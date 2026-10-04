@@ -2,9 +2,10 @@
 import React from 'react';
 import MasterPage from '@/components/MasterPage';
 import LoadingScreen from '@/components/LoadingScreen';
+import AquaModalWrapper from '@/components/AquaModalWrapper';
 import { useLanguage } from '@/lib/LanguageContext';
 import { useExpiryAlertsLogic, ExpiryItem } from './expiry_alerts_logic';
-import Link from 'next/link';
+import { MAIN_WAREHOUSE_ID } from '@/lib/inventory_engine';
 
 export default function ExpiryAlertsPage() {
   const { language } = useLanguage();
@@ -19,9 +20,9 @@ export default function ExpiryAlertsPage() {
     if (item.status === 'expired') {
       return (
         <span style={{
-          background: 'rgba(239, 68, 68, 0.15)',
-          color: '#b91c1c',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
+          background: 'rgba(168, 87, 60, 0.12)',
+          color: '#A8573C',
+          border: '1px solid rgba(168, 87, 60, 0.3)',
           padding: '4px 10px',
           borderRadius: '20px',
           fontSize: '11px',
@@ -38,9 +39,9 @@ export default function ExpiryAlertsPage() {
     if (item.status === 'critical') {
       return (
         <span style={{
-          background: 'rgba(249, 115, 22, 0.15)',
-          color: '#c2410c',
-          border: '1px solid rgba(249, 115, 22, 0.3)',
+          background: 'rgba(194, 155, 98, 0.15)',
+          color: '#8c6b32',
+          border: '1px solid rgba(194, 155, 98, 0.4)',
           padding: '4px 10px',
           borderRadius: '20px',
           fontSize: '11px',
@@ -57,7 +58,7 @@ export default function ExpiryAlertsPage() {
     if (item.status === 'warning') {
       return (
         <span style={{
-          background: 'rgba(234, 179, 8, 0.15)',
+          background: 'rgba(234, 179, 8, 0.12)',
           color: '#854d0e',
           border: '1px solid rgba(234, 179, 8, 0.3)',
           padding: '4px 10px',
@@ -76,9 +77,9 @@ export default function ExpiryAlertsPage() {
     if (item.status === 'safe') {
       return (
         <span style={{
-          background: 'rgba(78, 115, 79, 0.15)',
-          color: '#4E734F',
-          border: '1px solid rgba(78, 115, 79, 0.3)',
+          background: 'rgba(5, 150, 105, 0.12)',
+          color: '#059669',
+          border: '1px solid rgba(5, 150, 105, 0.3)',
           padding: '4px 10px',
           borderRadius: '20px',
           fontSize: '11px',
@@ -94,9 +95,9 @@ export default function ExpiryAlertsPage() {
     }
     return (
       <span style={{
-        background: 'rgba(100, 116, 139, 0.1)',
-        color: '#64748b',
-        border: '1px solid rgba(100, 116, 139, 0.25)',
+        background: 'rgba(30, 19, 11, 0.05)',
+        color: '#786c62',
+        border: '1px solid rgba(30, 19, 11, 0.12)',
         padding: '4px 10px',
         borderRadius: '20px',
         fontSize: '11px',
@@ -109,60 +110,116 @@ export default function ExpiryAlertsPage() {
 
   return (
     <MasterPage
-      title={isEn ? 'Inventory Expiry Tracking' : 'مراقبة الصلاحيات وإنذارات البضاعة'}
-      subtitle={isEn ? 'Smart monitoring of expired and soon-to-expire goods' : 'نظام الرقابة المبكرة على البضائع المنتهية وتلك التي أوشكت على الانتهاء'}
+      title={isEn ? 'Veterinary Expiry Tracking' : 'مراقبة الصلاحيات وإنذارات الأدوية البيطرية'}
+      subtitle={isEn ? 'Smart monitoring of expired and soon-to-expire pharmaceutical batches' : 'نظام الرقابة المبكرة على التشغيلات المنتهية وتلك التي أوشكت على الانتهاء بنظام FEFO'}
       icon="⏳"
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        
-        {/* 1. Header Alert Banner if expired items exist */}
-        {logic.metrics.expiredCount > 0 && (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', direction: 'rtl' }}>
+
+        {/* 1. Header Alert Banner & Bulk Actions */}
+        {(logic.metrics.expiredCount > 0 || logic.metrics.criticalCount > 0) && (
           <div style={{
-            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(220, 38, 38, 0.08) 100%)',
-            border: '1.5px solid rgba(239, 68, 68, 0.35)',
+            background: '#FFFFFF',
+            border: '1.5px solid rgba(168, 87, 60, 0.3)',
             borderRadius: '16px',
-            padding: '14px 20px',
+            padding: '16px 20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: '12px',
-            boxShadow: '0 4px 12px rgba(220, 38, 38, 0.08)'
+            gap: '14px',
+            boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '28px' }}>🚨</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '12px',
+                background: 'rgba(168, 87, 60, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px'
+              }}>
+                🚨
+              </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#b91c1c' }}>
-                  {isEn ? 'Urgent Alert: Expired Goods in Stock!' : 'إنذار عاجل: توجد بضائع منتهية الصلاحية بالمستودع!'}
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#A8573C' }}>
+                  {isEn ? 'Urgent Alert: Expired or Critical Stock Detected!' : 'إنذار الرقابة الدوائية: أدوية بيطرية منتهية أو وشيكة الانتهاء!'}
                 </h4>
-                <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#991b1b', fontWeight: 700 }}>
-                  {isEn 
-                    ? `Found ${logic.metrics.expiredCount} expired items with estimated loss of ${formatMoney(logic.metrics.expiredLoss)}. Please withdraw or write-off.`
-                    : `يوجد ${logic.metrics.expiredCount} أصناف منتهية الصلاحية بقيمة تقديرية ${formatMoney(logic.metrics.expiredLoss)}. يرجى سحبها أو تسجيل محضر إتلاف.`}
+                <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#1E130B', fontWeight: 700 }}>
+                  {logic.metrics.expiredCount > 0 && (
+                    <span style={{ color: '#A8573C', marginLeft: '8px' }}>
+                      ⛔ {logic.metrics.expiredCount} صنف منتهي (خسارة محتملة: {formatMoney(logic.metrics.expiredLoss)})
+                    </span>
+                  )}
+                  {logic.metrics.criticalCount > 0 && (
+                    <span style={{ color: '#C29B62' }}>
+                      ⏳ {logic.metrics.criticalCount} صنف حرج وشيك الانتهاء (قيمة معرضة: {formatMoney(logic.metrics.criticalLoss)})
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => logic.setStatusFilter('expired')}
-              style={{
-                background: '#dc2626',
-                color: '#fff',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '10px',
-                fontSize: '12px',
-                fontWeight: 800,
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)'
-              }}
-            >
-              {isEn ? 'Filter Expired Only 🔍' : 'عرض المنتهي فوراً 🔍'}
-            </button>
+
+            {/* Quick Bulk Execution Buttons */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {logic.metrics.expiredCount > 0 && (
+                <button
+                  type="button"
+                  disabled={logic.isBulkProcessing}
+                  onClick={logic.handleBulkExpiredDisposal}
+                  style={{
+                    background: '#A8573C',
+                    color: '#fff',
+                    border: 'none',
+                    minHeight: '44px',
+                    padding: '8px 18px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: 900,
+                    cursor: logic.isBulkProcessing ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(168, 87, 60, 0.25)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>🗑️</span>
+                  <span>{logic.isBulkProcessing ? 'جارٍ الإتلاف...' : `إتلاف كافة المنتهي (${logic.metrics.expiredCount})`}</span>
+                </button>
+              )}
+
+              {logic.metrics.criticalCount > 0 && (
+                <button
+                  type="button"
+                  disabled={logic.isBulkProcessing}
+                  onClick={() => logic.handleBulkCriticalPromo(30)}
+                  style={{
+                    background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    minHeight: '44px',
+                    padding: '8px 18px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: 900,
+                    cursor: logic.isBulkProcessing ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(194, 155, 98, 0.3)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>🎁</span>
+                  <span>{logic.isBulkProcessing ? 'جارٍ التفعيل...' : `تفعيل عروض تصفية للحرجة (${logic.metrics.criticalCount})`}</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 
-        {/* 2. Top KPI Cards (Desert Glassmorphism) */}
+        {/* 2. Top Luxury KPI Cards (Solid Elegant Design) */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -172,27 +229,27 @@ export default function ExpiryAlertsPage() {
           <div 
             onClick={() => logic.setStatusFilter('expired')}
             style={{
-              background: 'linear-gradient(135deg, rgba(255, 253, 250, 0.85) 0%, rgba(255, 253, 250, 0.5) 100%)',
-              backdropFilter: 'blur(24px) saturate(160%)',
-              border: logic.statusFilter === 'expired' ? '2px solid #ef4444' : '1px solid rgba(194, 155, 98, 0.3)',
+              background: '#FFFFFF',
+              border: logic.statusFilter === 'expired' ? '2px solid #A8573C' : '1px solid rgba(194, 155, 98, 0.25)',
               borderRadius: '16px',
-              padding: '16px',
+              padding: '16px 20px',
               cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(44, 26, 18, 0.08)',
-              transition: 'all 0.2s'
+              boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+              transition: 'transform 0.2s',
+              transform: logic.statusFilter === 'expired' ? 'translateY(-2px)' : 'none'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#b91c1c' }}>
-                {isEn ? '🔴 Expired Goods' : '🔴 منتهية الصلاحية'}
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#A8573C' }}>
+                {isEn ? '⛔ Expired Batches' : '⛔ منتهية الصلاحية'}
               </span>
-              <span style={{ fontSize: '20px' }}>⛔</span>
+              <span style={{ fontSize: '20px' }}>🚨</span>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 900, color: '#b91c1c', marginTop: '6px' }}>
-              {logic.metrics.expiredCount} <span style={{ fontSize: '13px' }}>{isEn ? 'items' : 'صنف'}</span>
+            <div style={{ fontSize: '26px', fontWeight: 900, color: '#A8573C', marginTop: '6px' }}>
+              {logic.metrics.expiredCount} <span style={{ fontSize: '13px', color: '#1E130B' }}>{isEn ? 'items' : 'صنف'}</span>
             </div>
-            <div style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700, marginTop: '4px' }}>
-              {isEn ? 'Loss: ' : 'الخسارة المقدرة: '}{formatMoney(logic.metrics.expiredLoss)}
+            <div style={{ fontSize: '11px', color: '#A8573C', fontWeight: 800, marginTop: '4px' }}>
+              {isEn ? 'Loss: ' : 'الخسارة المحتملة: '}{formatMoney(logic.metrics.expiredLoss)}
             </div>
           </div>
 
@@ -200,27 +257,27 @@ export default function ExpiryAlertsPage() {
           <div 
             onClick={() => logic.setStatusFilter('critical')}
             style={{
-              background: 'linear-gradient(135deg, rgba(255, 253, 250, 0.85) 0%, rgba(255, 253, 250, 0.5) 100%)',
-              backdropFilter: 'blur(24px) saturate(160%)',
-              border: logic.statusFilter === 'critical' ? '2px solid #f97316' : '1px solid rgba(194, 155, 98, 0.3)',
+              background: '#FFFFFF',
+              border: logic.statusFilter === 'critical' ? '2px solid #C29B62' : '1px solid rgba(194, 155, 98, 0.25)',
               borderRadius: '16px',
-              padding: '16px',
+              padding: '16px 20px',
               cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(44, 26, 18, 0.08)',
-              transition: 'all 0.2s'
+              boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+              transition: 'transform 0.2s',
+              transform: logic.statusFilter === 'critical' ? 'translateY(-2px)' : 'none'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#c2410c' }}>
-                {isEn ? '🟠 Critical (<= 30 Days)' : '🟠 أوشكت على الانتهاء (حرج)'}
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#8c6b32' }}>
+                {isEn ? '⏳ Critical (<= 30 Days)' : '⏳ أوشكت على الانتهاء (حرج)'}
               </span>
               <span style={{ fontSize: '20px' }}>⏳</span>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 900, color: '#c2410c', marginTop: '6px' }}>
-              {logic.metrics.criticalCount} <span style={{ fontSize: '13px' }}>{isEn ? 'items' : 'صنف'}</span>
+            <div style={{ fontSize: '26px', fontWeight: 900, color: '#C29B62', marginTop: '6px' }}>
+              {logic.metrics.criticalCount} <span style={{ fontSize: '13px', color: '#1E130B' }}>{isEn ? 'items' : 'صنف'}</span>
             </div>
-            <div style={{ fontSize: '11px', color: '#ea580c', fontWeight: 700, marginTop: '4px' }}>
-              {isEn ? 'At risk value: ' : 'قيمة البضاعة المعرضة: '}{formatMoney(logic.metrics.criticalLoss)}
+            <div style={{ fontSize: '11px', color: '#8c6b32', fontWeight: 800, marginTop: '4px' }}>
+              {isEn ? 'At risk: ' : 'قيمة البضاعة المعرضة: '}{formatMoney(logic.metrics.criticalLoss)}
             </div>
           </div>
 
@@ -228,27 +285,27 @@ export default function ExpiryAlertsPage() {
           <div 
             onClick={() => logic.setStatusFilter('warning')}
             style={{
-              background: 'linear-gradient(135deg, rgba(255, 253, 250, 0.85) 0%, rgba(255, 253, 250, 0.5) 100%)',
-              backdropFilter: 'blur(24px) saturate(160%)',
-              border: logic.statusFilter === 'warning' ? '2px solid #eab308' : '1px solid rgba(194, 155, 98, 0.3)',
+              background: '#FFFFFF',
+              border: logic.statusFilter === 'warning' ? '2px solid #eab308' : '1px solid rgba(194, 155, 98, 0.25)',
               borderRadius: '16px',
-              padding: '16px',
+              padding: '16px 20px',
               cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(44, 26, 18, 0.08)',
-              transition: 'all 0.2s'
+              boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+              transition: 'transform 0.2s',
+              transform: logic.statusFilter === 'warning' ? 'translateY(-2px)' : 'none'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#854d0e' }}>
-                {isEn ? '🟡 Warning (31-90 Days)' : '🟡 تنبيه مبكر (31 - 90 يوم)'}
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#854d0e' }}>
+                {isEn ? '⚠️ Warning (31-90 Days)' : '⚠️ تنبيه مبكر (31 - 90 يوم)'}
               </span>
               <span style={{ fontSize: '20px' }}>⚠️</span>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 900, color: '#854d0e', marginTop: '6px' }}>
-              {logic.metrics.warningCount} <span style={{ fontSize: '13px' }}>{isEn ? 'items' : 'صنف'}</span>
+            <div style={{ fontSize: '26px', fontWeight: 900, color: '#854d0e', marginTop: '6px' }}>
+              {logic.metrics.warningCount} <span style={{ fontSize: '13px', color: '#1E130B' }}>{isEn ? 'items' : 'صنف'}</span>
             </div>
-            <div style={{ fontSize: '11px', color: 'rgba(44, 26, 18, 0.6)', fontWeight: 700, marginTop: '4px' }}>
-              {isEn ? 'Priority for sales' : 'أولوية للبيع والتوزيع'}
+            <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 800, marginTop: '4px' }}>
+              {isEn ? 'Priority for sales' : 'أولوية للبيع والتوزيع بنظام FEFO'}
             </div>
           </div>
 
@@ -256,59 +313,60 @@ export default function ExpiryAlertsPage() {
           <div 
             onClick={() => logic.setStatusFilter('safe')}
             style={{
-              background: 'linear-gradient(135deg, rgba(255, 253, 250, 0.85) 0%, rgba(255, 253, 250, 0.5) 100%)',
-              backdropFilter: 'blur(24px) saturate(160%)',
-              border: logic.statusFilter === 'safe' ? '2px solid #4E734F' : '1px solid rgba(194, 155, 98, 0.3)',
+              background: '#FFFFFF',
+              border: logic.statusFilter === 'safe' ? '2px solid #059669' : '1px solid rgba(194, 155, 98, 0.25)',
               borderRadius: '16px',
-              padding: '16px',
+              padding: '16px 20px',
               cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(44, 26, 18, 0.08)',
-              transition: 'all 0.2s'
+              boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+              transition: 'transform 0.2s',
+              transform: logic.statusFilter === 'safe' ? 'translateY(-2px)' : 'none'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#4E734F' }}>
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#059669' }}>
                 {isEn ? '🟢 Safe (> 90 Days)' : '🟢 صلاحية آمنة (+90 يوم)'}
               </span>
               <span style={{ fontSize: '20px' }}>🛡️</span>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 900, color: '#4E734F', marginTop: '6px' }}>
-              {logic.metrics.safeCount} <span style={{ fontSize: '13px' }}>{isEn ? 'items' : 'صنف'}</span>
+            <div style={{ fontSize: '26px', fontWeight: 900, color: '#059669', marginTop: '6px' }}>
+              {logic.metrics.safeCount} <span style={{ fontSize: '13px', color: '#1E130B' }}>{isEn ? 'items' : 'صنف'}</span>
             </div>
-            <div style={{ fontSize: '11px', color: 'rgba(44, 26, 18, 0.6)', fontWeight: 700, marginTop: '4px' }}>
-              {isEn ? 'Good condition' : 'حالة ممتازة'}
+            <div style={{ fontSize: '11px', color: '#059669', fontWeight: 800, marginTop: '4px' }}>
+              {isEn ? 'Safe stock' : 'حالة ممتازة ومطابقة للمعايير'}
             </div>
           </div>
         </div>
 
-        {/* 3. Toolbar & Filters */}
+        {/* 3. Toolbar & Filters (Solid Luxury Bar) */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(255, 253, 250, 0.8) 0%, rgba(255, 253, 250, 0.45) 100%)',
-          backdropFilter: 'blur(24px) saturate(160%)',
-          border: '1px solid rgba(194, 155, 98, 0.3)',
+          background: '#FFFFFF',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
           borderRadius: '16px',
-          padding: '14px 18px',
+          padding: '16px 20px',
           display: 'flex',
           flexWrap: 'wrap',
           gap: '12px',
           alignItems: 'center',
-          justifyContent: 'space-between'
+          justifyContent: 'space-between',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
         }}>
           {/* Search Input */}
-          <div style={{ flex: '1 1 250px', position: 'relative' }}>
+          <div style={{ flex: '1 1 260px' }}>
             <input
               type="text"
-              placeholder={isEn ? 'Search item name, barcode, batch #...' : 'ابحث باسم الصنف، الباركود، أو رقم التشغيلة...'}
+              placeholder={isEn ? 'Search item name, barcode, batch #...' : 'ابحث باسم الدواء البيطري، الباركود، أو رقم التشغيلة...'}
               value={logic.searchTerm}
               onChange={(e) => logic.setSearchTerm(e.target.value)}
               style={{
                 width: '100%',
-                padding: '10px 14px',
+                minHeight: '44px',
+                padding: '10px 16px',
                 borderRadius: '12px',
                 border: '1px solid rgba(194, 155, 98, 0.35)',
                 background: '#FDFBF7',
-                color: '#2C1A12',
-                fontSize: '12px',
+                color: '#1E130B',
+                fontSize: '13px',
                 fontWeight: 700,
                 outline: 'none'
               }}
@@ -316,36 +374,38 @@ export default function ExpiryAlertsPage() {
           </div>
 
           {/* Warehouse Selector */}
-          <div style={{ minWidth: '180px' }}>
+          <div style={{ minWidth: '200px' }}>
             <select
               value={logic.selectedWarehouseId}
               onChange={(e) => logic.setSelectedWarehouseId(e.target.value)}
               style={{
                 width: '100%',
+                minHeight: '44px',
                 padding: '10px 14px',
                 borderRadius: '12px',
                 border: '1px solid rgba(194, 155, 98, 0.35)',
                 background: '#FDFBF7',
-                color: '#2C1A12',
-                fontSize: '12px',
-                fontWeight: 700,
-                outline: 'none'
+                color: '#1E130B',
+                fontSize: '13px',
+                fontWeight: 800,
+                outline: 'none',
+                cursor: 'pointer'
               }}
             >
-              <option value="all">{isEn ? '🏢 All Warehouses' : '🏢 كافة المستودعات'}</option>
+              <option value="all">{isEn ? '🏢 All Warehouses' : '🏢 كافة المستودعات والصيدليات'}</option>
               {logic.warehouses.map((w: any) => (
                 <option key={w.id} value={w.id}>{w.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Status Tabs */}
+          {/* Status Filter Tabs */}
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {[
               { id: 'all', label: isEn ? 'All' : 'الكل' },
-              { id: 'expired', label: isEn ? '🔴 Expired' : '🔴 منتهي' },
-              { id: 'critical', label: isEn ? '🟠 Critical' : '🟠 حرج' },
-              { id: 'warning', label: isEn ? '🟡 Warning' : '🟡 مبكر' },
+              { id: 'expired', label: isEn ? '⛔ Expired' : '⛔ منتهي' },
+              { id: 'critical', label: isEn ? '⏳ Critical' : '⏳ حرج' },
+              { id: 'warning', label: isEn ? '⚠️ Warning' : '⚠️ مبكر' },
               { id: 'safe', label: isEn ? '🟢 Safe' : '🟢 آمن' },
               { id: 'no_date', label: isEn ? '⚪ No Date' : '⚪ بدون تاريخ' }
             ].map((tab) => (
@@ -354,13 +414,14 @@ export default function ExpiryAlertsPage() {
                 type="button"
                 onClick={() => logic.setStatusFilter(tab.id as any)}
                 style={{
-                  padding: '7px 12px',
+                  minHeight: '44px',
+                  padding: '8px 14px',
                   borderRadius: '10px',
                   border: 'none',
                   background: logic.statusFilter === tab.id ? '#C29B62' : 'rgba(194, 155, 98, 0.12)',
-                  color: logic.statusFilter === tab.id ? '#fff' : '#2C1A12',
-                  fontSize: '11px',
-                  fontWeight: 800,
+                  color: logic.statusFilter === tab.id ? '#FFFFFF' : '#1E130B',
+                  fontSize: '12px',
+                  fontWeight: 900,
                   cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
@@ -375,18 +436,19 @@ export default function ExpiryAlertsPage() {
             type="button"
             onClick={logic.exportToExcel}
             style={{
-              padding: '9px 16px',
+              minHeight: '44px',
+              padding: '10px 18px',
               borderRadius: '12px',
               border: 'none',
-              background: '#4E734F',
-              color: '#fff',
-              fontSize: '12px',
-              fontWeight: 800,
+              background: '#059669',
+              color: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: 900,
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: '0 2px 8px rgba(78, 115, 79, 0.25)'
+              boxShadow: '0 4px 14px rgba(5, 150, 105, 0.25)'
             }}
           >
             <span>📊</span>
@@ -394,44 +456,43 @@ export default function ExpiryAlertsPage() {
           </button>
         </div>
 
-        {/* 4. Table Section */}
+        {/* 4. Table Section (Solid Pure White Card) */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(255, 253, 250, 0.8) 0%, rgba(255, 253, 250, 0.45) 100%)',
-          backdropFilter: 'blur(24px) saturate(160%)',
-          border: '1px solid rgba(194, 155, 98, 0.3)',
+          background: '#FFFFFF',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
           borderRadius: '16px',
           overflow: 'hidden',
-          boxShadow: '0 4px 6px rgba(44, 26, 18, 0.08)'
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
         }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '12px' }}>
               <thead>
                 <tr style={{
-                  background: 'rgba(44, 26, 18, 0.04)',
+                  background: 'rgba(30, 19, 11, 0.03)',
                   borderBottom: '1.5px solid rgba(194, 155, 98, 0.25)',
-                  color: '#2C1A12'
+                  color: '#1E130B'
                 }}>
-                  <th style={{ padding: '12px 14px', fontWeight: 900 }}>{isEn ? 'Item Code & Name' : 'كود واسم الصنف'}</th>
-                  <th style={{ padding: '12px 14px', fontWeight: 900 }}>{isEn ? 'Batch #' : 'رقم التشغيلة'}</th>
-                  <th style={{ padding: '12px 14px', fontWeight: 900 }}>{isEn ? 'Stock' : 'الرصيد المتوفر'}</th>
-                  <th style={{ padding: '12px 14px', fontWeight: 900 }}>{isEn ? 'Expiry Date' : 'تاريخ الانتهاء'}</th>
-                  <th style={{ padding: '12px 14px', fontWeight: 900 }}>{isEn ? 'Days Left' : 'الأيام المتبقية'}</th>
-                  <th style={{ padding: '12px 14px', fontWeight: 900 }}>{isEn ? 'Status' : 'حالة الصلاحية'}</th>
-                  <th style={{ padding: '12px 14px', fontWeight: 900 }}>{isEn ? 'Potential Loss' : 'الخسارة المحتملة'}</th>
-                  <th style={{ padding: '12px 14px', fontWeight: 900, textAlign: 'center' }}>{isEn ? 'Actions' : 'إجراءات سريعة'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Item Code & Name' : 'كود واسم الدواء البيطري'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Batch #' : 'رقم التشغيلة'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Stock' : 'الرصيد المتاح'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Expiry Date' : 'تاريخ الانتهاء'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Days Left' : 'الأيام المتبقية'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Status' : 'حالة الصلاحية'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Potential Loss' : 'الخسارة المحتملة'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900, textAlign: 'center' }}>{isEn ? 'Quick Actions' : 'إجراءات فورية'}</th>
                 </tr>
               </thead>
               <tbody>
                 {logic.isLoading ? (
                   <tr>
                     <td colSpan={8} style={{ padding: '40px', textAlign: 'center' }}>
-                      <LoadingScreen text={isEn ? 'Loading expiry data...' : 'جارٍ فحص صلاحيات البضاعة...'} />
+                      <LoadingScreen text={isEn ? 'Loading expiry data...' : 'جارٍ فحص صلاحيات الأدوية والتشغيلات...'} />
                     </td>
                   </tr>
                 ) : logic.items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'rgba(44, 26, 18, 0.6)', fontWeight: 800 }}>
-                      {isEn ? 'No items found matching the selected filter 🎉' : 'لا توجد أصناف مطابقة للفلتر المحدد حالياً 🎉'}
+                    <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: '#786c62', fontWeight: 800 }}>
+                      {isEn ? 'No items found matching the selected filter 🎉' : 'لا توجد أدوية بيطرية مطابقة للفلتر المحدد حالياً 🎉'}
                     </td>
                   </tr>
                 ) : (
@@ -444,129 +505,150 @@ export default function ExpiryAlertsPage() {
                         key={item.id}
                         style={{
                           borderBottom: '1px solid rgba(194, 155, 98, 0.15)',
-                          background: isExp ? 'rgba(239, 68, 68, 0.04)' : (isCrit ? 'rgba(249, 115, 22, 0.03)' : 'transparent'),
+                          background: isExp ? 'rgba(168, 87, 60, 0.04)' : (isCrit ? 'rgba(194, 155, 98, 0.04)' : 'transparent'),
                           transition: 'background 0.2s'
                         }}
                       >
                         {/* Item Code & Name */}
-                        <td style={{ padding: '12px 14px' }}>
-                          <div style={{ fontWeight: 900, color: '#2C1A12', fontSize: '13px' }}>
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '13px' }}>
                             {item.name}
                           </div>
-                          <div style={{ fontSize: '11px', color: 'rgba(44, 26, 18, 0.6)', fontWeight: 700 }}>
+                          <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 700, marginTop: '2px' }}>
                             {item.code ? `كود: ${item.code}` : ''} {item.barcode ? `| باركود: ${item.barcode}` : ''}
                           </div>
                         </td>
 
                         {/* Batch # */}
-                        <td style={{ padding: '12px 14px', fontWeight: 700, color: '#2C1A12' }}>
+                        <td style={{ padding: '14px 16px', fontWeight: 800, color: '#1E130B' }}>
                           {item.batch_number ? (
-                            <span style={{ background: 'rgba(194, 155, 98, 0.12)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>
+                            <span style={{
+                              background: 'rgba(194, 155, 98, 0.15)',
+                              color: '#8c6b32',
+                              border: '1px solid rgba(194, 155, 98, 0.3)',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 900
+                            }}>
                               {item.batch_number}
                             </span>
-                          ) : '-'}
+                          ) : (
+                            <span style={{ color: '#786c62' }}>-</span>
+                          )}
                         </td>
 
                         {/* Stock Available */}
-                        <td style={{ padding: '12px 14px' }}>
-                          <span style={{ fontWeight: 900, color: item.available_qty > 0 ? '#4E734F' : '#b91c1c' }}>
+                        <td style={{ padding: '14px 16px' }}>
+                          <span style={{ fontWeight: 900, color: item.available_qty > 0 ? '#059669' : '#A8573C', fontSize: '13px' }}>
                             {item.available_qty} {item.unit}
                           </span>
                         </td>
 
                         {/* Expiry Date */}
-                        <td style={{ padding: '12px 14px', fontWeight: 800, color: isExp ? '#b91c1c' : (isCrit ? '#c2410c' : '#2C1A12') }}>
+                        <td style={{ padding: '14px 16px', fontWeight: 900, color: isExp ? '#A8573C' : (isCrit ? '#C29B62' : '#1E130B') }}>
                           {item.expiry_date || (
-                            <span style={{ color: 'rgba(44, 26, 18, 0.4)' }}>{isEn ? 'Not specified' : 'غير محدد'}</span>
+                            <span style={{ color: '#786c62', fontWeight: 700 }}>{isEn ? 'Not specified' : 'غير مسجل'}</span>
                           )}
                         </td>
 
                         {/* Days Left */}
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '14px 16px' }}>
                           {item.days_left !== null ? (
                             <span style={{
                               fontWeight: 900,
-                              color: isExp ? '#b91c1c' : (isCrit ? '#c2410c' : (item.days_left <= 90 ? '#854d0e' : '#4E734F'))
+                              color: isExp ? '#A8573C' : (isCrit ? '#C29B62' : (item.days_left <= 90 ? '#854d0e' : '#059669'))
                             }}>
-                              {item.days_left <= 0 ? (isEn ? `Expired ${Math.abs(item.days_left)}d ago` : `منتهي منذ ${Math.abs(item.days_left)} يوم`) : `${item.days_left} يوم`}
+                              {item.days_left <= 0
+                                ? (isEn ? `Expired ${Math.abs(item.days_left)}d ago` : `منتهي منذ ${Math.abs(item.days_left)} يوم`)
+                                : `${item.days_left} يوم`}
                             </span>
                           ) : '-'}
                         </td>
 
                         {/* Status Badge */}
-                        <td style={{ padding: '12px 14px' }}>
+                        <td style={{ padding: '14px 16px' }}>
                           {getStatusBadge(item)}
                         </td>
 
                         {/* Potential Loss */}
-                        <td style={{ padding: '12px 14px', fontWeight: 900, color: item.potential_loss > 0 ? '#b91c1c' : 'rgba(44, 26, 18, 0.6)' }}>
+                        <td style={{ padding: '14px 16px', fontWeight: 900, color: item.potential_loss > 0 ? '#A8573C' : '#786c62' }}>
                           {item.potential_loss > 0 ? formatMoney(item.potential_loss) : '-'}
                         </td>
 
                         {/* Actions */}
-                        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                        <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
                             {/* Edit / Set Date */}
                             <button
                               type="button"
                               onClick={() => logic.openEditModal(item)}
-                              title={isEn ? 'Edit Expiry Date' : 'تعديل تاريخ الصلاحية والتشغيلة'}
+                              title={isEn ? 'Edit Expiry Date & Batch' : 'تعديل تاريخ الصلاحية والتشغيلة'}
                               style={{
+                                minHeight: '34px',
                                 padding: '6px 10px',
                                 borderRadius: '8px',
-                                border: '1px solid rgba(194, 155, 98, 0.3)',
-                                background: 'rgba(194, 155, 98, 0.12)',
-                                color: '#2C1A12',
+                                border: '1px solid rgba(194, 155, 98, 0.4)',
+                                background: 'rgba(194, 155, 98, 0.1)',
+                                color: '#1E130B',
                                 fontSize: '11px',
                                 fontWeight: 800,
                                 cursor: 'pointer'
                               }}
                             >
-                              ⏳ {isEn ? 'Edit' : 'تحديد'}
+                              ⏳ {isEn ? 'Edit' : 'تعديل'}
                             </button>
 
-                            {/* Create Promotion (if critical or warning) */}
-                            {(isCrit || item.status === 'warning') && (
-                              <Link
-                                href={`/promotions?item_id=${item.id}`}
-                                title={isEn ? 'Create Promotion to sell fast' : 'إنشاء عرض ترويجي لتصريف البضاعة'}
+                            {/* Create Promotion (if critical, warning, or safe) */}
+                            {item.available_qty > 0 && !isExp && (
+                              <button
+                                type="button"
+                                onClick={() => logic.openPromoModal(item)}
+                                title={isEn ? 'Quick Clearance Promotion' : 'تفعيل عرض تصفية فوري بضغطة زر'}
                                 style={{
+                                  minHeight: '34px',
                                   padding: '6px 10px',
                                   borderRadius: '8px',
                                   border: 'none',
                                   background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
-                                  color: '#fff',
+                                  color: '#FFFFFF',
                                   fontSize: '11px',
-                                  fontWeight: 800,
-                                  textDecoration: 'none',
+                                  fontWeight: 900,
+                                  cursor: 'pointer',
                                   display: 'inline-flex',
-                                  alignItems: 'center'
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  boxShadow: '0 2px 8px rgba(194, 155, 98, 0.25)'
                                 }}
                               >
-                                🎁 {isEn ? 'Promote' : 'عرض ترويجي'}
-                              </Link>
+                                🎁 {isEn ? 'Promote' : 'عرض تصفية'}
+                              </button>
                             )}
 
-                            {/* Disposal / Write-off if expired */}
-                            {isExp && (
-                              <Link
-                                href={`/inventory/transactions?action=disposal&item_id=${item.id}`}
-                                title={isEn ? 'Inventory Write-off (Disposal)' : 'تسجيل إتلاف مخزني'}
+                            {/* Disposal / Write-off */}
+                            {item.available_qty > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => logic.openDisposalModal(item)}
+                                title={isEn ? 'One-Click Disposal' : 'إتلاف مخزني فوري بضغطة زر'}
                                 style={{
+                                  minHeight: '34px',
                                   padding: '6px 10px',
                                   borderRadius: '8px',
                                   border: 'none',
-                                  background: '#dc2626',
-                                  color: '#fff',
+                                  background: '#A8573C',
+                                  color: '#FFFFFF',
                                   fontSize: '11px',
-                                  fontWeight: 800,
-                                  textDecoration: 'none',
+                                  fontWeight: 900,
+                                  cursor: 'pointer',
                                   display: 'inline-flex',
-                                  alignItems: 'center'
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  boxShadow: '0 2px 8px rgba(168, 87, 60, 0.25)'
                                 }}
                               >
-                                🗑️ {isEn ? 'Disposal' : 'إتلاف'}
-                              </Link>
+                                🗑️ {isEn ? 'Disposal' : 'إتلاف فوري'}
+                              </button>
                             )}
                           </div>
                         </td>
@@ -584,10 +666,10 @@ export default function ExpiryAlertsPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '12px 18px',
+              padding: '14px 20px',
               borderTop: '1px solid rgba(194, 155, 98, 0.2)'
             }}>
-              <span style={{ fontSize: '11px', color: 'rgba(44, 26, 18, 0.6)', fontWeight: 700 }}>
+              <span style={{ fontSize: '12px', color: '#786c62', fontWeight: 800 }}>
                 {isEn ? `Showing ${logic.items.length} of ${logic.allFilteredCount} items` : `عرض ${logic.items.length} من إجمالي ${logic.allFilteredCount} صنف`}
               </span>
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -596,19 +678,20 @@ export default function ExpiryAlertsPage() {
                   disabled={logic.currentPage <= 1}
                   onClick={() => logic.setCurrentPage(p => p - 1)}
                   style={{
-                    padding: '6px 12px',
+                    minHeight: '38px',
+                    padding: '6px 14px',
                     borderRadius: '8px',
                     border: '1px solid rgba(194, 155, 98, 0.3)',
-                    background: logic.currentPage <= 1 ? '#f1f5f9' : '#fff',
-                    color: '#2C1A12',
-                    fontSize: '11px',
+                    background: logic.currentPage <= 1 ? '#f5f5f5' : '#FFFFFF',
+                    color: '#1E130B',
+                    fontSize: '12px',
                     fontWeight: 800,
                     cursor: logic.currentPage <= 1 ? 'not-allowed' : 'pointer'
                   }}
                 >
                   {isEn ? 'Previous' : 'السابق'}
                 </button>
-                <span style={{ padding: '6px 10px', fontSize: '11px', fontWeight: 800, color: '#C29B62' }}>
+                <span style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 900, color: '#C29B62' }}>
                   {logic.currentPage} / {logic.totalPages}
                 </span>
                 <button
@@ -616,12 +699,13 @@ export default function ExpiryAlertsPage() {
                   disabled={logic.currentPage >= logic.totalPages}
                   onClick={() => logic.setCurrentPage(p => p + 1)}
                   style={{
-                    padding: '6px 12px',
+                    minHeight: '38px',
+                    padding: '6px 14px',
                     borderRadius: '8px',
                     border: '1px solid rgba(194, 155, 98, 0.3)',
-                    background: logic.currentPage >= logic.totalPages ? '#f1f5f9' : '#fff',
-                    color: '#2C1A12',
-                    fontSize: '11px',
+                    background: logic.currentPage >= logic.totalPages ? '#f5f5f5' : '#FFFFFF',
+                    color: '#1E130B',
+                    fontSize: '12px',
                     fontWeight: 800,
                     cursor: logic.currentPage >= logic.totalPages ? 'not-allowed' : 'pointer'
                   }}
@@ -634,175 +718,427 @@ export default function ExpiryAlertsPage() {
         </div>
 
         {/* 5. Edit Expiry Modal */}
-        {logic.isEditModalOpen && logic.selectedItemForEdit && (
-          <div style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(44, 26, 18, 0.45)',
-            backdropFilter: 'blur(8px)',
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px'
-          }}>
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(255, 253, 250, 0.96) 0%, rgba(255, 253, 250, 0.92) 100%)',
-              border: '1.5px solid rgba(194, 155, 98, 0.4)',
-              borderRadius: '20px',
-              padding: '24px',
-              width: '100%',
-              maxWidth: '440px',
-              boxShadow: '0 20px 40px rgba(44, 26, 18, 0.25)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '24px' }}>⏳</span>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#2C1A12' }}>
-                      {isEn ? 'Update Expiry Date' : 'تحديد / تعديل تاريخ الصلاحية'}
-                    </h3>
-                    <p style={{ margin: 0, fontSize: '11px', color: 'rgba(44, 26, 18, 0.6)', fontWeight: 700 }}>
-                      {logic.selectedItemForEdit.name}
-                    </p>
-                  </div>
+        <AquaModalWrapper
+          isOpen={logic.isEditModalOpen && !!logic.selectedItemForEdit}
+          onClose={() => logic.setIsEditModalOpen(false)}
+          title={isEn ? 'Update Expiry Date & Batch' : 'تحديد وتعديل الصلاحية والتشغيلة'}
+          icon="⏳"
+        >
+          {logic.selectedItemForEdit && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', direction: 'rtl' }}>
+              <div style={{ background: '#FDFBF7', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(194, 155, 98, 0.25)' }}>
+                <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '14px' }}>{logic.selectedItemForEdit.name}</div>
+                <div style={{ fontSize: '11px', color: '#786c62', marginTop: '2px' }}>
+                  الكود: {logic.selectedItemForEdit.code || '-'} | الرصيد: {logic.selectedItemForEdit.available_qty} {logic.selectedItemForEdit.unit}
                 </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Expiry Date *' : 'تاريخ انتهاء الصلاحية *'}
+                </label>
+                <input
+                  type="date"
+                  value={logic.editExpiryDate}
+                  onChange={(e) => logic.setEditExpiryDate(e.target.value)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Batch / Lot Number' : 'رقم التشغيلة / الدفعة (Batch Number)'}
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: BATCH-2026-09"
+                  value={logic.editBatchNumber}
+                  onChange={(e) => logic.setEditBatchNumber(e.target.value)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Alert Days in Advance' : 'تنبيه مسبق قبل كم يوم؟'}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={logic.editAlertDays}
+                  onChange={(e) => logic.setEditAlertDays(Number(e.target.value) || 30)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={logic.isSaving}
+                  onClick={logic.handleSaveExpiry}
+                  style={{
+                    flex: 1,
+                    minHeight: '44px',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 900,
+                    cursor: logic.isSaving ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(168, 87, 60, 0.25)'
+                  }}
+                >
+                  {logic.isSaving ? (isEn ? 'Saving...' : 'جارٍ الحفظ...') : (isEn ? 'Save Expiry Date ✓' : 'حفظ بيانات الصلاحية والتشغيلة ✓')}
+                </button>
                 <button
                   type="button"
                   onClick={() => logic.setIsEditModalOpen(false)}
                   style={{
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    color: '#ef4444',
-                    border: 'none',
-                    borderRadius: '50%',
-                    width: '32px',
-                    height: '32px',
-                    cursor: 'pointer',
-                    fontWeight: 900
+                    minHeight: '44px',
+                    padding: '12px 18px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.3)',
+                    background: 'transparent',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: 'pointer'
                   }}
                 >
-                  ✕
+                  {isEn ? 'Cancel' : 'إلغاء'}
                 </button>
               </div>
+            </div>
+          )}
+        </AquaModalWrapper>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {/* Expiry Date */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#2C1A12', marginBottom: '6px' }}>
-                    {isEn ? 'Expiry Date *' : 'تاريخ انتهاء الصلاحية *'}
-                  </label>
-                  <input
-                    type="date"
-                    value={logic.editExpiryDate}
-                    onChange={(e) => logic.setEditExpiryDate(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(194, 155, 98, 0.35)',
-                      background: '#FDFBF7',
-                      color: '#2C1A12',
-                      fontSize: '13px',
-                      fontWeight: 800,
-                      outline: 'none'
-                    }}
-                  />
+        {/* 6. Quick Disposal Modal (Solid Luxury Royal UI) */}
+        <AquaModalWrapper
+          isOpen={logic.isDisposalModalOpen && !!logic.selectedItemForDisposal}
+          onClose={() => logic.setIsDisposalModalOpen(false)}
+          title={isEn ? 'Quick Inventory Write-off (Disposal)' : 'إتلاف مخزني فوري وتسجيل التوالف'}
+          icon="🗑️"
+        >
+          {logic.selectedItemForDisposal && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', direction: 'rtl' }}>
+              <div style={{
+                background: 'rgba(168, 87, 60, 0.08)',
+                padding: '14px 18px',
+                borderRadius: '14px',
+                border: '1.5px solid rgba(168, 87, 60, 0.3)'
+              }}>
+                <div style={{ fontWeight: 900, color: '#A8573C', fontSize: '15px' }}>
+                  {logic.selectedItemForDisposal.name}
                 </div>
-
-                {/* Batch / Lot Number */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#2C1A12', marginBottom: '6px' }}>
-                    {isEn ? 'Batch / Lot Number (Optional)' : 'رقم التشغيلة / الدفعة (اختياري)'}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. BATCH-2026-09"
-                    value={logic.editBatchNumber}
-                    onChange={(e) => logic.setEditBatchNumber(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(194, 155, 98, 0.35)',
-                      background: '#FDFBF7',
-                      color: '#2C1A12',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      outline: 'none'
-                    }}
-                  />
+                <div style={{ fontSize: '12px', color: '#1E130B', marginTop: '4px', fontWeight: 700 }}>
+                  التشغيلة: {logic.selectedItemForDisposal.batch_number || 'غير مسجلة'} | تاريخ الانتهاء: {logic.selectedItemForDisposal.expiry_date || 'غير محدد'}
                 </div>
-
-                {/* Alert Before Days */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#2C1A12', marginBottom: '6px' }}>
-                    {isEn ? 'Alert Days in Advance' : 'تنبيه مسبق قبل كم يوم؟'}
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={logic.editAlertDays}
-                    onChange={(e) => logic.setEditAlertDays(Number(e.target.value) || 30)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(194, 155, 98, 0.35)',
-                      background: '#FDFBF7',
-                      color: '#2C1A12',
-                      fontSize: '13px',
-                      fontWeight: 800,
-                      outline: 'none'
-                    }}
-                  />
-                  <span style={{ fontSize: '10.5px', color: 'rgba(44, 26, 18, 0.5)', marginTop: '4px', display: 'block' }}>
-                    {isEn ? 'System will trigger an alert when days left reaches this threshold' : 'سيتم إرسال تنبيه في الإشعارات والكاشير عند وصول المتبقي لهذا العدد'}
-                  </span>
-                </div>
-
-                {/* Submit Buttons */}
-                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                  <button
-                    type="button"
-                    disabled={logic.isSaving}
-                    onClick={logic.handleSaveExpiry}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      borderRadius: '12px',
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
-                      color: '#fff',
-                      fontSize: '13px',
-                      fontWeight: 800,
-                      cursor: logic.isSaving ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 4px 12px rgba(168, 87, 60, 0.25)'
-                    }}
-                  >
-                    {logic.isSaving ? (isEn ? 'Saving...' : 'جارٍ الحفظ...') : (isEn ? 'Save Expiry Date ✓' : 'حفظ تاريخ الصلاحية ✓')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => logic.setIsEditModalOpen(false)}
-                    style={{
-                      padding: '12px 18px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(194, 155, 98, 0.3)',
-                      background: 'transparent',
-                      color: '#2C1A12',
-                      fontSize: '13px',
-                      fontWeight: 800,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {isEn ? 'Cancel' : 'إلغاء'}
-                  </button>
+                <div style={{ fontSize: '12px', color: '#A8573C', marginTop: '4px', fontWeight: 800 }}>
+                  الرصيد المتاح: {logic.selectedItemForDisposal.available_qty} {logic.selectedItemForDisposal.unit} | التكلفة للوحدة: {formatMoney(logic.selectedItemForDisposal.cost_price)}
                 </div>
               </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Disposal Quantity *' : 'الكمية المراد إتلافها *'}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={logic.selectedItemForDisposal.available_qty}
+                  value={logic.disposalQty}
+                  onChange={(e) => logic.setDisposalQty(Number(e.target.value) || 0)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '14px',
+                    fontWeight: 900,
+                    outline: 'none'
+                  }}
+                />
+                <span style={{ fontSize: '11px', color: '#A8573C', marginTop: '4px', display: 'block', fontWeight: 800 }}>
+                  إجمالي الخسارة الناتجة عن هذا الإتلاف: {formatMoney(logic.disposalQty * logic.selectedItemForDisposal.cost_price)}
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Warehouse' : 'المستودع المعني بالإتلاف'}
+                </label>
+                <select
+                  value={logic.disposalWarehouseId}
+                  onChange={(e) => logic.setDisposalWarehouseId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                >
+                  {logic.warehouses.map((w: any) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Reason / Notes' : 'سبب الإتلاف وملاحظات الضبط'}
+                </label>
+                <input
+                  type="text"
+                  value={logic.disposalReason}
+                  onChange={(e) => logic.setDisposalReason(e.target.value)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={logic.isDisposalLoading}
+                  onClick={logic.handleExecuteDisposal}
+                  style={{
+                    flex: 1,
+                    minHeight: '44px',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: '#A8573C',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 900,
+                    cursor: logic.isDisposalLoading ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(168, 87, 60, 0.25)'
+                  }}
+                >
+                  {logic.isDisposalLoading ? (isEn ? 'Executing...' : 'جارٍ تنفيذ الإتلاف...') : (isEn ? 'Confirm Disposal & Post Entry 🗑️' : 'تأكيد الإتلاف وترحيل القيد المحاسبي 🗑️')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => logic.setIsDisposalModalOpen(false)}
+                  style={{
+                    minHeight: '44px',
+                    padding: '12px 18px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.3)',
+                    background: 'transparent',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isEn ? 'Cancel' : 'إلغاء'}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </AquaModalWrapper>
+
+        {/* 7. Quick Promotion Modal (Solid Luxury Royal UI) */}
+        <AquaModalWrapper
+          isOpen={logic.isPromoModalOpen && !!logic.selectedItemForPromo}
+          onClose={() => logic.setIsPromoModalOpen(false)}
+          title={isEn ? 'Quick Clearance Promotion' : 'تفعيل عرض تصفية فوري للأدوية وشيكة الانتهاء'}
+          icon="🎁"
+        >
+          {logic.selectedItemForPromo && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', direction: 'rtl' }}>
+              <div style={{
+                background: 'rgba(194, 155, 98, 0.1)',
+                padding: '14px 18px',
+                borderRadius: '14px',
+                border: '1.5px solid rgba(194, 155, 98, 0.35)'
+              }}>
+                <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '15px' }}>
+                  {logic.selectedItemForPromo.name}
+                </div>
+                <div style={{ fontSize: '12px', color: '#8c6b32', marginTop: '4px', fontWeight: 800 }}>
+                  التشغيلة: {logic.selectedItemForPromo.batch_number || 'غير مسجلة'} | تاريخ الانتهاء: {logic.selectedItemForPromo.expiry_date || 'غير محدد'} ({logic.selectedItemForPromo.days_left} يوم متبقي)
+                </div>
+                <div style={{ fontSize: '12px', color: '#1E130B', marginTop: '4px', fontWeight: 700 }}>
+                  السعر المقترح: {formatMoney(logic.selectedItemForPromo.suggested_price)} | الرصيد المتاح: {logic.selectedItemForPromo.available_qty} {logic.selectedItemForPromo.unit}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Discount Percentage %' : 'نسبة الخصم الترويجي %'}
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    min={5}
+                    max={90}
+                    value={logic.promoDiscountPercent}
+                    onChange={(e) => logic.setPromoDiscountPercent(Number(e.target.value) || 0)}
+                    style={{
+                      flex: 1,
+                      minHeight: '44px',
+                      padding: '10px 14px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(194, 155, 98, 0.35)',
+                      background: '#FDFBF7',
+                      color: '#1E130B',
+                      fontSize: '14px',
+                      fontWeight: 900,
+                      outline: 'none'
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[15, 25, 35, 50].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => logic.setPromoDiscountPercent(pct)}
+                        style={{
+                          minHeight: '44px',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: logic.promoDiscountPercent === pct ? '2px solid #C29B62' : '1px solid rgba(194, 155, 98, 0.3)',
+                          background: logic.promoDiscountPercent === pct ? '#C29B62' : '#FFFFFF',
+                          color: logic.promoDiscountPercent === pct ? '#FFFFFF' : '#1E130B',
+                          fontSize: '12px',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        %{pct}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <span style={{ fontSize: '11px', color: '#059669', marginTop: '6px', display: 'block', fontWeight: 800 }}>
+                  السعر بعد الخصم: {formatMoney(logic.selectedItemForPromo.suggested_price * (1 - logic.promoDiscountPercent / 100))} (وفر {formatMoney(logic.selectedItemForPromo.suggested_price * (logic.promoDiscountPercent / 100))})
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Minimum Quantity to trigger' : 'الحد الأدنى للكمية لتطبيق الخصم'}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={logic.promoMinQty}
+                  onChange={(e) => logic.setPromoMinQty(Number(e.target.value) || 1)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={logic.isPromoLoading}
+                  onClick={logic.handleExecutePromo}
+                  style={{
+                    flex: 1,
+                    minHeight: '44px',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 900,
+                    cursor: logic.isPromoLoading ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(194, 155, 98, 0.3)'
+                  }}
+                >
+                  {logic.isPromoLoading ? (isEn ? 'Activating...' : 'جارٍ التفعيل...') : (isEn ? 'Activate Promotion in POS 🎁' : 'تفعيل العرض فورياً في الكاشير 🎁')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => logic.setIsPromoModalOpen(false)}
+                  style={{
+                    minHeight: '44px',
+                    padding: '12px 18px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.3)',
+                    background: 'transparent',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isEn ? 'Cancel' : 'إلغاء'}
+                </button>
+              </div>
+            </div>
+          )}
+        </AquaModalWrapper>
+
       </div>
     </MasterPage>
   );

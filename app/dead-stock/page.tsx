@@ -1,149 +1,612 @@
 "use client";
 import React from 'react';
-import { THEME } from '@/lib/theme';
-import { formatCurrency } from '@/lib/helpers';
+import MasterPage from '@/components/MasterPage';
+import LoadingScreen from '@/components/LoadingScreen';
+import AquaModalWrapper from '@/components/AquaModalWrapper';
+import { useLanguage } from '@/lib/LanguageContext';
 import { useDeadStockLogic } from './dead_stock_logic';
 
 export default function DeadStockPage() {
-    const {
-        filteredItems,
-        globalSearch,
-        setGlobalSearch,
-        stagnantDays,
-        setStagnantDays,
-        totalDeadItems,
-        totalFrozenCapital,
-        isLoading,
-        exportToExcel
-    } = useDeadStockLogic();
+  const { language } = useLanguage();
+  const isEn = language === 'en';
 
-    return (
-        <div className="dead-stock-container" style={{ padding: '20px', minHeight: '100vh', background: `linear-gradient(135deg, ${THEME.primary} 0%, #0a192f 100%)`, fontFamily: 'Tajawal, sans-serif', direction: 'rtl', maxWidth: '100vw', overflowX: 'hidden', boxSizing: 'border-box' }}>
-            <style>{`
-                @media (max-width: 768px) {
-                    .dead-stock-container { padding: 10px 8px !important; }
-                    .dead-stock-header { padding: 15px !important; border-radius: 16px !important; }
-                    .dead-stock-header h1 { font-size: 20px !important; }
-                    .dead-stock-filters { flex-direction: column !important; gap: 10px !important; }
-                    .dead-stock-filters > div { flex: 1 1 100% !important; width: 100% !important; }
-                    .dead-stock-kpi-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
-                    .dead-stock-kpi-card { padding: 15px !important; border-radius: 16px !important; }
-                    .dead-stock-kpi-card div:nth-child(2) { font-size: 24px !important; }
-                    .dead-stock-table-card { border-radius: 16px !important; }
-                    .dead-stock-table { min-width: 650px !important; }
-                    .dead-stock-table th, .dead-stock-table td { padding: 8px 10px !important; font-size: 11px !important; }
-                }
-            `}</style>
-            {/* Header */}
-            <div className="dead-stock-header" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '30px', marginBottom: '25px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-                    <div>
-                        <h1 style={{ color: 'white', margin: '0 0 10px 0', fontSize: '32px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <span style={{ background: `linear-gradient(45deg, ${THEME.accent}, #10b981)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>المخزون الراكد (Dead Stock)</span>
-                            <span style={{ fontSize: '24px' }}>🐢</span>
-                        </h1>
-                        <p style={{ color: '#94a3b8', margin: 0, fontSize: '15px', fontWeight: 500 }}>
-                            مراقبة البضاعة التي لم يتم سحبها أو بيعها منذ فترة طويلة لتجنب تجميد رأس المال.
-                        </p>
-                    </div>
-                    
-                    <div style={{ display: 'flex', gap: '15px' }}>
-                        <button onClick={exportToExcel} disabled={filteredItems.length === 0} style={{ background: filteredItems.length === 0 ? 'rgba(255,255,255,0.1)' : 'linear-gradient(45deg, #10b981, #059669)', color: filteredItems.length === 0 ? '#64748b' : 'white', border: 'none', padding: '12px 25px', borderRadius: '12px', fontWeight: 900, cursor: filteredItems.length === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: filteredItems.length === 0 ? 'none' : '0 10px 20px rgba(16,185,129,0.3)', transition: '0.3s' }}>
-                            <span>تصدير Excel</span>
-                            <span style={{ fontSize: '18px' }}>📑</span>
-                        </button>
-                    </div>
-                </div>
+  const {
+    filteredItems,
+    globalSearch,
+    setGlobalSearch,
+    stagnantDays,
+    setStagnantDays,
+    totalDeadItems,
+    totalFrozenCapital,
+    isLoading,
+    isDisposalModalOpen,
+    setIsDisposalModalOpen,
+    selectedItemForDisposal,
+    disposalQty,
+    setDisposalQty,
+    disposalReason,
+    setDisposalReason,
+    openDisposalModal,
+    handleExecuteDisposal,
+    isDisposalLoading,
+    isPromoModalOpen,
+    setIsPromoModalOpen,
+    selectedItemForPromo,
+    promoDiscountPercent,
+    setPromoDiscountPercent,
+    promoMinQty,
+    setPromoMinQty,
+    openPromoModal,
+    handleExecutePromo,
+    isPromoLoading,
+    exportToExcel
+  } = useDeadStockLogic();
 
-                {/* Filters */}
-                <div className="dead-stock-filters" style={{ display: 'flex', gap: '15px', marginTop: '30px', flexWrap: 'wrap' }}>
-                    <div style={{ flex: '1 1 300px' }}>
-                        <div style={{ color: THEME.accentLight, fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>بحث برمز أو اسم الصنف 🔍</div>
-                        <input 
-                            type="text" 
-                            placeholder="ابحث..." 
-                            value={globalSearch}
-                            onChange={(e) => setGlobalSearch(e.target.value)}
-                            style={{ width: '100%', padding: '14px 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none', transition: 'all 0.3s' }}
-                        />
-                    </div>
-                    <div style={{ flex: '0 0 200px' }}>
-                        <div style={{ color: THEME.accentLight, fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>أيام الركود (أكثر من) 🐢</div>
-                        <select 
-                            value={stagnantDays}
-                            onChange={(e) => setStagnantDays(Number(e.target.value))}
-                            style={{ width: '100%', padding: '14px 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none', appearance: 'none', cursor: 'pointer' }}
-                        >
-                            <option value={30} style={{ color: 'black' }}>30 يوماً (شهر)</option>
-                            <option value={60} style={{ color: 'black' }}>60 يوماً (شهران)</option>
-                            <option value={90} style={{ color: 'black' }}>90 يوماً (3 أشهر)</option>
-                            <option value={180} style={{ color: 'black' }}>180 يوماً (6 أشهر)</option>
-                            <option value={365} style={{ color: 'black' }}>365 يوماً (سنة)</option>
-                        </select>
-                    </div>
-                </div>
+  const formatMoney = (val: number) => {
+    return new Intl.NumberFormat('ar-SA', { style: 'currency', currency: 'SAR' }).format(val || 0);
+  };
+
+  return (
+    <MasterPage
+      title={isEn ? 'Dead Stock Analytics' : 'إدارة ومراقبة المخزون الراكد'}
+      subtitle={isEn ? 'Smart monitoring of slow-moving inventory to liquidate frozen capital' : 'تحليل البضائع بطيئة الحركة وتنشيط رأس المال المجمد بعروض تصفية وإتلاف فوري'}
+      icon="🐢"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', direction: 'rtl' }}>
+
+        {/* 1. Top Luxury KPI Cards (Solid White, Gold Borders) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '16px'
+        }}>
+          {/* Frozen Capital Card */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(168, 87, 60, 0.3)',
+            borderRadius: '16px',
+            padding: '20px',
+            boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#A8573C' }}>
+                {isEn ? '🥶 Total Frozen Capital' : '🥶 إجمالي رأس المال المجمد'}
+              </span>
+              <span style={{ fontSize: '22px' }}>💰</span>
             </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#A8573C', marginTop: '8px' }}>
+              {formatMoney(totalFrozenCapital)}
+            </div>
+            <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 700, marginTop: '4px' }}>
+              {isEn ? 'Capital tied up in non-moving goods' : 'قيمة البضائع المحتجزة بدون حركة بيع أو سحب'}
+            </div>
+          </div>
 
-            {isLoading ? (
-                <div style={{ padding: '50px', textAlign: 'center', color: 'white', fontWeight: 900, fontSize: '20px' }}>جاري الحساب...</div>
-            ) : (
-                <>
-                    {/* Global KPIs */}
-                    <div className="dead-stock-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-                        <div className="dead-stock-kpi-card" style={{ background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.1), rgba(159, 18, 57, 0.2))', border: '1px solid rgba(244, 63, 94, 0.3)', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
-                            <div style={{ color: '#fda4af', fontSize: '14px', fontWeight: 900, marginBottom: '8px' }}>إجمالي رأس المال المجمد 🥶💰</div>
-                            <div style={{ color: 'white', fontSize: '36px', fontWeight: 900 }}>{formatCurrency(totalFrozenCapital)}</div>
-                            <div style={{ color: '#fb7185', fontSize: '12px', marginTop: '10px' }}>قيمة البضاعة التي لا تتحرك</div>
-                        </div>
-                        <div className="dead-stock-kpi-card" style={{ background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.2))', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
-                            <div style={{ color: '#fcd34d', fontSize: '14px', fontWeight: 900, marginBottom: '8px' }}>عدد الأصناف الراكدة 🏷️</div>
-                            <div style={{ color: 'white', fontSize: '36px', fontWeight: 900 }}>{totalDeadItems} <span style={{ fontSize: '16px', fontWeight: 700, color: '#fcd34d' }}>صنف</span></div>
-                        </div>
-                    </div>
-
-                    {/* Data Table */}
-                    <div className="dead-stock-table-card" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(20px)', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                        <div style={{ overflowX: 'auto' }}>
-                            <table className="dead-stock-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', color: 'white' }}>
-                                <thead style={{ background: 'rgba(0,0,0,0.4)' }}>
-                                    <tr>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>كود الصنف 🔑</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>اسم الصنف 🏷️</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>الكمية الراكدة 📦</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>التكلفة 💲</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: '#fda4af', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>رأس المال المجمد 🥶</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>تاريخ آخر منصرف 📅</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: '#fde047', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>أيام الركود ⏳</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredItems.length > 0 ? filteredItems.map((item, idx) => (
-                                        <tr key={item.id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent', transition: '0.2s' }}>
-                                            <td style={{ padding: '20px', fontWeight: 800, color: '#94a3b8' }}>{item.code || '-'}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900 }}>{item.name}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900, color: '#38bdf8', fontSize: '16px' }}>{item.qty} {item.unit}</td>
-                                            <td style={{ padding: '20px', fontWeight: 800, color: '#cbd5e1' }}>{formatCurrency(item.cost)}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900, color: '#fda4af', fontSize: '16px' }}>{formatCurrency(item.frozenCapital)}</td>
-                                            <td style={{ padding: '20px', fontWeight: 800, color: '#cbd5e1', direction: 'ltr', textAlign: 'right' }}>{item.lastMovementDate}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900, color: '#fde047', fontSize: '18px' }}>
-                                                {item.daysSinceLastMovement} <span style={{ fontSize: '12px', fontWeight: 400 }}>يوم</span>
-                                            </td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td colSpan={7} style={{ padding: '60px', textAlign: 'center' }}>
-                                                <div style={{ fontSize: '48px', marginBottom: '15px' }}>✅</div>
-                                                <div style={{ color: '#10b981', fontWeight: 900, fontSize: '20px' }}>مخزونك نشيط جداً!</div>
-                                                <div style={{ color: '#64748b', marginTop: '5px' }}>لا توجد أصناف راكدة تتجاوز {stagnantDays} يوماً.</div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </>
-            )}
+          {/* Stagnant Items Count */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(194, 155, 98, 0.3)',
+            borderRadius: '16px',
+            padding: '20px',
+            boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#8c6b32' }}>
+                {isEn ? '🏷️ Stagnant Items Count' : '🏷️ عدد الأصناف الراكدة'}
+              </span>
+              <span style={{ fontSize: '22px' }}>📦</span>
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#C29B62', marginTop: '8px' }}>
+              {totalDeadItems} <span style={{ fontSize: '14px', color: '#1E130B' }}>{isEn ? 'items' : 'صنف'}</span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 700, marginTop: '4px' }}>
+              {isEn ? `No outward movement for ${stagnantDays}+ days` : `لم تسجل حركة منصرف منذ أكثر من ${stagnantDays} يوماً`}
+            </div>
+          </div>
         </div>
-    );
+
+        {/* 2. Controls & Filter Bar */}
+        <div style={{
+          background: '#FFFFFF',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '14px',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+        }}>
+          {/* Search Input */}
+          <div style={{ flex: '1 1 260px' }}>
+            <input
+              type="text"
+              placeholder={isEn ? 'Search item name, code, barcode...' : 'ابحث باسم الصنف، الكود، أو الباركود...'}
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '44px',
+                padding: '10px 16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(194, 155, 98, 0.35)',
+                background: '#FDFBF7',
+                color: '#1E130B',
+                fontSize: '13px',
+                fontWeight: 700,
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          {/* Stagnant Days Selector */}
+          <div style={{ minWidth: '220px' }}>
+            <select
+              value={stagnantDays}
+              onChange={(e) => setStagnantDays(Number(e.target.value))}
+              style={{
+                width: '100%',
+                minHeight: '44px',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                border: '1px solid rgba(194, 155, 98, 0.35)',
+                background: '#FDFBF7',
+                color: '#1E130B',
+                fontSize: '13px',
+                fontWeight: 800,
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value={30}>⏳ {isEn ? 'Stagnant > 30 Days (1 Month)' : 'ركود أكثر من 30 يوماً (شهر)'}</option>
+              <option value={60}>⏳ {isEn ? 'Stagnant > 60 Days (2 Months)' : 'ركود أكثر من 60 يوماً (شهران)'}</option>
+              <option value={90}>⏳ {isEn ? 'Stagnant > 90 Days (3 Months)' : 'ركود أكثر من 90 يوماً (3 أشهر)'}</option>
+              <option value={180}>⏳ {isEn ? 'Stagnant > 180 Days (6 Months)' : 'ركود أكثر من 180 يوماً (نصف سنة)'}</option>
+              <option value={365}>⏳ {isEn ? 'Stagnant > 365 Days (1 Year)' : 'ركود أكثر من سنة كاملة'}</option>
+            </select>
+          </div>
+
+          {/* Export Excel Button */}
+          <button
+            type="button"
+            onClick={exportToExcel}
+            disabled={filteredItems.length === 0}
+            style={{
+              minHeight: '44px',
+              padding: '10px 18px',
+              borderRadius: '12px',
+              border: 'none',
+              background: filteredItems.length === 0 ? '#e2e8f0' : '#059669',
+              color: filteredItems.length === 0 ? '#94a3b8' : '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: 900,
+              cursor: filteredItems.length === 0 ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: filteredItems.length === 0 ? 'none' : '0 4px 14px rgba(5, 150, 105, 0.25)'
+            }}
+          >
+            <span>📊</span>
+            <span>{isEn ? 'Export Excel' : 'تصدير إكسل'}</span>
+          </button>
+        </div>
+
+        {/* 3. Table Section */}
+        <div style={{
+          background: '#FFFFFF',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
+          borderRadius: '16px',
+          overflow: 'hidden',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+        }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '12px' }}>
+              <thead>
+                <tr style={{
+                  background: 'rgba(30, 19, 11, 0.03)',
+                  borderBottom: '1.5px solid rgba(194, 155, 98, 0.25)',
+                  color: '#1E130B'
+                }}>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Item Code & Name' : 'كود واسم الصنف'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Stagnant Stock' : 'الكمية الراكدة'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Cost Price' : 'متوسط التكلفة'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Frozen Capital' : 'رأس المال المجمد'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Last Movement' : 'تاريخ آخر منصرف'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>{isEn ? 'Stagnant Days' : 'أيام الركود'}</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900, textAlign: 'center' }}>{isEn ? 'Actions' : 'إجراءات التنشيط'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '40px', textAlign: 'center' }}>
+                      <LoadingScreen text={isEn ? 'Analyzing stagnant stock...' : 'جارٍ تحليل حركات وسجلات الركود...'} />
+                    </td>
+                  </tr>
+                ) : filteredItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '50px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '40px', marginBottom: '10px' }}>🌟</div>
+                      <div style={{ color: '#059669', fontWeight: 900, fontSize: '16px' }}>
+                        {isEn ? 'Great! No stagnant inventory detected.' : 'مخزونك نشيط جداً!'}
+                      </div>
+                      <div style={{ color: '#786c62', marginTop: '4px', fontSize: '13px' }}>
+                        {isEn ? `No items exceed ${stagnantDays} days without movement.` : `لا توجد أدوية أو بضائع راكدة تتجاوز ${stagnantDays} يوماً.`}
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      style={{
+                        borderBottom: '1px solid rgba(194, 155, 98, 0.15)',
+                        transition: 'background 0.2s'
+                      }}
+                    >
+                      {/* Name & Code */}
+                      <td style={{ padding: '14px 16px' }}>
+                        <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '13px' }}>
+                          {item.name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 700, marginTop: '2px' }}>
+                          {item.code ? `كود: ${item.code}` : ''} {item.barcode ? `| باركود: ${item.barcode}` : ''}
+                        </div>
+                      </td>
+
+                      {/* Stock */}
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{ fontWeight: 900, color: '#1E130B', fontSize: '13px' }}>
+                          {item.qty} {item.unit}
+                        </span>
+                      </td>
+
+                      {/* Cost */}
+                      <td style={{ padding: '14px 16px', fontWeight: 800, color: '#1E130B' }}>
+                        {formatMoney(item.cost)}
+                      </td>
+
+                      {/* Frozen Capital */}
+                      <td style={{ padding: '14px 16px', fontWeight: 900, color: '#A8573C', fontSize: '13px' }}>
+                        {formatMoney(item.frozenCapital)}
+                      </td>
+
+                      {/* Last Movement */}
+                      <td style={{ padding: '14px 16px', fontWeight: 700, color: '#786c62' }}>
+                        {item.lastMovementDate}
+                      </td>
+
+                      {/* Days Since Movement */}
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{
+                          background: 'rgba(168, 87, 60, 0.1)',
+                          color: '#A8573C',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontWeight: 900,
+                          fontSize: '12px'
+                        }}>
+                          {item.daysSinceLastMovement} يوم
+                        </span>
+                      </td>
+
+                      {/* Action Buttons */}
+                      <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => openPromoModal(item)}
+                            title={isEn ? 'Clearance Promotion' : 'تفعيل عرض تصفية فوري في الكاشير'}
+                            style={{
+                              minHeight: '34px',
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              border: 'none',
+                              background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                              color: '#FFFFFF',
+                              fontSize: '11px',
+                              fontWeight: 900,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              boxShadow: '0 2px 8px rgba(194, 155, 98, 0.25)'
+                            }}
+                          >
+                            🎁 {isEn ? 'Promote' : 'عرض تصفية'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => openDisposalModal(item)}
+                            title={isEn ? 'Inventory Disposal' : 'إتلاف مخزني للبضاعة التالفة أو الميتة'}
+                            style={{
+                              minHeight: '34px',
+                              padding: '6px 12px',
+                              borderRadius: '8px',
+                              border: 'none',
+                              background: '#A8573C',
+                              color: '#FFFFFF',
+                              fontSize: '11px',
+                              fontWeight: 900,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              boxShadow: '0 2px 8px rgba(168, 87, 60, 0.25)'
+                            }}
+                          >
+                            🗑️ {isEn ? 'Dispose' : 'إتلاف'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 4. Quick Disposal Modal */}
+        <AquaModalWrapper
+          isOpen={isDisposalModalOpen && !!selectedItemForDisposal}
+          onClose={() => setIsDisposalModalOpen(false)}
+          title={isEn ? 'Disposal of Stagnant Goods' : 'إتلاف مخزني لبضاعة راكدة'}
+          icon="🗑️"
+        >
+          {selectedItemForDisposal && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', direction: 'rtl' }}>
+              <div style={{
+                background: 'rgba(168, 87, 60, 0.08)',
+                padding: '14px 18px',
+                borderRadius: '14px',
+                border: '1.5px solid rgba(168, 87, 60, 0.3)'
+              }}>
+                <div style={{ fontWeight: 900, color: '#A8573C', fontSize: '15px' }}>
+                  {selectedItemForDisposal.name}
+                </div>
+                <div style={{ fontSize: '12px', color: '#1E130B', marginTop: '4px', fontWeight: 700 }}>
+                  الكمية الراكدة: {selectedItemForDisposal.qty} {selectedItemForDisposal.unit} | التكلفة: {formatMoney(selectedItemForDisposal.cost)}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Disposal Quantity *' : 'الكمية المراد إتلافها *'}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={selectedItemForDisposal.qty}
+                  value={disposalQty}
+                  onChange={(e) => setDisposalQty(Number(e.target.value) || 0)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '14px',
+                    fontWeight: 900,
+                    outline: 'none'
+                  }}
+                />
+                <span style={{ fontSize: '11px', color: '#A8573C', marginTop: '4px', display: 'block', fontWeight: 800 }}>
+                  إجمالي الخسارة المقيدة: {formatMoney(disposalQty * selectedItemForDisposal.cost)}
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Reason / Notes' : 'سبب الإتلاف وملاحظات الضبط'}
+                </label>
+                <input
+                  type="text"
+                  value={disposalReason}
+                  onChange={(e) => setDisposalReason(e.target.value)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={isDisposalLoading}
+                  onClick={handleExecuteDisposal}
+                  style={{
+                    flex: 1,
+                    minHeight: '44px',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: '#A8573C',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 900,
+                    cursor: isDisposalLoading ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(168, 87, 60, 0.25)'
+                  }}
+                >
+                  {isDisposalLoading ? (isEn ? 'Processing...' : 'جارٍ الإتلاف...') : (isEn ? 'Confirm Disposal & Post 🗑️' : 'تأكيد الإتلاف وتخفيض المخزون 🗑️')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDisposalModalOpen(false)}
+                  style={{
+                    minHeight: '44px',
+                    padding: '12px 18px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.3)',
+                    background: 'transparent',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isEn ? 'Cancel' : 'إلغاء'}
+                </button>
+              </div>
+            </div>
+          )}
+        </AquaModalWrapper>
+
+        {/* 5. Quick Promo Modal */}
+        <AquaModalWrapper
+          isOpen={isPromoModalOpen && !!selectedItemForPromo}
+          onClose={() => setIsPromoModalOpen(false)}
+          title={isEn ? 'Clearance Promo for Stagnant Stock' : 'تفعيل عرض تصفية للمخزون الراكد'}
+          icon="🎁"
+        >
+          {selectedItemForPromo && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', direction: 'rtl' }}>
+              <div style={{
+                background: 'rgba(194, 155, 98, 0.1)',
+                padding: '14px 18px',
+                borderRadius: '14px',
+                border: '1.5px solid rgba(194, 155, 98, 0.35)'
+              }}>
+                <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '15px' }}>
+                  {selectedItemForPromo.name}
+                </div>
+                <div style={{ fontSize: '12px', color: '#1E130B', marginTop: '4px', fontWeight: 700 }}>
+                  الكمية الراكدة: {selectedItemForPromo.qty} {selectedItemForPromo.unit} | السعر الحالي: {formatMoney(selectedItemForPromo.suggested_price)}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Discount Percentage %' : 'نسبة الخصم الترويجي %'}
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    min={5}
+                    max={90}
+                    value={promoDiscountPercent}
+                    onChange={(e) => setPromoDiscountPercent(Number(e.target.value) || 0)}
+                    style={{
+                      flex: 1,
+                      minHeight: '44px',
+                      padding: '10px 14px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(194, 155, 98, 0.35)',
+                      background: '#FDFBF7',
+                      color: '#1E130B',
+                      fontSize: '14px',
+                      fontWeight: 900,
+                      outline: 'none'
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[20, 30, 40, 50].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setPromoDiscountPercent(pct)}
+                        style={{
+                          minHeight: '44px',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: promoDiscountPercent === pct ? '2px solid #C29B62' : '1px solid rgba(194, 155, 98, 0.3)',
+                          background: promoDiscountPercent === pct ? '#C29B62' : '#FFFFFF',
+                          color: promoDiscountPercent === pct ? '#FFFFFF' : '#1E130B',
+                          fontSize: '12px',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        %{pct}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                  {isEn ? 'Minimum Quantity' : 'الحد الأدنى للكمية لتطبيق الخصم'}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={promoMinQty}
+                  onChange={(e) => setPromoMinQty(Number(e.target.value) || 1)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  disabled={isPromoLoading}
+                  onClick={handleExecutePromo}
+                  style={{
+                    flex: 1,
+                    minHeight: '44px',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 900,
+                    cursor: isPromoLoading ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(194, 155, 98, 0.3)'
+                  }}
+                >
+                  {isPromoLoading ? (isEn ? 'Activating...' : 'جارٍ التفعيل...') : (isEn ? 'Activate Clearance Promo 🎁' : 'تفعيل العرض فورياً في الكاشير 🎁')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPromoModalOpen(false)}
+                  style={{
+                    minHeight: '44px',
+                    padding: '12px 18px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.3)',
+                    background: 'transparent',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isEn ? 'Cancel' : 'إلغاء'}
+                </button>
+              </div>
+            </div>
+          )}
+        </AquaModalWrapper>
+
+      </div>
+    </MasterPage>
+  );
 }
