@@ -1,126 +1,404 @@
 "use client";
 import React from 'react';
-import { THEME } from '@/lib/theme';
-import { formatCurrency } from '@/lib/helpers';
+import MasterPage from '@/components/MasterPage';
+import LoadingScreen from '@/components/LoadingScreen';
 import { useInventoryValuationLogic } from './inventory_valuation_logic';
 
 export default function InventoryValuationPage() {
-    const {
-        filteredItems,
-        globalSearch,
-        setGlobalSearch,
-        totalInventoryValue,
-        totalItemsCount,
-        totalPhysicalUnits,
-        isLoading,
-        exportToExcel
-    } = useInventoryValuationLogic();
+  const {
+    filteredItems,
+    warehouses,
+    selectedWarehouseId,
+    setSelectedWarehouseId,
+    globalSearch,
+    setGlobalSearch,
+    sortBy,
+    setSortBy,
+    metrics,
+    isLoading,
+    exportToExcel
+  } = useInventoryValuationLogic();
 
-    return (
-        <div className="inv-val-container" style={{ padding: '20px', minHeight: '100vh', background: `linear-gradient(135deg, ${THEME.primary} 0%, #0a192f 100%)`, fontFamily: 'Tajawal, sans-serif', direction: 'rtl', maxWidth: '100vw', overflowX: 'hidden', boxSizing: 'border-box' }}>
-            <style>{`
-                @media (max-width: 768px) {
-                    .inv-val-container { padding: 10px 8px !important; }
-                    .inv-val-header { padding: 15px !important; border-radius: 16px !important; }
-                    .inv-val-header h1 { font-size: 20px !important; }
-                    .inv-val-btn { width: 100% !important; justify-content: center !important; min-height: 44px !important; }
-                    .inv-val-kpi-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
-                    .inv-val-kpi-card { padding: 15px !important; border-radius: 16px !important; }
-                    .inv-val-kpi-card div:nth-child(2) { font-size: 24px !important; }
-                    .inv-val-table-card { border-radius: 16px !important; }
-                    .inv-val-table { min-width: 600px !important; }
-                    .inv-val-table th, .inv-val-table td { padding: 8px 10px !important; font-size: 11px !important; }
-                }
-            `}</style>
-            {/* Header */}
-            <div className="inv-val-header" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '30px', marginBottom: '25px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-                    <div>
-                        <h1 style={{ color: 'white', margin: '0 0 10px 0', fontSize: '32px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <span style={{ background: `linear-gradient(45deg, ${THEME.accent}, #fde047)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>تقييم المخزون (Inventory Valuation)</span>
-                            <span style={{ fontSize: '24px' }}>💵</span>
-                        </h1>
-                        <p style={{ color: '#94a3b8', margin: 0, fontSize: '15px', fontWeight: 500 }}>
-                            يعرض قيمة البضاعة الحالية كرقم مالي (الكمية × متوسط التكلفة).
-                        </p>
-                    </div>
-                    
-                    <div style={{ display: 'flex', gap: '15px' }}>
-                        <button className="inv-val-btn" onClick={exportToExcel} disabled={filteredItems.length === 0} style={{ background: filteredItems.length === 0 ? 'rgba(255,255,255,0.1)' : 'linear-gradient(45deg, #10b981, #059669)', color: filteredItems.length === 0 ? '#64748b' : 'white', border: 'none', padding: '12px 25px', borderRadius: '12px', fontWeight: 900, cursor: filteredItems.length === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: filteredItems.length === 0 ? 'none' : '0 10px 20px rgba(16,185,129,0.3)', transition: '0.3s' }}>
-                            <span>تصدير Excel</span>
-                            <span style={{ fontSize: '18px' }}>📑</span>
-                        </button>
-                    </div>
-                </div>
+  const formatMoney = (val: number) => {
+    return new Intl.NumberFormat('ar-SA', { style: 'currency', currency: 'SAR' }).format(val || 0);
+  };
 
-                {/* Filters */}
-                <div style={{ display: 'flex', gap: '15px', marginTop: '30px', flexWrap: 'wrap' }}>
-                    <div style={{ flex: '1 1 300px' }}>
-                        <div style={{ color: THEME.accentLight, fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>بحث برمز أو اسم الصنف 🔍</div>
-                        <input 
-                            type="text" 
-                            placeholder="ابحث..." 
-                            value={globalSearch}
-                            onChange={(e) => setGlobalSearch(e.target.value)}
-                            style={{ width: '100%', padding: '14px 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none', transition: 'all 0.3s' }}
-                        />
-                    </div>
-                </div>
+  return (
+    <MasterPage
+      title="تقييم المخزون المالي والأرباح المتوقعة"
+      subtitle="حساب قيمة المخزون بمتوسط التكلفة المرجح (WAC) وأسعار البيع وهوامش الربحية"
+      icon="💵"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', direction: 'rtl' }}>
+        
+        {/* Print Styles */}
+        <style>{`
+          @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: black !important; }
+            .inv-val-table th, .inv-val-table td { padding: 6px 8px !important; font-size: 11px !important; }
+          }
+        `}</style>
+
+        {/* 1. Top Luxury KPI Cards (Solid Elegant Cards) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '14px'
+        }}>
+          {/* Cost Valuation (WAC) */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1.5px solid rgba(194, 155, 98, 0.3)',
+            borderRadius: '16px',
+            padding: '18px 20px',
+            boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#8c6b32' }}>
+                قيمة المخزون بالتكلفة (WAC) 💵
+              </span>
+              <span style={{ fontSize: '22px' }}>📊</span>
             </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#C29B62', marginTop: '6px' }}>
+              {formatMoney(metrics.totalCostValue)}
+            </div>
+            <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 800, marginTop: '4px' }}>
+              محسوب بمتوسط التكلفة المرجح للحركات الواردة
+            </div>
+          </div>
 
-            {isLoading ? (
-                <div style={{ padding: '50px', textAlign: 'center', color: 'white', fontWeight: 900, fontSize: '20px' }}>جاري الحساب والتقييم...</div>
-            ) : (
-                <>
-                    {/* Global KPIs */}
-                    <div className="inv-val-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-                        <div className="inv-val-kpi-card" style={{ background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(2, 132, 199, 0.2))', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
-                            <div style={{ color: '#7dd3fc', fontSize: '14px', fontWeight: 900, marginBottom: '8px' }}>إجمالي قيمة المخزون 💵</div>
-                            <div style={{ color: 'white', fontSize: '36px', fontWeight: 900 }}>{formatCurrency(totalInventoryValue)}</div>
-                        </div>
-                        <div className="inv-val-kpi-card" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.2))', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
-                            <div style={{ color: '#6ee7b7', fontSize: '14px', fontWeight: 900, marginBottom: '8px' }}>إجمالي الوحدات المادية 📦</div>
-                            <div style={{ color: 'white', fontSize: '36px', fontWeight: 900 }}>{totalPhysicalUnits.toLocaleString()}</div>
-                        </div>
-                        <div className="inv-val-kpi-card" style={{ background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.2))', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
-                            <div style={{ color: '#fcd34d', fontSize: '14px', fontWeight: 900, marginBottom: '8px' }}>عدد الأصناف 🏷️</div>
-                            <div style={{ color: 'white', fontSize: '36px', fontWeight: 900 }}>{totalItemsCount}</div>
-                        </div>
-                    </div>
+          {/* Retail Sales Valuation */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1.5px solid rgba(5, 150, 105, 0.3)',
+            borderRadius: '16px',
+            padding: '18px 20px',
+            boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#059669' }}>
+                القيمة البيعية المتوقعة (Retail) 🏷️
+              </span>
+              <span style={{ fontSize: '22px' }}>💰</span>
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#059669', marginTop: '6px' }}>
+              {formatMoney(metrics.totalRetailValue)}
+            </div>
+            <div style={{ fontSize: '11px', color: '#059669', fontWeight: 800, marginTop: '4px' }}>
+              قيمة البضاعة بأسعار البيع والتجزئة المعتمدة
+            </div>
+          </div>
 
-                    {/* Data Table */}
-                    <div className="inv-val-table-card" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(20px)', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                        <div style={{ overflowX: 'auto' }}>
-                            <table className="inv-val-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', color: 'white' }}>
-                                <thead style={{ background: 'rgba(0,0,0,0.4)' }}>
-                                    <tr>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>كود الصنف 🔑</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>اسم الصنف 🏷️</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>الكمية الحالية 📦</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>متوسط التكلفة 💲</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: '#fde047', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>إجمالي القيمة 💵</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredItems.length > 0 ? filteredItems.map((item, idx) => (
-                                        <tr key={item.id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent', transition: '0.2s' }}>
-                                            <td style={{ padding: '20px', fontWeight: 800, color: '#94a3b8' }}>{item.code || '-'}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900 }}>{item.name}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900, color: '#38bdf8', fontSize: '16px' }}>{item.qty} {item.unit}</td>
-                                            <td style={{ padding: '20px', fontWeight: 800, color: '#cbd5e1' }}>{formatCurrency(item.cost)}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900, color: '#fde047', fontSize: '18px' }}>{formatCurrency(item.totalValue)}</td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontWeight: 900 }}>لا توجد أصناف مطابقة للبحث</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </>
-            )}
+          {/* Expected Profit */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1.5px solid rgba(168, 87, 60, 0.3)',
+            borderRadius: '16px',
+            padding: '18px 20px',
+            boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#A8573C' }}>
+                مجمل الربح المتوقع 📈
+              </span>
+              <span style={{ fontSize: '22px' }}>💎</span>
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#A8573C', marginTop: '6px' }}>
+              {formatMoney(metrics.totalExpectedProfit)}
+            </div>
+            <div style={{ fontSize: '11px', color: '#A8573C', fontWeight: 800, marginTop: '4px' }}>
+              متوسط هامش الربح المحقق: <strong style={{ fontSize: '13px' }}>{metrics.overallMarginPct}%</strong>
+            </div>
+          </div>
+
+          {/* Stock Count & Units */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1px solid rgba(194, 155, 98, 0.25)',
+            borderRadius: '16px',
+            padding: '18px 20px',
+            boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>
+                إجمالي الوحدات المتاحة 📦
+              </span>
+              <span style={{ fontSize: '22px' }}>🏢</span>
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#1E130B', marginTop: '6px' }}>
+              {metrics.totalUnits.toLocaleString('ar-SA')} <span style={{ fontSize: '14px', color: '#786c62' }}>وحدة</span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 800, marginTop: '4px' }}>
+              منها {metrics.inStockCount} صنف متوفر في المستودع المحدد
+            </div>
+          </div>
         </div>
-    );
+
+        {/* 2. Controls & Filtering Bar */}
+        <div className="no-print" style={{
+          background: '#FFFFFF',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '12px',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+        }}>
+          {/* Warehouse Selector */}
+          <div style={{ minWidth: '220px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, color: '#1E130B', marginBottom: '4px' }}>
+              🏢 نطاق المستودع
+            </label>
+            <select
+              value={selectedWarehouseId}
+              onChange={(e) => setSelectedWarehouseId(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '44px',
+                padding: '8px 14px',
+                borderRadius: '12px',
+                border: '1px solid rgba(194, 155, 98, 0.35)',
+                background: '#FDFBF7',
+                color: '#1E130B',
+                fontSize: '13px',
+                fontWeight: 800,
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">🏢 إجمالي كافة المستودعات والصيدليات</option>
+              {warehouses.map((w: any) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search Box */}
+          <div style={{ flex: '1 1 240px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, color: '#1E130B', marginBottom: '4px' }}>
+              🔍 بحث بالاسم أو الكود
+            </label>
+            <input
+              type="text"
+              placeholder="ابحث باسم الدواء البيطري أو الكود أو الباركود..."
+              value={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '44px',
+                padding: '10px 16px',
+                borderRadius: '12px',
+                border: '1px solid rgba(194, 155, 98, 0.35)',
+                background: '#FDFBF7',
+                color: '#1E130B',
+                fontSize: '13px',
+                fontWeight: 700,
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          {/* Sort Tabs */}
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 900, color: '#1E130B', marginBottom: '4px' }}>
+              📊 ترتيب حسب
+            </label>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {[
+                { id: 'value', label: 'أعلى قيمة' },
+                { id: 'qty', label: 'الكمية' },
+                { id: 'profit', label: 'الربحية' },
+                { id: 'margin', label: 'الهامش %' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSortBy(tab.id as any)}
+                  style={{
+                    minHeight: '44px',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: sortBy === tab.id ? '#1E130B' : 'rgba(30, 19, 11, 0.06)',
+                    color: sortBy === tab.id ? '#FFFFFF' : '#1E130B',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Print & Export Buttons */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              style={{
+                minHeight: '44px',
+                padding: '10px 18px',
+                borderRadius: '12px',
+                border: '1px solid rgba(194, 155, 98, 0.3)',
+                background: '#FFFFFF',
+                color: '#1E130B',
+                fontSize: '13px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>🖨️</span>
+              <span>طباعة</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={exportToExcel}
+              disabled={filteredItems.length === 0}
+              style={{
+                minHeight: '44px',
+                padding: '10px 18px',
+                borderRadius: '12px',
+                border: 'none',
+                background: '#059669',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: 900,
+                cursor: filteredItems.length === 0 ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 4px 14px rgba(5, 150, 105, 0.25)'
+              }}
+            >
+              <span>📊</span>
+              <span>تصدير Excel</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 3. Valuation Details Table */}
+        <div style={{
+          background: '#FFFFFF',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
+          borderRadius: '16px',
+          overflow: 'hidden',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+        }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="inv-val-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '12px' }}>
+              <thead>
+                <tr style={{
+                  background: 'rgba(30, 19, 11, 0.03)',
+                  borderBottom: '1.5px solid rgba(194, 155, 98, 0.25)',
+                  color: '#1E130B'
+                }}>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>الصنف والكود</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>الرصيد المتاح</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>تكلفة WAC</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>سعر البيع</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>قيمة التكلفة الإجمالية</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>القيمة البيعية الإجمالية</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900 }}>الربح المتوقع</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 900, textAlign: 'center' }}>الهامش %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '50px', textAlign: 'center' }}>
+                      <LoadingScreen text="جارٍ حساب متوسطات التكلفة وتقييم المخزون..." />
+                    </td>
+                  </tr>
+                ) : filteredItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '50px', textAlign: 'center', color: '#786c62', fontWeight: 800 }}>
+                      لا توجد أصناف مطابقة للبحث أو المستودع المحدد
+                    </td>
+                  </tr>
+                ) : (
+                  filteredItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      style={{
+                        borderBottom: '1px solid rgba(194, 155, 98, 0.15)',
+                        transition: 'background 0.2s'
+                      }}
+                    >
+                      {/* Name & Code */}
+                      <td style={{ padding: '14px 16px' }}>
+                        <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '13px' }}>
+                          {item.name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#786c62', marginTop: '2px', fontWeight: 700 }}>
+                          {item.code ? `كود: ${item.code}` : ''} {item.barcode ? `| باركود: ${item.barcode}` : ''}
+                        </div>
+                      </td>
+
+                      {/* Available Qty */}
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{ fontWeight: 900, color: item.available_qty > 0 ? '#1E130B' : '#A8573C', fontSize: '13px' }}>
+                          {item.available_qty} {item.unit}
+                        </span>
+                      </td>
+
+                      {/* WAC Cost */}
+                      <td style={{ padding: '14px 16px', fontWeight: 800, color: '#C29B62' }}>
+                        {formatMoney(item.wac_cost)}
+                      </td>
+
+                      {/* Retail Price */}
+                      <td style={{ padding: '14px 16px', fontWeight: 800, color: '#059669' }}>
+                        {formatMoney(item.suggested_price)}
+                      </td>
+
+                      {/* Total Cost Value */}
+                      <td style={{ padding: '14px 16px', fontWeight: 900, color: '#C29B62', fontSize: '13px' }}>
+                        {formatMoney(item.total_cost_value)}
+                      </td>
+
+                      {/* Total Retail Value */}
+                      <td style={{ padding: '14px 16px', fontWeight: 900, color: '#059669', fontSize: '13px' }}>
+                        {formatMoney(item.total_retail_value)}
+                      </td>
+
+                      {/* Expected Profit */}
+                      <td style={{ padding: '14px 16px', fontWeight: 900, color: item.expected_profit >= 0 ? '#A8573C' : '#dc2626' }}>
+                        {formatMoney(item.expected_profit)}
+                      </td>
+
+                      {/* Margin % */}
+                      <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                        <span style={{
+                          background: item.margin_percentage >= 20 ? 'rgba(5, 150, 105, 0.12)' : 'rgba(194, 155, 98, 0.15)',
+                          color: item.margin_percentage >= 20 ? '#059669' : '#8c6b32',
+                          border: item.margin_percentage >= 20 ? '1px solid rgba(5, 150, 105, 0.3)' : '1px solid rgba(194, 155, 98, 0.3)',
+                          padding: '3px 8px',
+                          borderRadius: '8px',
+                          fontWeight: 900,
+                          fontSize: '11px'
+                        }}>
+                          {item.margin_percentage}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </MasterPage>
+  );
 }

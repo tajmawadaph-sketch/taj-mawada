@@ -1,183 +1,521 @@
 "use client";
 import React from 'react';
-import { THEME } from '@/lib/theme';
-import { formatCurrency } from '@/lib/helpers';
-import { useItemCardLogic } from './item_card_logic';
+import MasterPage from '@/components/MasterPage';
+import LoadingScreen from '@/components/LoadingScreen';
+import { useItemCardLogic, ItemCardTransaction } from './item_card_logic';
 import { BarcodeCameraButton } from '@/components/BarcodeScannerWidget';
 
 export default function ItemCardPage() {
-    const {
-        itemsList,
-        selectedItemId,
-        setSelectedItemId,
-        dateFrom,
-        setDateFrom,
-        dateTo,
-        setDateTo,
-        transactions,
-        totalIn,
-        totalOut,
-        finalBalance,
-        isLoading,
-        exportToExcel
-    } = useItemCardLogic();
+  const {
+    itemsList,
+    selectedItemId,
+    setSelectedItemId,
+    selectedItem,
+    warehouses,
+    selectedWarehouseFilter,
+    setSelectedWarehouseFilter,
+    warehouseBalances,
+    dateFrom,
+    setDateFrom,
+    dateTo,
+    setDateTo,
+    transactions,
+    totalIn,
+    totalOut,
+    totalWaste,
+    finalBalance,
+    isLoading,
+    exportToExcel
+  } = useItemCardLogic();
 
-    return (
-        <div className="itemcard-container" style={{ padding: '20px', minHeight: '100vh', background: `linear-gradient(135deg, ${THEME.primary} 0%, #0a192f 100%)`, fontFamily: 'Tajawal, sans-serif', direction: 'rtl', maxWidth: '100vw', overflowX: 'hidden', boxSizing: 'border-box' }}>
-            <style>{`
-                @media (max-width: 768px) {
-                    .itemcard-container { padding: 10px 8px !important; }
-                    .itemcard-header { padding: 15px !important; border-radius: 16px !important; margin-bottom: 15px !important; }
-                    .itemcard-header h1 { font-size: 20px !important; }
-                    .itemcard-btn { width: 100% !important; justify-content: center !important; min-height: 44px !important; }
-                    .itemcard-filters { flex-direction: column !important; gap: 10px !important; margin-top: 15px !important; }
-                    .itemcard-filters > div { width: 100% !important; flex: 1 1 100% !important; }
-                    .itemcard-kpis { grid-template-columns: 1fr !important; gap: 12px !important; }
-                    .itemcard-table { min-width: 650px !important; }
-                    .itemcard-table th, .itemcard-table td { padding: 8px 10px !important; font-size: 11px !important; }
-                }
-            `}</style>
-            {/* Header */}
-            <div className="itemcard-header" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '30px', marginBottom: '25px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-                    <div>
-                        <h1 style={{ color: 'white', margin: '0 0 10px 0', fontSize: '32px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <span style={{ background: `linear-gradient(45deg, ${THEME.accent}, #38bdf8)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>بطاقة / كارت الصنف</span>
-                            <span style={{ fontSize: '24px' }}>🏷️</span>
-                        </h1>
-                        <p style={{ color: '#94a3b8', margin: 0, fontSize: '15px', fontWeight: 500 }}>
-                            تتبع مسار صنف معين (الوارد والمنصرف بالتفصيل والرصيد المتراكم).
-                        </p>
-                    </div>
-                    
-                    <div style={{ display: 'flex', gap: '15px' }}>
-                        <button className="itemcard-btn" onClick={exportToExcel} disabled={transactions.length === 0} style={{ background: transactions.length === 0 ? 'rgba(255,255,255,0.1)' : 'linear-gradient(45deg, #10b981, #059669)', color: transactions.length === 0 ? '#64748b' : 'white', border: 'none', padding: '12px 25px', borderRadius: '12px', fontWeight: 900, cursor: transactions.length === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: transactions.length === 0 ? 'none' : '0 10px 20px rgba(16,185,129,0.3)', transition: '0.3s' }}>
-                            <span>تصدير Excel</span>
-                            <span style={{ fontSize: '18px' }}>📑</span>
-                        </button>
-                    </div>
-                </div>
+  const formatMoney = (val: number) => {
+    return new Intl.NumberFormat('ar-SA', { style: 'currency', currency: 'SAR' }).format(val || 0);
+  };
 
-                {/* Filters */}
-                <div className="itemcard-filters" style={{ display: 'flex', gap: '15px', marginTop: '30px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <div style={{ flex: '2 1 300px' }}>
-                        <div style={{ color: THEME.accentLight, fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>اختيار الصنف 📦</div>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <select 
-                                value={selectedItemId}
-                                onChange={(e) => setSelectedItemId(e.target.value)}
-                                style={{ flex: 1, padding: '14px 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none', cursor: 'pointer', appearance: 'none', fontWeight: 800 }}
-                            >
-                                <option value="" style={{ color: 'black' }}>-- اختر صنفاً للبحث --</option>
-                                {itemsList.map((item: any) => (
-                                    <option key={item.id} value={item.id} style={{ color: 'black' }}>
-                                        {item.code ? `[${item.code}] ` : ''} {item.name}
-                                    </option>
-                                ))}
-                            </select>
-                            <BarcodeCameraButton 
-                                onScan={(scannedBarcode) => {
-                                    const match = itemsList.find((i: any) => String(i.code) === scannedBarcode || String(i.id) === scannedBarcode);
-                                    if (match) {
-                                        setSelectedItemId(match.id);
-                                    }
-                                }}
-                                title="مسح باركود الصنف بكاميرا الكاشير"
-                                style={{ height: '48px', borderRadius: '14px', minWidth: '48px' }}
-                            />
-                        </div>
-                    </div>
-                    <div style={{ flex: '1 1 200px' }}>
-                        <div style={{ color: THEME.accentLight, fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>من تاريخ</div>
-                        <input 
-                            type="date" 
-                            value={dateFrom}
-                            onChange={(e) => setDateFrom(e.target.value)}
-                            style={{ width: '100%', padding: '14px 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
-                        />
-                    </div>
-                    <div style={{ flex: '1 1 200px' }}>
-                        <div style={{ color: THEME.accentLight, fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>إلى تاريخ</div>
-                        <input 
-                            type="date" 
-                            value={dateTo}
-                            onChange={(e) => setDateTo(e.target.value)}
-                            style={{ width: '100%', padding: '14px 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
-                        />
-                    </div>
-                </div>
+  return (
+    <MasterPage
+      title="بطاقة حركة الصنف الدوائي (Item Movement Ledger)"
+      subtitle="السجل الزمني والتشغيلي المتكامل لكافة حركات الوارد، المنصرف، التحويل، الإتلاف، والتسويات الجردية"
+      icon="🏷️"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', direction: 'rtl' }}>
+        
+        {/* Print Styles */}
+        <style>{`
+          @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: black !important; }
+            .item-table th, .item-table td { padding: 6px 8px !important; font-size: 11px !important; }
+          }
+        `}</style>
+
+        {/* 1. Item Selection & Operational Filters Card */}
+        <div className="no-print" style={{
+          background: '#FFFFFF',
+          border: '1.5px solid rgba(194, 155, 98, 0.3)',
+          borderRadius: '16px',
+          padding: '20px',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', alignItems: 'flex-end' }}>
+            
+            {/* Item Dropdown & Barcode Camera */}
+            <div style={{ gridColumn: 'span 2' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                📦 اختيار الدواء البيطري / الصنف *
+              </label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <select
+                  value={selectedItemId}
+                  onChange={(e) => setSelectedItemId(e.target.value)}
+                  style={{
+                    flex: 1,
+                    minHeight: '44px',
+                    padding: '8px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    background: '#FDFBF7',
+                    color: '#1E130B',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">-- اختر الدواء البيطري لاستعراض كارت الحركة --</option>
+                  {itemsList.map((item: any) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code ? `[${item.code}] ` : ''}{item.name} ({item.unit || 'حبة'})
+                    </option>
+                  ))}
+                </select>
+
+                <BarcodeCameraButton
+                  onScan={(scannedCode) => {
+                    const match = itemsList.find((i: any) => 
+                      String(i.code).toLowerCase() === scannedCode.toLowerCase() ||
+                      String(i.barcode).toLowerCase() === scannedCode.toLowerCase()
+                    );
+                    if (match) setSelectedItemId(match.id);
+                  }}
+                  title="مسح باركود الصنف بكاميرا الكاشير"
+                  style={{ minHeight: '44px', borderRadius: '12px', minWidth: '44px' }}
+                />
+              </div>
             </div>
 
-            {isLoading ? (
-                <div style={{ padding: '50px', textAlign: 'center', color: 'white', fontWeight: 900, fontSize: '20px' }}>جاري التحميل...</div>
-            ) : !selectedItemId ? (
-                <div style={{ padding: '80px 20px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '24px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '15px' }}>🏷️</div>
-                    <h2 style={{ color: 'white', margin: '0 0 10px 0' }}>الرجاء اختيار صنف</h2>
-                    <p style={{ color: '#94a3b8', margin: 0 }}>اختر صنفاً من القائمة أعلاه لعرض بطاقة حركاته التفصيلية.</p>
-                </div>
-            ) : (
-                <>
-                    {/* Global KPIs */}
-                    <div className="itemcard-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-                        <div style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.2))', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
-                            <div style={{ color: '#6ee7b7', fontSize: '14px', fontWeight: 900, marginBottom: '8px' }}>إجمالي الوارد 📥</div>
-                            <div style={{ color: 'white', fontSize: '36px', fontWeight: 900 }}>{totalIn}</div>
-                        </div>
-                        <div style={{ background: 'linear-gradient(135deg, rgba(225, 29, 72, 0.1), rgba(190, 18, 60, 0.2))', border: '1px solid rgba(225, 29, 72, 0.3)', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
-                            <div style={{ color: '#fda4af', fontSize: '14px', fontWeight: 900, marginBottom: '8px' }}>إجمالي المنصرف 📤</div>
-                            <div style={{ color: 'white', fontSize: '36px', fontWeight: 900 }}>{totalOut}</div>
-                        </div>
-                        <div style={{ background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(2, 132, 199, 0.2))', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '25px', borderRadius: '24px', textAlign: 'center' }}>
-                            <div style={{ color: '#7dd3fc', fontSize: '14px', fontWeight: 900, marginBottom: '8px' }}>الرصيد الحالي الشامل 📦</div>
-                            <div style={{ color: 'white', fontSize: '36px', fontWeight: 900 }}>{finalBalance}</div>
-                        </div>
-                    </div>
+            {/* Warehouse Filter */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                🏢 المستودع
+              </label>
+              <select
+                value={selectedWarehouseFilter}
+                onChange={(e) => setSelectedWarehouseFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: '44px',
+                  padding: '8px 14px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(194, 155, 98, 0.35)',
+                  background: '#FDFBF7',
+                  color: '#1E130B',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="all">🏢 كافة المستودعات والفروع</option>
+                {warehouses.map((w: any) => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
+              </select>
+            </div>
 
-                    {/* Data Table */}
-                    <div style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(20px)', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                            <table className="itemcard-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', color: 'white' }}>
-                                <thead style={{ background: 'rgba(0,0,0,0.4)' }}>
-                                    <tr>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>التاريخ 📅</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>نوع الحركة 🔄</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>الوارد 📥</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>المنصرف 📤</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: '#fcd34d', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>الرصيد المتراكم 📦</th>
-                                        <th style={{ padding: '20px', fontSize: '14px', color: THEME.accentLight, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>البيان والمستودع 📝</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {transactions.length > 0 ? transactions.map((tx, idx) => (
-                                        <tr key={tx.id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent', transition: '0.2s' }}>
-                                            <td style={{ padding: '20px', fontWeight: 800 }}>{tx.transaction_date}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900 }}>
-                                                {tx.actualQty > 0 ? (
-                                                    <span style={{ color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '5px 10px', borderRadius: '8px' }}>وارد</span>
-                                                ) : (
-                                                    <span style={{ color: '#fb7185', background: 'rgba(251, 113, 133, 0.1)', padding: '5px 10px', borderRadius: '8px' }}>منصرف</span>
-                                                )}
-                                            </td>
-                                            <td style={{ padding: '20px', fontWeight: 900, color: '#10b981', fontSize: '16px' }}>{tx.actualQty > 0 ? tx.actualQty : '-'}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900, color: '#fb7185', fontSize: '16px' }}>{tx.actualQty < 0 ? Math.abs(tx.actualQty) : '-'}</td>
-                                            <td style={{ padding: '20px', fontWeight: 900, color: '#fcd34d', fontSize: '18px' }}>{tx.runningBalance}</td>
-                                            <td style={{ padding: '20px', fontWeight: 700, color: '#94a3b8' }}>
-                                                <div style={{ color: 'white', marginBottom: '4px' }}>{tx.notes || 'حركة مخزون'}</div>
-                                                <div style={{ fontSize: '12px' }}>🏢 المستودع: {tx.warehouseName}</div>
-                                            </td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontWeight: 900 }}>لا توجد حركات مسجلة لهذا الصنف في هذه الفترة</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </>
-            )}
+            {/* Date From */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                من تاريخ
+              </label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: '44px',
+                  padding: '8px 14px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(194, 155, 98, 0.35)',
+                  background: '#FDFBF7',
+                  color: '#1E130B',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* Date To */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                إلى تاريخ
+              </label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: '44px',
+                  padding: '8px 14px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(194, 155, 98, 0.35)',
+                  background: '#FDFBF7',
+                  color: '#1E130B',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                disabled={!selectedItemId}
+                style={{
+                  minHeight: '44px',
+                  padding: '10px 18px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(194, 155, 98, 0.3)',
+                  background: '#FFFFFF',
+                  color: '#1E130B',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: !selectedItemId ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>🖨️</span>
+                <span>طباعة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={exportToExcel}
+                disabled={!selectedItemId || transactions.length === 0}
+                style={{
+                  minHeight: '44px',
+                  padding: '10px 18px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: (!selectedItemId || transactions.length === 0) ? '#e2e8f0' : '#059669',
+                  color: (!selectedItemId || transactions.length === 0) ? '#94a3b8' : '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: 900,
+                  cursor: (!selectedItemId || transactions.length === 0) ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: (!selectedItemId || transactions.length === 0) ? 'none' : '0 4px 14px rgba(5, 150, 105, 0.25)'
+                }}
+              >
+                <span>📊</span>
+                <span>تصدير Excel</span>
+              </button>
+            </div>
+
+          </div>
+
+          {/* Selected Item Stock Distribution Pills */}
+          {selectedItem && warehouseBalances.length > 0 && (
+            <div style={{
+              marginTop: '16px',
+              paddingTop: '14px',
+              borderTop: '1px solid rgba(194, 155, 98, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap'
+            }}>
+              <span style={{ fontSize: '12px', fontWeight: 900, color: '#1E130B' }}>
+                توزيع الرصيد الحالي بالمستودعات:
+              </span>
+              {warehouseBalances.map((wb: any) => (
+                <div
+                  key={wb.warehouse_id}
+                  style={{
+                    background: 'rgba(194, 155, 98, 0.1)',
+                    border: '1px solid rgba(194, 155, 98, 0.3)',
+                    borderRadius: '8px',
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    color: '#1E130B',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <span>🏢 {wb.warehouses?.name || 'مستودع'}:</span>
+                  <span style={{ color: '#059669', fontWeight: 900 }}>{wb.quantity} {selectedItem.unit}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-    );
+
+        {/* 2. Loading / Empty States */}
+        {isLoading ? (
+          <div style={{ padding: '60px', textAlign: 'center' }}>
+            <LoadingScreen text="جارٍ جلب وتدقيق حركات الصنف وسجلاته التاريخية..." />
+          </div>
+        ) : !selectedItemId ? (
+          <div style={{
+            padding: '70px 20px',
+            textAlign: 'center',
+            background: '#FFFFFF',
+            borderRadius: '20px',
+            border: '1.5px dashed rgba(194, 155, 98, 0.3)',
+            boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>🏷️</div>
+            <h3 style={{ color: '#1E130B', margin: '0 0 8px 0', fontSize: '18px', fontWeight: 900 }}>
+              الرجاء اختيار دواء بيطري أو مسح باركوده
+            </h3>
+            <p style={{ color: '#786c62', margin: 0, fontSize: '13px', fontWeight: 700 }}>
+              اختر الصنف من القائمة أعلاه لعرض بطاقة حركاته التفصيلية، وأرصدته المتراكمة، وأرقام التشغيلات والقيود المرتبطة.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* 3. Luxury Movement KPIs */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '14px'
+            }}>
+              {/* Total In */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(5, 150, 105, 0.3)',
+                borderRadius: '16px',
+                padding: '16px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#059669' }}>إجمالي الوارد 📥</span>
+                  <span style={{ fontSize: '20px' }}>📦</span>
+                </div>
+                <div style={{ fontSize: '26px', fontWeight: 900, color: '#059669', marginTop: '6px' }}>
+                  {totalIn} <span style={{ fontSize: '13px', color: '#1E130B' }}>{selectedItem?.unit || 'حبة'}</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 800, marginTop: '2px' }}>
+                  توريدات، مشتريات، وتسويات زيادة
+                </div>
+              </div>
+
+              {/* Total Out */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(30, 19, 11, 0.2)',
+                borderRadius: '16px',
+                padding: '16px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>إجمالي المنصرف 📤</span>
+                  <span style={{ fontSize: '20px' }}>🚚</span>
+                </div>
+                <div style={{ fontSize: '26px', fontWeight: 900, color: '#1E130B', marginTop: '6px' }}>
+                  {totalOut} <span style={{ fontSize: '13px', color: '#786c62' }}>{selectedItem?.unit || 'حبة'}</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 800, marginTop: '2px' }}>
+                  مبيعات كاشير، صرف لمناديب، وتحويلات
+                </div>
+              </div>
+
+              {/* Total Waste / Loss */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(168, 87, 60, 0.3)',
+                borderRadius: '16px',
+                padding: '16px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#A8573C' }}>التوالف والهدر 🗑️</span>
+                  <span style={{ fontSize: '20px' }}>⚠️</span>
+                </div>
+                <div style={{ fontSize: '26px', fontWeight: 900, color: '#A8573C', marginTop: '6px' }}>
+                  {totalWaste} <span style={{ fontSize: '13px', color: '#1E130B' }}>{selectedItem?.unit || 'حبة'}</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#A8573C', fontWeight: 800, marginTop: '2px' }}>
+                  بضائع تالفة ومنتهية الصلاحية
+                </div>
+              </div>
+
+              {/* Final Balance */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(194, 155, 98, 0.4)',
+                borderRadius: '16px',
+                padding: '16px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#8c6b32' }}>الرصيد التراكمي الفعلي 🏷️</span>
+                  <span style={{ fontSize: '20px' }}>⚖️</span>
+                </div>
+                <div style={{ fontSize: '26px', fontWeight: 900, color: '#C29B62', marginTop: '6px' }}>
+                  {finalBalance} <span style={{ fontSize: '13px', color: '#1E130B' }}>{selectedItem?.unit || 'حبة'}</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#059669', fontWeight: 800, marginTop: '2px' }}>
+                  متطابق مع السجلات المخزنية المعتمدة
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Detailed Movement Ledger Table */}
+            <div style={{
+              background: '#FFFFFF',
+              border: '1px solid rgba(194, 155, 98, 0.25)',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+            }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="item-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{
+                      background: 'rgba(30, 19, 11, 0.03)',
+                      borderBottom: '1.5px solid rgba(194, 155, 98, 0.25)',
+                      color: '#1E130B'
+                    }}>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>التاريخ والرقم</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>نوع الحركة</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>التشغيلة والصلاحية</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>الوارد (+)</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>المنصرف (-)</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>سعر الوحدة</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>الرصيد التراكمي</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>المستودع والجهة</th>
+                      <th style={{ padding: '14px 16px', fontWeight: 900 }}>البيان</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} style={{ padding: '50px', textAlign: 'center', color: '#786c62', fontWeight: 800 }}>
+                          لا توجد حركات مسجلة لهذا الصنف خلال الفترة المحددة
+                        </td>
+                      </tr>
+                    ) : (
+                      transactions.map((tx) => (
+                        <tr
+                          key={tx.id}
+                          style={{
+                            borderBottom: '1px solid rgba(194, 155, 98, 0.15)',
+                            transition: 'background 0.2s'
+                          }}
+                        >
+                          {/* Date & Number */}
+                          <td style={{ padding: '14px 16px' }}>
+                            <div style={{ fontWeight: 900, color: '#1E130B' }}>
+                              {tx.transaction_date}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#786c62', fontWeight: 700 }}>
+                              {tx.transaction_number}
+                            </div>
+                          </td>
+
+                          {/* Type Badge */}
+                          <td style={{ padding: '14px 16px' }}>
+                            <span style={{
+                              background: `${tx.typeBadgeColor}15`,
+                              color: tx.typeBadgeColor,
+                              border: `1px solid ${tx.typeBadgeColor}35`,
+                              padding: '3px 8px',
+                              borderRadius: '8px',
+                              fontWeight: 900,
+                              fontSize: '11px',
+                              display: 'inline-flex',
+                              alignItems: 'center'
+                            }}>
+                              {tx.typeLabel}
+                            </span>
+                          </td>
+
+                          {/* Batch & Expiry */}
+                          <td style={{ padding: '14px 16px' }}>
+                            <div style={{ fontWeight: 800, color: '#1E130B' }}>
+                              {tx.batch_number ? `دفعة: ${tx.batch_number}` : '-'}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#8c6b32', fontWeight: 700 }}>
+                              {tx.expiry_date ? `انتهاء: ${tx.expiry_date}` : ''}
+                            </div>
+                          </td>
+
+                          {/* Inbound Qty */}
+                          <td style={{ padding: '14px 16px', fontWeight: 900, color: '#059669', fontSize: '13px' }}>
+                            {tx.signedQuantity > 0 ? `+${tx.quantity}` : '-'}
+                          </td>
+
+                          {/* Outbound Qty */}
+                          <td style={{ padding: '14px 16px', fontWeight: 900, color: tx.signedQuantity < 0 ? '#A8573C' : '#786c62', fontSize: '13px' }}>
+                            {tx.signedQuantity < 0 ? `-${tx.quantity}` : '-'}
+                          </td>
+
+                          {/* Unit Price */}
+                          <td style={{ padding: '14px 16px', fontWeight: 800, color: '#1E130B' }}>
+                            {tx.unit_price > 0 ? formatMoney(tx.unit_price) : '-'}
+                          </td>
+
+                          {/* Running Balance */}
+                          <td style={{ padding: '14px 16px' }}>
+                            <span style={{
+                              fontWeight: 900,
+                              fontSize: '14px',
+                              color: tx.runningBalance >= 0 ? '#C29B62' : '#dc2626'
+                            }}>
+                              {tx.runningBalance} {selectedItem?.unit || 'حبة'}
+                            </span>
+                          </td>
+
+                          {/* Warehouse & Partner */}
+                          <td style={{ padding: '14px 16px' }}>
+                            <div style={{ fontWeight: 800, color: '#1E130B' }}>
+                              🏢 {tx.warehouseName}
+                              {tx.destinationWarehouseName && ` ➔ ${tx.destinationWarehouseName}`}
+                            </div>
+                            {tx.partnerName && (
+                              <div style={{ fontSize: '11px', color: '#786c62', fontWeight: 700 }}>
+                                👤 {tx.partnerName}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Notes */}
+                          <td style={{ padding: '14px 16px', color: '#786c62', fontWeight: 700 }}>
+                            {tx.notes || 'حركة مخزنية موثقة'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+      </div>
+    </MasterPage>
+  );
 }
