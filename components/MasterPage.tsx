@@ -823,11 +823,13 @@ html, body {
 
         {/* Left side: Header Content, Actions, Avatar */}
         <div className="header-side" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <OfflineSyncIndicator />
           {headerContent}
           
           <div className="header-actions" style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center', borderRight: isRtl ? '2px solid rgba(194, 155, 98, 0.2)' : 'none', borderLeft: !isRtl ? '2px solid rgba(194, 155, 98, 0.2)' : 'none', paddingRight: isRtl ? '10px' : '0', paddingLeft: !isRtl ? '10px' : '0' }}>
              
+             {/* 🟢 مؤشر تزامن وربط البيانات الحية */}
+             <OfflineSyncIndicator />
+
              {/* Desktop Nav Arrows & Shortcuts Button */}
              <div className="nav-group" style={{ display: 'flex', gap: '4px', margin: 0, border: 'none', background: 'rgba(255, 253, 250, 0.6)', borderRadius: '12px', padding: '3px' }}>
                 <button 

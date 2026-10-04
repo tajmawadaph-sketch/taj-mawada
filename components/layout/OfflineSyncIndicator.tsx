@@ -13,7 +13,6 @@ import {
   X, 
   CheckCircle2, 
   AlertTriangle, 
-  ShieldCheck,
   Server
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -58,36 +57,59 @@ export default function OfflineSyncIndicator() {
 
   return (
     <>
-      {/* 🟢 زر المؤشر السريع في الشريط */}
+      <style>{`
+        .offline-sync-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: #FFFFFF;
+          border: 1.5px solid ${isHealthy ? 'rgba(5, 150, 105, 0.3)' : 'rgba(217, 119, 6, 0.4)'};
+          border-radius: 10px;
+          height: 34px;
+          padding: 0 10px;
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(30, 19, 11, 0.04);
+          color: #1E130B;
+          font-size: 11.5px;
+          font-weight: 800;
+          transition: all 0.2s ease;
+          direction: rtl;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .offline-sync-pill:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(30, 19, 11, 0.08);
+        }
+        @media (max-width: 768px) {
+          .offline-sync-pill {
+            padding: 0;
+            width: 34px;
+            height: 34px;
+            justify-content: center;
+            border-radius: 9px;
+          }
+          .offline-sync-text {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      {/* 🟢 زر المؤشر المتجاوب في الشريط العلوي */}
       <button
         onClick={() => setIsModalOpen(true)}
         type="button"
-        title="انقر لعرض تفاصيل ربط السحابة وقاعدة البيانات المحلية"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: '#FFFFFF',
-          border: `1.5px solid ${isHealthy ? 'rgba(5, 150, 105, 0.3)' : 'rgba(217, 119, 6, 0.4)'}`,
-          borderRadius: '30px',
-          padding: '6px 14px',
-          cursor: 'pointer',
-          boxShadow: '0 2px 10px rgba(30, 19, 11, 0.04)',
-          color: '#1E130B',
-          fontSize: '12px',
-          fontWeight: 800,
-          transition: 'all 0.2s ease',
-          direction: 'rtl'
-        }}
-        className="hover:shadow-md hover:scale-[1.02]"
+        className="offline-sync-pill"
+        title={isHealthy ? `متزامن بالسحابة (${tableCounts.total} سجل)` : `تنبيه: ${pendingCount} عملية بانتظار المزامنة`}
       >
         {/* نقطة الحالة النابضة */}
         <span 
           style={{
             position: 'relative',
             display: 'flex',
-            height: '10px',
-            width: '10px'
+            height: '8px',
+            width: '8px',
+            flexShrink: 0
           }}
         >
           <span 
@@ -107,27 +129,29 @@ export default function OfflineSyncIndicator() {
               position: 'relative',
               display: 'inline-flex',
               borderRadius: '50%',
-              height: '10px',
-              width: '10px',
+              height: '8px',
+              width: '8px',
               backgroundColor: isHealthy ? '#059669' : '#d97706'
             }}
           />
         </span>
 
         {/* أيقونة قاعدة البيانات */}
-        <Database size={14} style={{ color: '#C29B62' }} />
+        <Database size={14} style={{ color: '#C29B62', flexShrink: 0 }} />
 
-        {/* النص والبادج */}
-        {isHealthy ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span>مربوط</span>
-            <span style={{ color: '#059669' }} suppressHydrationWarning>({tableCounts.total.toLocaleString('ar-SA')})</span>
-          </span>
-        ) : (
-          <span style={{ color: '#b45309', fontWeight: 900 }}>
-            {pendingCount > 0 ? `${pendingCount} معلق` : 'غير متصل'}
-          </span>
-        )}
+        {/* النص والبادج (يختفي على شاشات الجوال لحماية الهيدر) */}
+        <span className="offline-sync-text">
+          {isHealthy ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>مربوط</span>
+              <span style={{ color: '#059669', fontSize: '10.5px' }} suppressHydrationWarning>({tableCounts.total.toLocaleString('ar-SA')})</span>
+            </span>
+          ) : (
+            <span style={{ color: '#b45309', fontWeight: 900 }}>
+              {pendingCount > 0 ? `${pendingCount} معلق` : 'أوفلاين'}
+            </span>
+          )}
+        </span>
       </button>
 
       {/* 👑 النافذة المنبثقة التفاعلية الفاخرة (Offline Sync Modal) */}
@@ -141,7 +165,7 @@ export default function OfflineSyncIndicator() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '20px',
+            padding: '16px',
             direction: 'rtl'
           }}
           onClick={() => setIsModalOpen(false)}
@@ -149,15 +173,15 @@ export default function OfflineSyncIndicator() {
           <div
             style={{
               background: '#FFFFFF',
-              borderRadius: '24px',
+              borderRadius: '20px',
               border: '1.5px solid rgba(194, 155, 98, 0.3)',
               boxShadow: '0 25px 60px rgba(30, 19, 11, 0.3)',
               width: '100%',
-              maxWidth: '520px',
-              padding: '28px 24px',
+              maxWidth: '480px',
+              padding: '24px 20px',
               color: '#1E130B',
               position: 'relative',
-              animation: 'scaleUp 0.25s ease-out'
+              animation: 'scaleUp 0.2s ease-out'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -166,13 +190,13 @@ export default function OfflineSyncIndicator() {
               onClick={() => setIsModalOpen(false)}
               style={{
                 position: 'absolute',
-                top: '20px',
-                left: '20px',
+                top: '16px',
+                left: '16px',
                 background: '#FDFBF7',
                 border: '1px solid rgba(194, 155, 98, 0.2)',
                 borderRadius: '50%',
-                width: '32px',
-                height: '32px',
+                width: '30px',
+                height: '30px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -180,16 +204,16 @@ export default function OfflineSyncIndicator() {
                 color: '#6b7280'
               }}
             >
-              <X size={16} />
+              <X size={15} />
             </button>
 
             {/* عنوان المودال */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
               <div 
                 style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '14px',
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '12px',
                   background: 'rgba(194, 155, 98, 0.15)',
                   display: 'flex',
                   alignItems: 'center',
@@ -197,59 +221,58 @@ export default function OfflineSyncIndicator() {
                   color: '#C29B62'
                 }}
               >
-                <Server size={22} />
+                <Server size={20} />
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#1E130B' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#1E130B' }}>
                   مركز مزامنة البيانات والربط الثنائي
                 </h3>
-                <p style={{ margin: '3px 0 0', fontSize: '12.5px', color: '#6b7280', fontWeight: 700 }}>
-                  مراقبة القناة السحابية (Supabase) والخزنة المحلية (IndexedDB / Disk)
+                <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#6b7280', fontWeight: 700 }}>
+                  مراقبة السحابة السحابية وقاعدة المتصفح المحلية
                 </p>
               </div>
             </div>
 
             {/* 📡 القناتان الأساسيتان */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '18px' }}>
               
               {/* القناة الأولى: السحابة */}
               <div 
                 style={{
                   background: '#FDFBF7',
-                  border: '1px solid rgba(194, 155, 98, 0.2)',
-                  borderRadius: '16px',
-                  padding: '16px',
+                  border: '1px solid rgba(194, 155, 98, 0.15)',
+                  borderRadius: '14px',
+                  padding: '12px 14px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div style={{ color: isOnline ? '#059669' : '#A8573C' }}>
-                    {isOnline ? <Cloud size={24} /> : <CloudOff size={24} />}
+                    {isOnline ? <Cloud size={20} /> : <CloudOff size={20} />}
                   </div>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B' }}>
-                      القناة السحابية (Supabase PostgreSQL)
+                    <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>
+                      السحابة (Supabase Cloud)
                     </div>
-                    <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 700, marginTop: '2px' }}>
-                      {isOnline ? 'الاتصال نشط ومحدث لحظياً' : 'انقطع الاتصال بالسيرفر السحابي'}
+                    <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700 }}>
+                      {isOnline ? 'الاتصال نشط ومحدث لحظياً' : 'انقطع الاتصال بالسيرفر'}
                     </div>
                   </div>
                 </div>
 
                 <span
                   style={{
-                    padding: '4px 10px',
+                    padding: '3px 8px',
                     borderRadius: '20px',
-                    fontSize: '11.5px',
+                    fontSize: '11px',
                     fontWeight: 800,
                     background: isOnline ? 'rgba(5, 150, 105, 0.12)' : 'rgba(168, 87, 60, 0.12)',
-                    color: isOnline ? '#059669' : '#A8573C',
-                    border: `1px solid ${isOnline ? 'rgba(5, 150, 105, 0.25)' : 'rgba(168, 87, 60, 0.25)'}`
+                    color: isOnline ? '#059669' : '#A8573C'
                   }}
                 >
-                  {isOnline ? 'متصل ومحدث' : 'أوفلاين'}
+                  {isOnline ? 'متصل' : 'أوفلاين'}
                 </span>
               </div>
 
@@ -257,37 +280,36 @@ export default function OfflineSyncIndicator() {
               <div 
                 style={{
                   background: '#FDFBF7',
-                  border: '1px solid rgba(194, 155, 98, 0.2)',
-                  borderRadius: '16px',
-                  padding: '16px',
+                  border: '1px solid rgba(194, 155, 98, 0.15)',
+                  borderRadius: '14px',
+                  padding: '12px 14px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div style={{ color: '#C29B62' }}>
-                    <HardDrive size={24} />
+                    <HardDrive size={20} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B' }}>
-                      الخزنة المحلية (IndexedDB & Local Disk)
+                    <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>
+                      الخزنة المحلية (IndexedDB & Disk)
                     </div>
-                    <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 700, marginTop: '2px' }}>
-                      قاعدة بيانات المتصفح والأرشيف المحلي <code style={{ fontSize: '10.5px', color: '#C29B62' }}>D:\TajMawadah_Data</code>
+                    <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700 }}>
+                      قاعدة المتصفح <code style={{ fontSize: '10px', color: '#C29B62' }}>D:\TajMawadah_Data</code>
                     </div>
                   </div>
                 </div>
 
                 <span
                   style={{
-                    padding: '4px 10px',
+                    padding: '3px 8px',
                     borderRadius: '20px',
-                    fontSize: '11.5px',
+                    fontSize: '11px',
                     fontWeight: 800,
                     background: 'rgba(5, 150, 105, 0.12)',
-                    color: '#059669',
-                    border: '1px solid rgba(5, 150, 105, 0.25)'
+                    color: '#059669'
                   }}
                 >
                   نشط ومحمي
@@ -300,27 +322,27 @@ export default function OfflineSyncIndicator() {
               style={{
                 background: pendingCount > 0 ? 'rgba(217, 119, 6, 0.08)' : 'rgba(5, 150, 105, 0.06)',
                 border: `1px solid ${pendingCount > 0 ? 'rgba(217, 119, 6, 0.25)' : 'rgba(5, 150, 105, 0.2)'}`,
-                borderRadius: '14px',
-                padding: '12px 16px',
+                borderRadius: '12px',
+                padding: '10px 14px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: '20px'
+                marginBottom: '16px'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 800 }}>
-                {pendingCount > 0 ? <AlertTriangle size={18} style={{ color: '#d97706' }} /> : <CheckCircle2 size={18} style={{ color: '#059669' }} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 800 }}>
+                {pendingCount > 0 ? <AlertTriangle size={16} style={{ color: '#d97706' }} /> : <CheckCircle2 size={16} style={{ color: '#059669' }} />}
                 <span>
-                  {pendingCount > 0 ? `يوجد ${pendingCount} عملية بانتظار الترحيل إلى السحابة` : 'طابور العمليات خالي ومكتمل بنسبة 100%'}
+                  {pendingCount > 0 ? `يوجد ${pendingCount} عملية بانتظار الترحيل` : 'طابور العمليات مكتمل بنسبة 100%'}
                 </span>
               </div>
-              <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 700 }} suppressHydrationWarning>
+              <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700 }} suppressHydrationWarning>
                 {timeAgoText}
               </span>
             </div>
 
             {/* أزرار الإجراءات */}
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={handleManualSync}
                 disabled={isSyncing}
@@ -329,19 +351,18 @@ export default function OfflineSyncIndicator() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px',
-                  padding: '12px',
+                  gap: '6px',
+                  padding: '10px',
                   background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
                   color: '#FFFFFF',
                   border: 'none',
-                  borderRadius: '14px',
-                  fontSize: '13.5px',
+                  borderRadius: '12px',
+                  fontSize: '13px',
                   fontWeight: 900,
-                  cursor: isSyncing ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 15px rgba(168, 87, 60, 0.25)'
+                  cursor: isSyncing ? 'not-allowed' : 'pointer'
                 }}
               >
-                <RefreshCw size={16} className={(isSyncing || isRefreshing) ? 'animate-spin' : ''} />
+                <RefreshCw size={14} className={(isSyncing || isRefreshing) ? 'animate-spin' : ''} />
                 <span>{isSyncing ? 'جاري المزامنة...' : 'فحص ومزامنة فورية'}</span>
               </button>
 
@@ -353,18 +374,18 @@ export default function OfflineSyncIndicator() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '6px',
-                    padding: '12px 16px',
+                    gap: '4px',
+                    padding: '10px 14px',
                     background: '#fee2e2',
                     color: '#991b1b',
                     border: '1px solid #fecaca',
-                    borderRadius: '14px',
-                    fontSize: '13px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
                     fontWeight: 800,
                     cursor: 'pointer'
                   }}
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={14} />
                   <span>مسح الطابور</span>
                 </button>
               )}
