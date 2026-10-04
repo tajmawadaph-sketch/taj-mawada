@@ -53,20 +53,25 @@ export async function executeWithOfflineSync<T>({
     const result = await cloudOperation();
     return { success: true, data: result, isOffline: false };
   } catch (error: any) {
-    // التقاط أخطاء الشبكة فقط (Failed to fetch أو أخطاء Timeout)
+    const errorMsg = (error?.message || '').toLowerCase();
     const isNetworkError = 
-      error.message?.includes('fetch') || 
-      error.message?.includes('network') ||
-      error.code === 'ECONNRESET';
+      !isUserOnline() ||
+      errorMsg.includes('fetch') || 
+      errorMsg.includes('network') ||
+      errorMsg.includes('err_name_not_resolved') ||
+      errorMsg.includes('failed to load') ||
+      errorMsg.includes('load failed') ||
+      errorMsg.includes('timeout') ||
+      error?.code === 'ECONNRESET';
 
     if (isNetworkError && fallbackToOfflineQueue) {
-      console.log('⚠️ انقطع الاتصال فجأة أثناء التنفيذ، جاري الحفظ في الطابور...');
+      console.log('⚠️ [Offline Executor] انقطع الاتصال فجأة أو تعذر الوصول للسيرفر، جاري الحفظ المحلي في الطابور...');
       const localId = await enqueueSyncItem(offlineBackup);
       return { success: true, isOffline: true, data: { id: localId, ...offlineBackup.payload } as any };
     }
 
-    // إذا كان خطأ برمجي أو خطأ قواعد بيانات (ليس خطأ إنترنت)، نرميه كما هو
-    console.error('❌ فشل تنفيذ العملية السحابية (خطأ غير شبكي):', error);
+    // إذا كان خطأ برمجي صريح، نرميه
+    console.error('❌ فشل تنفيذ العملية السحابية:', error);
     throw error;
   }
 }
