@@ -8,34 +8,32 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-## Desert Glassmorphism Theme (UI/UX Guidelines)
-The official design language for this application is **"Desert Glassmorphism"**, inspired by golden sands, warm clay, and the heritage of horse/camel care. When creating or updating UI components, you MUST adhere to the following rules:
+## Luxury Royal UI/UX & Tailwind v4 (Design & Architecture Guidelines)
+The official design language and architecture for **"Taj Al-Mawadah ERP & POS"** is **Luxury Royal UI/UX** using **Tailwind CSS v4**, paired with a strict **Offline-First** architecture. When creating or updating components and business logic, you MUST adhere to the following rules:
 
-1. **Desert Core Palette:**
-   - **Primary (Deep Tent Brown)**: `#2C1A12` - Used for main text, headings, and navbars.
-   - **Accent (Golden Sand)**: `#C29B62` - Used for primary buttons, active icons, and branding.
-   - **Highlight/Hover (Terracotta Clay)**: `#A8573C` - Used for alerts, hover states, and depth.
-   - **Background (Dune Pearl)**: `#FDFBF7` - Main app background.
-   - **Success (Oasis Green)**: `#4E734F` - Success states and stock availability.
+1. **Luxury Palette:**
+   - **Primary Text & Shell (Royal Coffee)**: `#1E130B` - Main text, headings, sidebars, and dark accents.
+   - **Accent & Primary Buttons (Luxury Gold)**: `#C29B62` - Primary buttons, active icons, focus rings (`focus:ring-[#C29B62]`).
+   - **Highlight & Alerts (Rust/Terracotta)**: `#A8573C` - Alerts, destructive actions, highlight badges.
+   - **App Background (Pure Pearl)**: `#FDFBF7` - Main application background for light mode (eye-friendly for cashiers).
+   - **Success (Emerald Green)**: `#059669` - Success badges, in-stock indicators, payment confirmation.
 
-2. **Desert Glass Effects (The Core Identity):**
-   - **Cards/Windows**: Gradient glass `background: linear-gradient(135deg, rgba(255, 253, 250, 0.8) 0%, rgba(255, 253, 250, 0.45) 100%)`.
-   - **Backdrop Filters**: `backdrop-filter: blur(24px) saturate(160%)`.
-   - **Borders**: Thin glowing borders `border: 1px solid rgba(194, 155, 98, 0.3)`.
-   - **Shadows**: Warm sandy shadows `box-shadow: 0 4px 6px rgba(44, 26, 18, 0.08)`.
-   - **Hover States**: Cards should lift on hover with intensified terracotta shadow `box-shadow: 0 10px 15px rgba(168, 87, 60, 0.15); transform: translateY(-5px);`.
+2. **Styling & Components (Solid & Elegant):**
+   - **No Heavy Glassmorphism:** Strictly avoid heavy `backdrop-filter: blur(...)` to maximize performance on POS machines.
+   - **Cards:** Solid pure white background (`bg-white` / `#FFFFFF`) with smooth rounded corners (`rounded-xl` or `rounded-2xl`).
+   - **Borders:** Subtle gold borders for active cards: `border: 1px solid rgba(194, 155, 98, 0.2)`.
+   - **Shadows:** Deep, soft luxury shadows: `box-shadow: 0 4px 20px rgba(30, 19, 11, 0.05);` lifting slightly on hover (`hover:-translate-y-0.5`).
+   - **Alerts & Toasts:** NEVER use native browser `alert()` or `confirm()`. Use custom branded Toast notifications.
+   - **Print Stylesheet:** Include clean thermal receipt and A4 print styles using `@media print` on all invoice/statement views, hiding UI chrome.
 
-3. **Typography & Spacing:**
-   - Use `rgba(44, 26, 18, 0.6)` for muted, secondary, or descriptive text.
-   - Maintain rounded corners (`border-radius: 16px` for cards, `12px` for buttons).
+3. **Offline-First Resilience:**
+   - All mutations in POS/Inventory must route through `executeWithOfflineSync` (`lib/offline/offlineExecutor.ts`).
+   - Data fetching for POS must use `cached()` and `resources.ts` via the RAM Cache (`lib/cache/dataCache.ts`).
+   - Offline queue (`sync_queue`) is handled by `idb` (`lib/offline/syncStore.ts`) and synced via `syncManager.ts`.
 
-4. **Mobile Responsiveness:**
-   - Ensure all tables have horizontal scrolling (`overflow-x: auto`) on mobile.
-   - Convert multi-column grids to single-column on screens `<= 768px`.
-   - Make buttons touch-friendly (minimum `44px` height).
-   - Ensure modals take up `95vw` on mobile screens.
+4. **Mobile & POS Touch Responsiveness:**
+   - Touch targets must be at least `44px` height (`min-h-[44px]`).
+   - Tables must have horizontal scrolling (`overflow-x: auto`).
+   - Modals take `95vw` on mobile screens.
+   - Full RTL Arabic typography using Google's `Cairo` font.
 
-5. **Aesthetics Over Basic MVP:**
-   - Always prioritize a premium, modern, and polished look over basic generic HTML/CSS. 
-
-</RULE>
