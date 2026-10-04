@@ -2,9 +2,8 @@
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react'; 
 
-// تم إضافة الثيم عشان الكود ميضربش لو مش متعرف في الملف ده
 const THEME = {
-  primary: '#0f172a', accent: '#ca8a04', success: '#059669', slate: 'rgba(255, 255, 255, 0.6)', text: '#111827', border: 'rgba(40, 145, 200, 0.2)', ruby: '#e11d48'
+  primary: '#1E130B', accent: '#C29B62', success: '#059669', slate: 'rgba(255, 255, 255, 0.6)', text: '#1E130B', border: 'rgba(194, 155, 98, 0.3)', ruby: '#A8573C'
 };
 
 export default function ZatcaQRCode({ record }: { record: any }) {
@@ -35,7 +34,7 @@ export default function ZatcaQRCode({ record }: { record: any }) {
   const taxTotal = Number(record.tax_amount || 0).toFixed(2);
 
   return (
-    <div style={{ padding: '4px', border: `2px solid ${THEME.primary}`, borderRadius: '8px', background: 'white', display: 'inline-block' }}>
+    <div style={{ padding: '4px', border: '1.5px solid rgba(194, 155, 98, 0.45)', borderRadius: '8px', background: 'white', display: 'inline-block' }}>
       <QRCodeSVG 
         value={generateQR("صيدلية تاج المودة البيطرية", "312487477800003", timestamp, invoiceTotal, taxTotal)} 
         size={90} 

@@ -282,8 +282,7 @@ export default function InvoicePrintModal({
                 .print-modal-overlay {
                     position: fixed !important; 
                     inset: 0 !important;
-                    background: rgba(18, 41, 70, 0.88) !important; 
-                    backdrop-filter: blur(10px) !important; 
+                    background: rgba(30, 19, 11, 0.78) !important; 
                     z-index: 999999999 !important;
                     display: flex !important; 
                     flex-direction: column !important; 
@@ -291,17 +290,18 @@ export default function InvoicePrintModal({
                     justify-content: flex-start !important; 
                     padding: 25px 20px !important; 
                     overflow-y: auto !important;
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    font-family: 'Cairo', system-ui, -apple-system, sans-serif;
                 }
 
                 .print-actions-bar {
                     display: flex !important; 
                     gap: 12px !important; 
                     margin-bottom: 25px !important;
-                    background: white !important; 
-                    padding: 12px 25px !important; 
-                    border-radius: 50px !important;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+                    background: #FFFFFF !important; 
+                    padding: 10px 22px !important; 
+                    border-radius: 18px !important;
+                    border: 1.5px solid rgba(194, 155, 98, 0.35) !important;
+                    box-shadow: 0 10px 30px rgba(30, 19, 11, 0.2) !important;
                     position: sticky !important; 
                     top: 20px !important; 
                     z-index: 1000000000 !important; 
@@ -309,48 +309,52 @@ export default function InvoicePrintModal({
                     justify-content: center !important;
                 }
                 .action-btn { 
+                    min-height: 44px;
                     padding: 10px 22px; 
                     border-radius: 12px; 
                     border: none; 
-                    font-weight: 900; 
-                    font-size: 14px; 
+                    font-weight: 800; 
+                    font-size: 13.5px; 
                     cursor: pointer; 
                     transition: 0.2s; 
                     display: flex;
                     align-items: center;
                     gap: 6px;
+                    font-family: 'Cairo', system-ui, sans-serif;
                 }
                 .action-btn:hover { 
                     transform: translateY(-2px); 
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.2); 
+                    box-shadow: 0 5px 15px rgba(30, 19, 11, 0.15); 
                 }
-                .action-btn.print { background: linear-gradient(135deg, #C29B62, #A8573C); color: white; }
-                .action-btn.whatsapp { background: #25D366; color: white; box-shadow: 0 4px 12px rgba(37,211,102,0.3); }
-                .action-btn.whatsapp:hover { background: #20ba59; }
-                .action-btn.format-switch { background: #f59e0b; color: white; }
-                .action-btn.close { background: #fee2e2; color: #dc2626; }
+                .action-btn.print { background: linear-gradient(135deg, #C29B62, #A8573C); color: white; box-shadow: 0 4px 14px rgba(194, 155, 98, 0.35); }
+                .action-btn.whatsapp { background: #059669; color: white; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
+                .action-btn.whatsapp:hover { background: #047857; }
+                .action-btn.format-switch { background: #FDFBF7; color: #1E130B; border: 1.5px solid rgba(194, 155, 98, 0.4); }
+                .action-btn.close { background: #fef2f2; color: #A8573C; border: 1px solid rgba(168, 87, 60, 0.25); }
 
                 /* نافذة الواتساب المنبثقة */
                 .wa-modal-box {
                     position: fixed;
                     top: 50%; left: 50%;
                     transform: translate(-50%, -50%);
-                    background: white;
+                    background: #FFFFFF;
                     padding: 24px;
                     border-radius: 20px;
-                    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+                    box-shadow: 0 20px 60px rgba(30, 19, 11, 0.4);
+                    border: 1.5px solid rgba(194, 155, 98, 0.35);
                     z-index: 100000000;
                     width: 90%;
                     max-width: 380px;
                     direction: rtl;
                     text-align: center;
+                    font-family: 'Cairo', system-ui, sans-serif;
                 }
-                .wa-modal-box h3 { margin: 0 0 10px 0; color: #122946; font-size: 18px; font-weight: 900; }
+                .wa-modal-box h3 { margin: 0 0 10px 0; color: #1E130B; font-size: 18px; font-weight: 900; }
                 .wa-input {
-                    width: 100%; padding: 12px 14px; border: 2px solid #25D366;
+                    width: 100%; padding: 12px 14px; border: 2px solid #059669;
                     border-radius: 12px; font-size: 16px; font-weight: 800;
                     direction: ltr; text-align: center; margin: 15px 0;
-                    box-sizing: border-box; outline: none;
+                    box-sizing: border-box; outline: none; background: #FDFBF7;
                 }
 
                 /* =================== تصميم A4 الاحترافي =================== */
@@ -537,15 +541,17 @@ export default function InvoicePrintModal({
                     html, body { 
                         margin: 0 !important; 
                         padding: 0 !important; 
-                        background: white !important; 
+                        background: #FFFFFF !important; 
                         overflow: visible !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
                     }
                     body > *:not(.print-modal-overlay) { display: none !important; }
-                    .no-print, .print-actions-bar { display: none !important; }
+                    .no-print, .print-actions-bar, .luxury-toast-container, .luxury-confirm-overlay { display: none !important; }
                     .print-modal-overlay { 
                         position: absolute !important; left: 0 !important; top: 0 !important; 
-                        background: white !important; padding: 0 !important; margin: 0 !important; 
-                        display: block !important; 
+                        background: #FFFFFF !important; padding: 0 !important; margin: 0 !important; 
+                        display: block !important; overflow: visible !important;
                     }
                 }
             `}</style>
@@ -553,12 +559,16 @@ export default function InvoicePrintModal({
             {printFormat === 'a4' && (
                 <style>{`
                     @media print {
-                        @page { size: A4 portrait; margin: 0 !important; }
-                        html, body, .print-modal-overlay { width: 210mm !important; height: 297mm !important; }
+                        @page { size: A4 portrait; margin: 8mm 6mm !important; }
+                        html, body, .print-modal-overlay { width: 210mm !important; min-height: 297mm !important; }
                         .a4-preview-box {
-                            position: absolute !important; top: 0 !important; left: 0 !important; 
-                            width: 210mm !important; height: 297mm !important; 
-                            padding: 12mm 15mm !important; margin: 0 !important; border: none !important; box-shadow: none !important;
+                            position: relative !important; top: 0 !important; left: 0 !important; 
+                            width: 100% !important; max-width: 210mm !important; 
+                            padding: 0 !important; margin: 0 !important; border: none !important; box-shadow: none !important;
+                            border-radius: 0 !important;
+                            page-break-inside: avoid !important;
+                        }
+                        .inv-header, .inv-title-box, .info-grid, .inv-table, .inv-footer-flex, .inv-footer-contact {
                             page-break-inside: avoid !important;
                         }
                     }
@@ -573,8 +583,10 @@ export default function InvoicePrintModal({
                         .thermal-preview-box {
                             position: absolute !important; top: 0 !important; left: 0 !important; 
                             width: 80mm !important; max-width: 80mm !important; margin: 0 !important; 
-                            padding: 4mm 3mm !important; border: none !important; box-shadow: none !important;
+                            padding: 3mm 2.5mm !important; border: none !important; box-shadow: none !important;
                             border-radius: 0 !important;
+                            page-break-inside: avoid !important;
+                            page-break-after: avoid !important;
                         }
                     }
                 `}</style>
@@ -649,8 +661,8 @@ export default function InvoicePrintModal({
                         </div>
 
                         <div className="header-center">
-                            <h1 style={{ fontSize: '19px', fontWeight: 900, color: '#122946', margin: '0 0 4px 0' }}>صيدلية تاج المودة البيطرية</h1>
-                            <h2 style={{ fontSize: '14px', fontWeight: 900, color: '#2891C8', margin: '0 0 6px 0', letterSpacing: '0.5px' }}>Taj Al-Mawadah Vet Pharmacy</h2>
+                            <h1 style={{ fontSize: '19px', fontWeight: 900, color: '#1E130B', margin: '0 0 4px 0' }}>صيدلية تاج المودة البيطرية</h1>
+                            <h2 style={{ fontSize: '14px', fontWeight: 900, color: '#C29B62', margin: '0 0 6px 0', letterSpacing: '0.5px' }}>Taj Al-Mawadah Vet Pharmacy</h2>
                             <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>الرقم الضريبي (VAT No): 312487477800003</div>
                             <div style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginTop: '2px' }}>الرقم الموحد (Unified No): 7051013519</div>
                         </div>
@@ -750,7 +762,13 @@ export default function InvoicePrintModal({
                                         <tr key={index}>
                                             <td>{item.index}</td>
                                             <td className="desc">
-                                                <div>{item.name}</div>
+                                                <div style={{ color: '#1E130B', fontWeight: 900 }}>{item.name}</div>
+                                                {(item.batch_number || item.expiry_date) && (
+                                                    <div style={{ fontSize: '10px', color: '#1E130B', marginTop: '2px', fontWeight: 700 }}>
+                                                        {item.batch_number && <span style={{ marginLeft: '10px' }}>تشغيلة: <strong style={{ color: '#A8573C' }}>{item.batch_number}</strong></span>}
+                                                        {item.expiry_date && <span>صلاحية: <strong style={{ color: '#059669' }}>{item.expiry_date}</strong></span>}
+                                                    </div>
+                                                )}
                                                 {Boolean(item.discount && item.discount > 0) && (
                                                     <span style={{ display: 'block', fontSize: '10px', color: '#dc2626', fontWeight: 700 }}>
                                                         خصم: {formatCurrencyEn(item.discount)} -
@@ -761,7 +779,7 @@ export default function InvoicePrintModal({
                                             <td>{formatNumberEn(item.quantity)}</td>
                                             <td>{formatCurrencyEn(item.unit_price)}</td>
                                             <td>{formatCurrencyEn(item.tax)}</td>
-                                            <td style={{ fontWeight: 900, color: '#122946' }}>{formatCurrencyEn(item.total)}</td>
+                                            <td style={{ fontWeight: 900, color: '#1E130B' }}>{formatCurrencyEn(item.total)}</td>
                                         </tr>
                                     ))
                                 ) : (
@@ -930,7 +948,20 @@ export default function InvoicePrintModal({
                         <tbody>
                             {lines.map((line, idx) => (
                                 <tr key={idx}>
-                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{line.name}</td>
+                                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                                        <div>{line.name}</div>
+                                        {(line.batch_number || line.expiry_date) && (
+                                            <div style={{ fontSize: '8.5px', color: '#111', marginTop: '1px', fontWeight: 700 }}>
+                                                {line.batch_number && <span>تشغيلة: <strong>{line.batch_number}</strong> </span>}
+                                                {line.expiry_date && <span>| ص: <strong>{line.expiry_date}</strong></span>}
+                                            </div>
+                                        )}
+                                        {Boolean(line.discount && line.discount > 0) && (
+                                            <div style={{ fontSize: '9px', color: '#333', fontWeight: 'normal' }}>
+                                                خصم: {Number(line.discount).toFixed(2)}-
+                                            </div>
+                                        )}
+                                    </td>
                                     <td style={{ textAlign: 'center' }}>{line.quantity}</td>
                                     <td style={{ textAlign: 'center' }}>{line.unit_price.toFixed(2)}</td>
                                     <td style={{ textAlign: 'left', fontWeight: '900' }}>{line.total.toFixed(2)}</td>

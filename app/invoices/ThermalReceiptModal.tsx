@@ -227,59 +227,64 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
             <style dangerouslySetInnerHTML={{__html: `
                 .thermal-modal-overlay {
                     position: fixed; inset: 0; width: 100%; height: 100%;
-                    background: rgba(18, 41, 70, 0.85); backdrop-filter: blur(10px);
+                    background: rgba(30, 19, 11, 0.78);
                     display: flex; justify-content: flex-start; align-items: center; z-index: 999999999;
                     flex-direction: column; padding: 25px 15px; overflow-y: auto;
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    font-family: 'Cairo', system-ui, -apple-system, sans-serif;
                 }
 
                 .thermal-actions {
-                    display: flex; gap: 12px; background: rgba(255, 255, 255, 0.95);
-                    padding: 12px 25px; border-radius: 50px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                    display: flex; gap: 12px; background: #FFFFFF;
+                    padding: 10px 20px; border-radius: 18px; box-shadow: 0 10px 30px rgba(30, 19, 11, 0.2);
                     position: sticky; top: 15px; z-index: 10000; margin-bottom: 20px;
-                    border: 1px solid rgba(255,255,255,0.8);
+                    border: 1.5px solid rgba(194, 155, 98, 0.35);
                     flex-wrap: wrap; justify-content: center;
                 }
                 .thermal-actions button {
+                    min-height: 44px;
                     padding: 10px 20px; border: none; border-radius: 12px; cursor: pointer;
-                    font-weight: 800; font-size: 14px; transition: all 0.2s ease;
+                    font-weight: 800; font-size: 13.5px; transition: all 0.2s ease;
                     display: flex; align-items: center; gap: 6px;
+                    font-family: 'Cairo', system-ui, sans-serif;
                 }
                 .thermal-actions button:hover {
-                    transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+                    transform: translateY(-2px); box-shadow: 0 5px 15px rgba(30, 19, 11, 0.15);
                 }
                 .btn-print-thermal { 
-                    background: linear-gradient(135deg, #C29B62, #A8573C); 
-                    color: white; 
+                    background: linear-gradient(135deg, #C29B62 0%, #A8573C 100%); 
+                    color: #FFFFFF; 
+                    box-shadow: 0 4px 14px rgba(194, 155, 98, 0.35);
                 }
                 .btn-whatsapp { 
-                    background: #25D366; 
-                    color: white; 
-                    box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3);
+                    background: #059669; 
+                    color: #FFFFFF; 
+                    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
                 }
                 .btn-whatsapp:hover {
-                    background: #20ba59;
+                    background: #047857;
                 }
                 .btn-a4 { 
-                    background: #f59e0b; 
-                    color: white; 
+                    background: #FDFBF7; 
+                    color: #1E130B; 
+                    border: 1.5px solid rgba(194, 155, 98, 0.4) !important;
                 }
                 .btn-close { 
-                    background: #fee2e2; 
-                    color: #dc2626; 
+                    background: #fef2f2; 
+                    color: #A8573C; 
+                    border: 1px solid rgba(168, 87, 60, 0.2) !important;
                 }
                 
                 /* صندوق إيصال الـ 80 ملم الحراري */
                 .thermal-receipt-container {
                     width: 80mm; 
                     max-width: 80mm;
-                    background: white; 
-                    padding: 6mm 5mm;
+                    background: #FFFFFF; 
+                    padding: 5mm 4mm;
                     border-radius: 16px; 
-                    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
-                    color: #000; 
-                    font-family: 'Courier New', Courier, monospace, monospace;
-                    font-size: 11.5px; 
+                    box-shadow: 0 15px 40px rgba(30, 19, 11, 0.25);
+                    color: #000000; 
+                    font-family: 'Cairo', 'Courier New', monospace;
+                    font-size: 11px; 
                     line-height: 1.35;
                     font-weight: bold; 
                     text-align: center;
@@ -289,9 +294,9 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                 }
 
                 .thermal-logo {
-                    width: 70px;
+                    width: 75px;
                     height: auto;
-                    max-height: 65px;
+                    max-height: 70px;
                     object-fit: contain;
                     margin: 0 auto 5px auto;
                     display: block;
@@ -300,12 +305,12 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
 
                 .thermal-divider {
                     border-bottom: 1px dashed #000;
-                    margin: 7px 0;
+                    margin: 6px 0;
                     width: 100%;
                 }
                 .thermal-divider-double {
                     border-bottom: 2px solid #000;
-                    margin: 8px 0;
+                    margin: 7px 0;
                     width: 100%;
                 }
 
@@ -313,9 +318,9 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                     display: inline-block;
                     border: 1.5px solid #000;
                     padding: 3px 8px;
-                    font-size: 11px;
+                    font-size: 10.5px;
                     font-weight: 900;
-                    margin: 4px 0;
+                    margin: 3px 0;
                     border-radius: 4px;
                     letter-spacing: 0.5px;
                 }
@@ -324,7 +329,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                     width: 100%;
                     border-collapse: collapse;
                     margin: 4px 0;
-                    font-size: 11px;
+                    font-size: 10.5px;
                     text-align: right;
                 }
                 .meta-table td {
@@ -332,7 +337,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                     vertical-align: top;
                 }
                 .meta-label {
-                    color: #333;
+                    color: #222;
                     white-space: nowrap;
                     font-weight: bold;
                     width: 32%;
@@ -348,8 +353,8 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                 .thermal-items-table {
                     width: 100%;
                     border-collapse: collapse;
-                    margin: 6px 0;
-                    font-size: 11px;
+                    margin: 5px 0;
+                    font-size: 10.5px;
                 }
                 .thermal-items-table th {
                     border-bottom: 1.5px solid #000;
@@ -360,7 +365,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                 }
                 .thermal-items-table td {
                     padding: 4px 1px;
-                    border-bottom: 1px dashed #444;
+                    border-bottom: 1px dashed #555;
                     vertical-align: middle;
                 }
 
@@ -370,16 +375,16 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                     justify-content: space-between;
                     align-items: center;
                     padding: 2px 0;
-                    font-size: 11px;
+                    font-size: 10.5px;
                 }
                 .totals-row.grand {
                     border-top: 1.5px solid #000;
                     border-bottom: 1.5px solid #000;
                     padding: 6px 4px;
                     margin: 5px 0;
-                    font-size: 13.5px;
+                    font-size: 13px;
                     font-weight: 900;
-                    background: #f0f0f0;
+                    background: #f4f4f4;
                 }
 
                 /* نافذة الواتساب المنبثقة */
@@ -387,26 +392,28 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                     position: fixed;
                     top: 50%; left: 50%;
                     transform: translate(-50%, -50%);
-                    background: white;
+                    background: #FFFFFF;
                     padding: 24px;
                     border-radius: 20px;
-                    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+                    box-shadow: 0 20px 60px rgba(30, 19, 11, 0.4);
+                    border: 1.5px solid rgba(194, 155, 98, 0.35);
                     z-index: 100000000;
                     width: 90%;
                     max-width: 380px;
                     direction: rtl;
                     text-align: center;
+                    font-family: 'Cairo', system-ui, sans-serif;
                 }
                 .wa-modal-box h3 {
                     margin: 0 0 10px 0;
-                    color: #122946;
+                    color: #1E130B;
                     font-size: 18px;
                     font-weight: 900;
                 }
                 .wa-input {
                     width: 100%;
                     padding: 12px 14px;
-                    border: 2px solid #25D366;
+                    border: 2px solid #059669;
                     border-radius: 12px;
                     font-size: 16px;
                     font-weight: 800;
@@ -415,6 +422,7 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                     margin: 15px 0;
                     box-sizing: border-box;
                     outline: none;
+                    background: #FDFBF7;
                 }
 
                 @media print {
@@ -426,8 +434,10 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                         width: 80mm !important;
                         margin: 0 !important;
                         padding: 0 !important;
-                        background: white !important;
+                        background: #ffffff !important;
                         overflow: visible !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
                     }
                     body * { visibility: hidden !important; }
                     .thermal-receipt-container, .thermal-receipt-container * {
@@ -437,19 +447,24 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                         position: absolute !important; 
                         left: 0 !important; 
                         top: 0 !important; 
-                        width: 80mm !important;
-                        max-width: 80mm !important;
+                        width: 80mm !important; 
+                        max-width: 80mm !important; 
                         margin: 0 !important; 
-                        padding: 4mm 3mm !important; 
+                        padding: 3mm 2.5mm !important; 
                         box-shadow: none !important; 
+                        border: none !important;
                         border-radius: 0 !important;
+                        page-break-inside: avoid !important;
+                        page-break-after: avoid !important;
                     }
                     .thermal-modal-overlay { 
                         background: transparent !important; 
                         backdrop-filter: none !important; 
                         padding: 0 !important;
+                        margin: 0 !important;
+                        overflow: visible !important;
                     }
-                    .thermal-actions, .no-print { 
+                    .thermal-actions, .no-print, .luxury-toast-container, .luxury-confirm-overlay { 
                         display: none !important; 
                     }
                 }
@@ -592,6 +607,12 @@ export default function ThermalReceiptModal({ isOpen, onClose, record, onOpenA4 
                             <tr key={idx}>
                                 <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
                                     <div>{line.name}</div>
+                                    {(line.batch_number || line.expiry_date) && (
+                                        <div style={{ fontSize: '8.5px', color: '#111', marginTop: '1px', fontWeight: 700 }}>
+                                            {line.batch_number && <span>تشغيلة: <strong>{line.batch_number}</strong> </span>}
+                                            {line.expiry_date && <span>| ص: <strong>{line.expiry_date}</strong></span>}
+                                        </div>
+                                    )}
                                     {Boolean(line.discount && line.discount > 0) && (
                                         <div style={{ fontSize: '9px', color: '#333', fontWeight: 'normal' }}>
                                             خصم: {Number(line.discount).toFixed(2)}-

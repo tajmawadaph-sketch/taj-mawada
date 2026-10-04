@@ -452,3 +452,34 @@ input:focus, select:focus, textarea:focus {
 .low-graphics-mode * {
   -webkit-overflow-scrolling: touch;
 }
+
+/* =========================================================================
+   🖨️ Global Luxury Print Stylesheet (@media print)
+   ========================================================================= */
+@media print {
+  /* 1. ضبط جودة الألوان */
+  html, body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 2. إخفاء أشرطة التنقل، القوائم الجانبية، الأزرار والتنبيهات كلياً */
+  nav, 
+  aside, 
+  .no-print, 
+  .print-actions-bar,
+  .thermal-actions,
+  .perf-switcher-pill,
+  .luxury-toast-container,
+  .luxury-confirm-overlay {
+    display: none !important;
+  }
+
+  /* 3. منع تقسيم الجداول والبطاقات في منتصف الصفحة */
+  table, tr, td, th, .a4-preview-box, .thermal-receipt-container {
+    page-break-inside: avoid !important;
+  }
+}
+

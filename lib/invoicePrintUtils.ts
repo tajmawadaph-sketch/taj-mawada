@@ -12,6 +12,8 @@ export interface NormalizedInvoiceLine {
     discount?: number;
     tax: number;
     total: number;
+    batch_number?: string;
+    expiry_date?: string;
 }
 
 /**
@@ -59,6 +61,8 @@ export function normalizeInvoiceLines(record: any): NormalizedInvoiceLine[] {
             const discount = Number(item.discount ?? item.discount_amount ?? 0);
             const total = Number(item.total_price ?? item.total ?? ((quantity * unit_price) - discount));
             const tax = Number(item.tax ?? item.tax_amount ?? (total * 0.15));
+            const batch_number = item.batch_number || item.batch || item.batch_no || '';
+            const expiry_date = item.expiry_date || item.expiry || item.exp_date || '';
             result.push({
                 index: idx + 1,
                 name,
@@ -67,7 +71,9 @@ export function normalizeInvoiceLines(record: any): NormalizedInvoiceLine[] {
                 unit_price,
                 discount,
                 tax,
-                total
+                total,
+                batch_number: batch_number ? String(batch_number) : undefined,
+                expiry_date: expiry_date ? String(expiry_date) : undefined
             });
         });
     }
@@ -83,6 +89,8 @@ export function normalizeInvoiceLines(record: any): NormalizedInvoiceLine[] {
                 ? Number(record.unit_price) 
                 : (Number(record.taxable_amount || record.total_amount || 0) / quantity);
             const total = quantity * unit_price;
+            const batch_number = record.batch_number || '';
+            const expiry_date = record.expiry_date || '';
             result.push({
                 index: 1,
                 name,
@@ -90,7 +98,9 @@ export function normalizeInvoiceLines(record: any): NormalizedInvoiceLine[] {
                 unit,
                 unit_price,
                 tax: total * 0.15,
-                total
+                total,
+                batch_number: batch_number ? String(batch_number) : undefined,
+                expiry_date: expiry_date ? String(expiry_date) : undefined
             });
         }
     }
