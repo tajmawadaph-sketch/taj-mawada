@@ -1,241 +1,655 @@
 "use client";
-import React, { useEffect, useState, useMemo } from 'react';
+import React from 'react';
 import MasterPage from '@/components/MasterPage';
-import { supabase } from '@/lib/supabase';
-import { formatCurrency } from '@/lib/helpers';
-import RawasiSidebarManager from '@/components/RawasiSidebarManager';
+import LoadingScreen from '@/components/LoadingScreen';
 import PrintHeader from '@/components/PrintHeader';
+import { formatCurrency } from '@/lib/helpers';
+import { useFinancialStatementsLogic, FinancialAccountRow } from './financial_statements_logic';
 
 export default function FinancialStatementsPage() {
-  const [incomeStatement, setIncomeStatement] = useState<any>(null);
-  const [balanceSheet, setBalanceSheet] = useState<any>(null);
-  const [lastUpdated, setLastUpdated] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+    const {
+        startDate, setStartDate,
+        endDate, setEndDate,
+        activeTab, setActiveTab,
+        setPeriodPreset,
+        revenues, expenses, totalRevenues, totalExpenses, netProfit, grossProfitMargin,
+        currentAssets, fixedAssets, totalAssets,
+        currentLiabilities, longTermLiabilities, totalLiabilities,
+        equityItems, totalEquity, totalLiabilitiesAndEquity,
+        isBalanced, balanceDiff,
+        isLoading, refetch, exportToExcel
+    } = useFinancialStatementsLogic();
 
-  const fetchStatements = async () => {
-    try {
-      const { data, error } = await supabase.from('sys_financial_reports').select('*');
-      if (error) throw error;
-      
-      if (data) {
-        const income = data.find((d: any) => d.report_name === 'IncomeStatement');
-        const balance = data.find((d: any) => d.report_name === 'BalanceSheet');
-        
-        if (income) {
-          setIncomeStatement(income.report_data);
-          setLastUpdated(new Date(income.updated_at).toLocaleString('ar-EG'));
-        }
-        if (balance) {
-          setBalanceSheet(balance.report_data);
-          if (!income) setLastUpdated(new Date(balance.updated_at).toLocaleString('ar-EG'));
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching statements:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+    const renderAccountTable = (title: string, icon: string, items: FinancialAccountRow[], total: number, totalColor = '#1E130B') => {
+        return (
+            <div style={{
+                background: '#FFFFFF',
+                borderRadius: '16px',
+                border: '1px solid rgba(194, 155, 98, 0.22)',
+                boxShadow: '0 4px 18px rgba(30, 19, 11, 0.04)',
+                overflow: 'hidden',
+                marginBottom: '18px'
+            }}>
+                <div style={{
+                    padding: '14px 20px',
+                    background: '#FDFBF7',
+                    borderBottom: '1.5px solid rgba(194, 155, 98, 0.2)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }}>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#1E130B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>{icon}</span>
+                        <span>{title}</span>
+                    </h3>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#8c6b32' }}>
+                        {items.length} حسابات
+                    </span>
+                </div>
 
-  useEffect(() => {
-    const init = async () => {
-      await fetchStatements();
-      try {
-        await supabase.rpc('generate_financial_reports_json');
-        await fetchStatements();
-      } catch (e) {}
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '13px' }}>
+                        <thead>
+                            <tr style={{ background: 'rgba(194, 155, 98, 0.06)', borderBottom: '1px solid rgba(194, 155, 98, 0.15)' }}>
+                                <th style={{ padding: '10px 18px', color: '#8c6b32', fontWeight: 800, width: '120px' }}>كود الحساب</th>
+                                <th style={{ padding: '10px 18px', color: '#1E130B', fontWeight: 800 }}>اسم الحساب</th>
+                                <th style={{ padding: '10px 18px', color: '#1E130B', fontWeight: 800, textAlign: 'left', width: '180px' }}>الرصيد (SAR)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {items.length === 0 ? (
+                                <tr>
+                                    <td colSpan={3} style={{ padding: '25px', textAlign: 'center', color: '#6e5d4f', fontWeight: 700 }}>
+                                        لا توجد حركات مسجلة تحت هذا القسم خلال الفترة.
+                                    </td>
+                                </tr>
+                            ) : (
+                                items.map((acc, idx) => (
+                                    <tr
+                                        key={acc.id || idx}
+                                        style={{
+                                            borderBottom: '1px solid rgba(194, 155, 98, 0.08)',
+                                            background: idx % 2 === 0 ? '#FFFFFF' : '#FDFBF7'
+                                        }}
+                                    >
+                                        <td style={{ padding: '10px 18px', color: '#6e5d4f', fontWeight: 700, fontFamily: 'monospace' }}>
+                                            {acc.code || '-'}
+                                        </td>
+                                        <td style={{ padding: '10px 18px', color: '#1E130B', fontWeight: 800 }}>
+                                            {acc.name}
+                                        </td>
+                                        <td style={{ padding: '10px 18px', fontWeight: 900, textAlign: 'left', color: totalColor }}>
+                                            {formatCurrency(acc.balance)}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                        <tfoot>
+                            <tr style={{ background: '#FDFBF7', borderTop: '2px solid rgba(194, 155, 98, 0.25)' }}>
+                                <td colSpan={2} style={{ padding: '12px 18px', fontWeight: 900, color: '#1E130B', fontSize: '14px' }}>
+                                    إجمالي {title}
+                                </td>
+                                <td style={{ padding: '12px 18px', fontWeight: 900, textAlign: 'left', fontSize: '15px', color: totalColor }}>
+                                    {formatCurrency(total)}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        );
     };
-    init();
-  }, []);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await supabase.rpc('generate_financial_reports_json');
-      await fetchStatements();
-    } catch (error) {
-      console.error('Error refreshing statements:', error);
-      await fetchStatements();
-    }
-  };
-
-  const renderSection = (title: string, dataArray: any[], total: number) => {
-    if (!dataArray || dataArray.length === 0) return null;
     return (
-      <div className="table-wrapper" style={{ marginBottom: '20px', animation: 'fadeInUp 0.5s ease' }}>
-        <h3 style={{ padding: '15px 20px', margin: 0, background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '1.1rem', color: 'var(--text-primary)' }}>{title}</h3>
-        <table className="modern-table">
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'right', padding: '12px 20px', color: 'var(--text-secondary)' }}>اسم الحساب</th>
-              <th style={{ textAlign: 'left', padding: '12px 20px', color: 'var(--text-secondary)' }}>الرصيد</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dataArray.map((acc: any, idx: number) => (
-              <tr key={acc.id || acc.account_code || idx} style={{ transition: 'all 0.2s ease', cursor: 'default' }} className="hover:bg-white/5">
-                <td style={{ textAlign: 'right', padding: '12px 20px', fontWeight: '500' }}>{acc.account_name || acc.name}</td>
-                <td style={{ textAlign: 'left', padding: '12px 20px' }} className="amount-cell positive">{formatCurrency(acc.amount ?? acc.balance ?? 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <td style={{ textAlign: 'right', padding: '15px 20px', fontWeight: 'bold', fontSize: '1.1em', color: 'var(--text-primary)' }}>الإجمالي</td>
-              <td style={{ textAlign: 'left', padding: '15px 20px', fontWeight: 'bold', fontSize: '1.1em' }} className="amount-cell positive">{formatCurrency(total)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    );
-  };
-
-  const sidebarContent = useMemo(() => ({
-    summary: (
-      <div className="air-status-card">
-          <div className="status-ping"><div className="ping-ring"></div><div className="ping-core"></div></div>
-          <h3 className="status-label">FINANCIAL_NODE_LIVE</h3>
-          <p className="status-sub">بيانات فورية (Cached)</p>
-          <p style={{ marginTop: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>آخر تحديث:<br/>{lastUpdated || 'جاري التحميل...'}</p>
-      </div>
-    ),
-    actions: (
-      <div className="sidebar-action-stack" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <button className="btn-main-glass gold" style={{ padding: '12px', fontSize: '1.1rem', fontWeight: 'bold' }} onClick={handleRefresh} disabled={refreshing}>
-            {refreshing ? 'جاري المزامنة... ⏳' : 'تحديث الأرقام 🔄'}
-          </button>
-          <button className="btn-main-glass white" style={{ padding: '12px', fontSize: '1.1rem' }} onClick={() => window.print()}>طباعة القوائم 🖨️</button>
-      </div>
-    )
-  }), [handleRefresh, refreshing, lastUpdated]);
-
-  if (loading) return (
-    <div className="air-loader-gate">
-        <div className="loader-core"></div>
-        <p>INITIALIZING FINANCIAL GLASS...</p>
-    </div>
-  );
-
-  return (
-    <MasterPage title="القوائم المالية الجاهزة" subtitle="Sovereign Control Center - Financial Glass Architecture">
-      
-      <div className="air-glass-wrapper">
-        <style>{`
-          .print-header { display: none; }
-          @media print {
-            body { background: white !important; color: black !important; margin: 0; padding: 0; }
-            nav, aside, header, .sidebar-action-stack, .air-status-card, .mesh-gradient-aura, .RawasiSidebarManager { display: none !important; }
-            .theatre-layout { display: block !important; padding: 0 !important; margin: 0 !important; }
-            .theatre-main-stage { display: block !important; width: 100% !important; padding: 0 !important; }
-            .glass-panel { border: none !important; box-shadow: none !important; background: transparent !important; padding: 10px !important; margin-bottom: 20px !important; page-break-inside: avoid; }
-            .print-header { display: block !important; text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
-            .print-header h1 { margin: 0; font-size: 24px; font-weight: bold; }
-            .print-header h2 { margin: 10px 0; font-size: 20px; }
-            .print-header p { margin: 0; font-size: 14px; color: #555 !important; }
-            * { color: black !important; text-shadow: none !important; box-shadow: none !important; }
-            .modern-table { width: 100% !important; border-collapse: collapse !important; }
-            .modern-table th { background: #eee !important; color: #000 !important; border: 1px solid #aaa !important; padding: 10px !important; font-weight: bold !important; }
-            .modern-table td { border: 1px solid #aaa !important; padding: 8px !important; }
-            .summary-card { border: 2px solid #000 !important; padding: 15px !important; margin-top: 15px !important; background: #f9f9f9 !important; page-break-inside: avoid; text-align: center; }
-            .summary-title { font-size: 1.3rem !important; font-weight: bold !important; color: #000 !important; margin-bottom: 10px; }
-            .summary-value { font-size: 1.8rem !important; font-weight: bold !important; color: #000 !important; }
-            @page { size: A4 landscape; margin: 1.5cm; }
-          }
-          @media (max-width: 768px) {
-            .theatre-layout { display: block !important; }
-            .theatre-main-stage { width: 100% !important; padding: 0 !important; }
-            .theatre-main-stage > div { grid-template-columns: 1fr !important; gap: 15px !important; }
-            .glass-panel > div { padding: 15px !important; }
-            .modern-table th, .modern-table td { padding: 8px 10px !important; font-size: 12px !important; }
-            .table-wrapper { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-          }
-        `}</style>
-
-        <PrintHeader title="القوائم المالية" subtitle="قائمة الدخل والمركز المالي" />
-
-        {/* 🪐 Mesh Aura Background */}
-        <div className="mesh-gradient-aura"></div>
-        
-        <div className="theatre-layout">
-           <RawasiSidebarManager summary={sidebarContent.summary} actions={sidebarContent.actions} watchDeps={[incomeStatement, balanceSheet]} />
-
-           <div className="theatre-main-stage">
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '30px', alignItems: 'start' }}>
+        <MasterPage
+            title="القوائم المالية والحسابات الختامية"
+            subtitle="قائمة الدخل التراكمية والمركز المالي المتوازن وفق معايير المحاسبة السعودية"
+            icon="🏛️"
+        >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', direction: 'rtl', minHeight: '100vh', paddingBottom: '50px' }}>
                 
-                {/* قائمة الدخل */}
-                <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ padding: '25px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '15px', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 0%, transparent 100%)' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>📈</div>
-                    <h2 style={{ margin: 0, fontSize: '1.4rem' }}>قائمة الدخل (Income Statement)</h2>
-                  </div>
+                {/* Print Stylesheet */}
+                <style>{`
+                    @media print {
+                        .no-print { display: none !important; }
+                        body { background: white !important; color: #1E130B !important; }
+                        table { width: 100% !important; border-collapse: collapse !important; }
+                        th, td { border: 1px solid #C29B62 !important; padding: 6px 10px !important; font-size: 11px !important; }
+                        .print-footer { display: flex !important; justify-content: space-between !important; margin-top: 40px !important; }
+                    }
+                    @media (max-width: 768px) {
+                        .stat-filter-row { flex-direction: column !important; }
+                        .stat-kpi-grid { grid-template-columns: 1fr !important; }
+                        .stat-dual-grid { grid-template-columns: 1fr !important; }
+                    }
+                `}</style>
 
-                  <div style={{ padding: '25px' }}>
-                    {incomeStatement && (
-                      <>
-                        {renderSection('الإيرادات (Revenues)', incomeStatement.revenues, incomeStatement.total_revenue)}
-                        {renderSection('المصروفات (Expenses)', incomeStatement.expenses, incomeStatement.total_expense)}
+                <PrintHeader title="القوائم المالية الرسمية والمركز المالي" subtitle={`عن الفترة من ${startDate} إلى ${endDate}`} />
 
-                        {(() => {
-                          const netProfit = Number(incomeStatement.net_profit ?? incomeStatement.net_income ?? 0);
-                          const isPositive = netProfit >= 0;
-                          return (
-                            <div className="summary-card" style={{ 
-                              marginTop: '30px',
-                              background: isPositive ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05))' : 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05))', 
-                              border: isPositive ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-                              boxShadow: isPositive ? '0 10px 30px rgba(16, 185, 129, 0.1)' : '0 10px 30px rgba(239, 68, 68, 0.1)'
-                            }}>
-                              <div className="summary-title" style={{ fontSize: '1.1rem', color: isPositive ? '#34d399' : '#f87171' }}>
-                                {isPositive ? 'صافي الربح (Net Income)' : 'صافي الخسارة (Net Loss)'}
-                              </div>
-                              <div className="summary-value amount-cell positive" style={{ fontSize: '2rem', color: isPositive ? '#10b981' : '#ef4444' }}>
-                                {formatCurrency(Math.abs(netProfit))}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* المركز المالي */}
-                <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ padding: '25px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '15px', background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 0%, transparent 100%)' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>⚖️</div>
-                    <h2 style={{ margin: 0, fontSize: '1.4rem' }}>المركز المالي (Balance Sheet)</h2>
-                  </div>
-
-                  <div style={{ padding: '25px' }}>
-                    {balanceSheet && (
-                      <>
-                        {renderSection('الأصول (Assets)', balanceSheet.assets, balanceSheet.total_assets)}
-                        {renderSection('الالتزامات (Liabilities)', balanceSheet.liabilities, balanceSheet.total_liabilities)}
-                        {renderSection('حقوق الملكية (Equity)', balanceSheet.equity, balanceSheet.total_equity)}
-
-                        <div className="summary-card" style={{ 
-                          marginTop: '30px',
-                          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05))', 
-                          border: '1px solid rgba(59, 130, 246, 0.3)',
-                          boxShadow: '0 10px 30px rgba(59, 130, 246, 0.1)'
-                        }}>
-                          <div className="summary-title" style={{ fontSize: '1.1rem', color: '#60a5fa' }}>إجمالي الالتزامات وحقوق الملكية + الدخل</div>
-                          <div className="summary-value amount-cell positive" style={{ fontSize: '2rem', color: '#3b82f6' }}>
-                            {formatCurrency(balanceSheet.total_liabilities_and_equity ?? ((Number(balanceSheet.total_liabilities) || 0) + (Number(balanceSheet.total_equity) || 0) + (Number(balanceSheet.net_profit) || 0)))}
-                          </div>
+                {/* 1. Filter Toolbar */}
+                <div className="no-print" style={{
+                    background: '#FFFFFF',
+                    border: '1px solid rgba(194, 155, 98, 0.25)',
+                    borderRadius: '20px',
+                    padding: '20px 24px',
+                    boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '16px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                        {/* Preset buttons */}
+                        <div style={{ display: 'flex', background: '#FDFBF7', border: '1px solid rgba(194, 155, 98, 0.25)', borderRadius: '12px', padding: '3px' }}>
+                            <button
+                                onClick={() => setPeriodPreset('this_year')}
+                                style={{
+                                    padding: '6px 14px',
+                                    borderRadius: '9px',
+                                    border: 'none',
+                                    background: '#C29B62',
+                                    color: '#FFFFFF',
+                                    fontWeight: 800,
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    minHeight: '38px'
+                                }}
+                            >
+                                السنة الحالية
+                            </button>
+                            <button
+                                onClick={() => setPeriodPreset('this_quarter')}
+                                style={{
+                                    padding: '6px 14px',
+                                    borderRadius: '9px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#6e5d4f',
+                                    fontWeight: 800,
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    minHeight: '38px'
+                                }}
+                            >
+                                الربع الحالي
+                            </button>
+                            <button
+                                onClick={() => setPeriodPreset('this_month')}
+                                style={{
+                                    padding: '6px 14px',
+                                    borderRadius: '9px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: '#6e5d4f',
+                                    fontWeight: 800,
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    minHeight: '38px'
+                                }}
+                            >
+                                الشهر الحالي
+                            </button>
                         </div>
-                      </>
-                    )}
-                  </div>
+
+                        {/* Date Pickers */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>من:</span>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                style={{
+                                    padding: '8px 12px',
+                                    borderRadius: '10px',
+                                    border: '1px solid rgba(194, 155, 98, 0.3)',
+                                    background: '#FDFBF7',
+                                    color: '#1E130B',
+                                    fontWeight: 700,
+                                    fontSize: '13px',
+                                    minHeight: '40px'
+                                }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>إلى:</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                style={{
+                                    padding: '8px 12px',
+                                    borderRadius: '10px',
+                                    border: '1px solid rgba(194, 155, 98, 0.3)',
+                                    background: '#FDFBF7',
+                                    color: '#1E130B',
+                                    fontWeight: 700,
+                                    fontSize: '13px',
+                                    minHeight: '40px'
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        <button
+                            onClick={() => refetch()}
+                            style={{
+                                background: '#FDFBF7',
+                                color: '#1E130B',
+                                border: '1px solid rgba(194, 155, 98, 0.35)',
+                                padding: '10px 16px',
+                                borderRadius: '12px',
+                                fontWeight: 800,
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                minHeight: '44px'
+                            }}
+                        >
+                            <span>تحديث الأرقام</span>
+                            <span>🔄</span>
+                        </button>
+                        <button
+                            onClick={() => window.print()}
+                            style={{
+                                background: '#FDFBF7',
+                                color: '#1E130B',
+                                border: '1px solid rgba(194, 155, 98, 0.35)',
+                                padding: '10px 16px',
+                                borderRadius: '12px',
+                                fontWeight: 800,
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                minHeight: '44px'
+                            }}
+                        >
+                            <span>طباعة رسمية A4</span>
+                            <span>🖨️</span>
+                        </button>
+                        <button
+                            onClick={exportToExcel}
+                            style={{
+                                background: 'linear-gradient(135deg, #C29B62 0%, #A88348 100%)',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                padding: '10px 20px',
+                                borderRadius: '12px',
+                                fontWeight: 900,
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                boxShadow: '0 4px 14px rgba(194, 155, 98, 0.25)',
+                                minHeight: '44px'
+                            }}
+                        >
+                            <span>تصدير Excel</span>
+                            <span>📑</span>
+                        </button>
+                    </div>
                 </div>
 
-              </div>
-           </div>
-        </div>
-      </div>
-    </MasterPage>
-  );
+                {isLoading ? (
+                    <LoadingScreen message="جاري استخراج ميزان المراجعة وتوليد القوائم المالية المتوازنة..." />
+                ) : (
+                    <>
+                        {/* 2. Top Luxury KPI Cards Grid */}
+                        <div className="stat-kpi-grid" style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+                            gap: '14px'
+                        }}>
+                            {/* Revenues */}
+                            <div style={{
+                                background: '#FFFFFF',
+                                border: '1.5px solid rgba(194, 155, 98, 0.3)',
+                                borderRadius: '16px',
+                                padding: '18px 20px',
+                                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>إجمالي الإيرادات للفترة</span>
+                                    <span style={{ fontSize: '18px' }}>📈</span>
+                                </div>
+                                <div style={{ fontSize: '24px', fontWeight: 900, color: '#1E130B', marginTop: '8px' }}>
+                                    {formatCurrency(totalRevenues)}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#8c6b32', marginTop: '4px', fontWeight: 700 }}>
+                                    مبيعات وإيرادات تشغيلية
+                                </div>
+                            </div>
+
+                            {/* Expenses */}
+                            <div style={{
+                                background: '#FFFFFF',
+                                border: '1px solid rgba(194, 155, 98, 0.2)',
+                                borderRadius: '16px',
+                                padding: '18px 20px',
+                                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>إجمالي المصروفات للفترة</span>
+                                    <span style={{ fontSize: '18px' }}>📉</span>
+                                </div>
+                                <div style={{ fontSize: '24px', fontWeight: 900, color: '#6e5d4f', marginTop: '8px' }}>
+                                    {formatCurrency(totalExpenses)}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', fontWeight: 700 }}>
+                                    تكاليف ومصروفات تشغيلية وعمومية
+                                </div>
+                            </div>
+
+                            {/* Net Income */}
+                            <div style={{
+                                background: '#FFFFFF',
+                                border: `1.5px solid ${netProfit >= 0 ? 'rgba(5, 150, 105, 0.3)' : 'rgba(168, 87, 60, 0.3)'}`,
+                                borderRadius: '16px',
+                                padding: '18px 20px',
+                                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: 900, color: netProfit >= 0 ? '#059669' : '#A8573C' }}>
+                                        {netProfit >= 0 ? 'صافي الربح للفترة' : 'صافي الخسارة للفترة'}
+                                    </span>
+                                    <span style={{ fontSize: '18px' }}>✨</span>
+                                </div>
+                                <div style={{ fontSize: '24px', fontWeight: 900, color: netProfit >= 0 ? '#059669' : '#A8573C', marginTop: '8px' }}>
+                                    {formatCurrency(Math.abs(netProfit))}
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#6e5d4f', marginTop: '4px', fontWeight: 700 }}>
+                                    هامش الربح الصافي: {grossProfitMargin.toFixed(1)}%
+                                </div>
+                            </div>
+
+                            {/* Balance Sheet Status */}
+                            <div style={{
+                                background: '#FFFFFF',
+                                border: `1.5px solid ${isBalanced ? 'rgba(5, 150, 105, 0.35)' : 'rgba(168, 87, 60, 0.35)'}`,
+                                borderRadius: '16px',
+                                padding: '18px 20px',
+                                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: 900, color: isBalanced ? '#059669' : '#A8573C' }}>
+                                        {isBalanced ? 'الميزانية متزنة 100%' : 'فارق توازن الميزانية'}
+                                    </span>
+                                    <span style={{ fontSize: '18px' }}>⚖️</span>
+                                </div>
+                                <div style={{ fontSize: '24px', fontWeight: 900, color: '#1E130B', marginTop: '8px' }}>
+                                    {formatCurrency(totalAssets)}
+                                </div>
+                                <div style={{ fontSize: '12px', color: isBalanced ? '#059669' : '#A8573C', marginTop: '4px', fontWeight: 700 }}>
+                                    {isBalanced ? 'الأصول = الالتزامات + حقوق الملكية' : `فارق: ${formatCurrency(balanceDiff)}`}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. Navigation Tabs */}
+                        <div className="no-print" style={{
+                            display: 'flex',
+                            gap: '10px',
+                            borderBottom: '2px solid rgba(194, 155, 98, 0.2)',
+                            paddingBottom: '8px'
+                        }}>
+                            <button
+                                onClick={() => setActiveTab('both')}
+                                style={{
+                                    padding: '10px 20px',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    background: activeTab === 'both' ? '#1E130B' : '#FDFBF7',
+                                    color: activeTab === 'both' ? '#FFFFFF' : '#6e5d4f',
+                                    fontWeight: 900,
+                                    fontSize: '14px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                عرض القوائم معاً ⚖️
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('income')}
+                                style={{
+                                    padding: '10px 20px',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    background: activeTab === 'income' ? '#C29B62' : '#FDFBF7',
+                                    color: activeTab === 'income' ? '#FFFFFF' : '#6e5d4f',
+                                    fontWeight: 900,
+                                    fontSize: '14px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                قائمة الدخل (Income Statement) 📈
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('balance')}
+                                style={{
+                                    padding: '10px 20px',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    background: activeTab === 'balance' ? '#8c6b32' : '#FDFBF7',
+                                    color: activeTab === 'balance' ? '#FFFFFF' : '#6e5d4f',
+                                    fontWeight: 900,
+                                    fontSize: '14px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                المركز المالي والميزانية العمومية (Balance Sheet) 🏛️
+                            </button>
+                        </div>
+
+                        {/* 4. Financial Statements Main Stage */}
+                        <div className="stat-dual-grid" style={{
+                            display: 'grid',
+                            gridTemplateColumns: activeTab === 'both' ? 'repeat(auto-fit, minmax(450px, 1fr))' : '1fr',
+                            gap: '24px'
+                        }}>
+                            {/* Column A: Income Statement */}
+                            {(activeTab === 'both' || activeTab === 'income') && (
+                                <div>
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        marginBottom: '16px',
+                                        padding: '12px 18px',
+                                        background: '#FFFFFF',
+                                        border: '1px solid rgba(194, 155, 98, 0.25)',
+                                        borderRadius: '14px'
+                                    }}>
+                                        <span style={{ fontSize: '20px' }}>📈</span>
+                                        <div>
+                                            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#1E130B' }}>
+                                                قائمة الدخل والأرباح والخسائر
+                                            </h2>
+                                            <span style={{ fontSize: '12px', color: '#6e5d4f', fontWeight: 600 }}>
+                                                عن الفترة من {startDate} إلى {endDate}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {renderAccountTable('الإيرادات (Revenues)', '💰', revenues, totalRevenues, '#059669')}
+                                    {renderAccountTable('المصروفات (Expenses)', '🧾', expenses, totalExpenses, '#6e5d4f')}
+
+                                    {/* Net Income Summary Card */}
+                                    <div style={{
+                                        background: netProfit >= 0 ? 'rgba(5, 150, 105, 0.08)' : 'rgba(168, 87, 60, 0.08)',
+                                        border: `1.5px solid ${netProfit >= 0 ? '#059669' : '#A8573C'}`,
+                                        borderRadius: '16px',
+                                        padding: '20px',
+                                        textAlign: 'center',
+                                        marginTop: '10px'
+                                    }}>
+                                        <div style={{ fontSize: '14px', fontWeight: 900, color: netProfit >= 0 ? '#059669' : '#A8573C' }}>
+                                            {netProfit >= 0 ? 'صافي الربح التشغيلي (Net Income)' : 'صافي الخسارة (Net Loss)'}
+                                        </div>
+                                        <div style={{ fontSize: '28px', fontWeight: 900, color: netProfit >= 0 ? '#059669' : '#A8573C', marginTop: '6px' }}>
+                                            {formatCurrency(Math.abs(netProfit))}
+                                        </div>
+                                        <div style={{ fontSize: '12px', color: '#6e5d4f', fontWeight: 700, marginTop: '4px' }}>
+                                            نسبة صافي الربح من الإيرادات: {grossProfitMargin.toFixed(1)}%
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Column B: Balance Sheet */}
+                            {(activeTab === 'both' || activeTab === 'balance') && (
+                                <div>
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        marginBottom: '16px',
+                                        padding: '12px 18px',
+                                        background: '#FFFFFF',
+                                        border: '1px solid rgba(194, 155, 98, 0.25)',
+                                        borderRadius: '14px'
+                                    }}>
+                                        <span style={{ fontSize: '20px' }}>🏛️</span>
+                                        <div>
+                                            <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#1E130B' }}>
+                                                الميزانية العمومية والمركز المالي
+                                            </h2>
+                                            <span style={{ fontSize: '12px', color: '#6e5d4f', fontWeight: 600 }}>
+                                                كما في تاريخ {endDate}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* 1. Assets */}
+                                    {renderAccountTable('الأصول المتداولة (Current Assets)', '💵', currentAssets, currentAssets.reduce((s, a) => s + a.balance, 0), '#1E130B')}
+                                    {renderAccountTable('الأصول غير المتداولة / الثابتة (Fixed Assets)', '🏢', fixedAssets, fixedAssets.reduce((s, a) => s + a.balance, 0), '#1E130B')}
+
+                                    <div style={{
+                                        background: '#FDFBF7',
+                                        border: '1px solid rgba(194, 155, 98, 0.3)',
+                                        borderRadius: '12px',
+                                        padding: '12px 20px',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        marginBottom: '18px'
+                                    }}>
+                                        <span style={{ fontWeight: 900, color: '#8c6b32', fontSize: '14px' }}>إجمالي الأصول (Total Assets):</span>
+                                        <span style={{ fontWeight: 900, color: '#1E130B', fontSize: '16px' }}>{formatCurrency(totalAssets)}</span>
+                                    </div>
+
+                                    {/* 2. Liabilities */}
+                                    {renderAccountTable('الالتزامات المتداولة (Current Liabilities)', '⏳', currentLiabilities, currentLiabilities.reduce((s, l) => s + l.balance, 0), '#A8573C')}
+                                    {renderAccountTable('الالتزامات طويلة الأجل (Long-term Liabilities)', '🏦', longTermLiabilities, longTermLiabilities.reduce((s, l) => s + l.balance, 0), '#A8573C')}
+
+                                    {/* 3. Equity with Period Net Income */}
+                                    <div style={{
+                                        background: '#FFFFFF',
+                                        borderRadius: '16px',
+                                        border: '1px solid rgba(194, 155, 98, 0.22)',
+                                        boxShadow: '0 4px 18px rgba(30, 19, 11, 0.04)',
+                                        overflow: 'hidden',
+                                        marginBottom: '18px'
+                                    }}>
+                                        <div style={{
+                                            padding: '14px 20px',
+                                            background: '#FDFBF7',
+                                            borderBottom: '1.5px solid rgba(194, 155, 98, 0.2)',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}>
+                                            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#1E130B' }}>
+                                                🛡️ حقوق الملكية (Owner's Equity)
+                                            </h3>
+                                        </div>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '13px' }}>
+                                            <tbody>
+                                                {equityItems.map((eq, idx) => (
+                                                    <tr key={eq.id || idx} style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)' }}>
+                                                        <td style={{ padding: '10px 18px', color: '#6e5d4f', fontFamily: 'monospace' }}>{eq.code}</td>
+                                                        <td style={{ padding: '10px 18px', fontWeight: 800, color: '#1E130B' }}>{eq.name}</td>
+                                                        <td style={{ padding: '10px 18px', fontWeight: 900, textAlign: 'left', color: '#1E130B' }}>{formatCurrency(eq.balance)}</td>
+                                                    </tr>
+                                                ))}
+                                                <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)', background: 'rgba(194, 155, 98, 0.06)' }}>
+                                                    <td style={{ padding: '10px 18px', color: '#8c6b32', fontFamily: 'monospace' }}>INC-P</td>
+                                                    <td style={{ padding: '10px 18px', fontWeight: 900, color: '#8c6b32' }}>صافي ربح / (خسارة) الفترة الحالية</td>
+                                                    <td style={{ padding: '10px 18px', fontWeight: 900, textAlign: 'left', color: netProfit >= 0 ? '#059669' : '#A8573C' }}>
+                                                        {formatCurrency(netProfit)}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr style={{ background: '#FDFBF7', borderTop: '2px solid rgba(194, 155, 98, 0.25)' }}>
+                                                    <td colSpan={2} style={{ padding: '12px 18px', fontWeight: 900, color: '#1E130B' }}>
+                                                        إجمالي حقوق الملكية
+                                                    </td>
+                                                    <td style={{ padding: '12px 18px', fontWeight: 900, textAlign: 'left', fontSize: '15px', color: '#8c6b32' }}>
+                                                        {formatCurrency(totalEquity)}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+
+                                    {/* Liabilities and Equity Balance Check Card */}
+                                    <div style={{
+                                        background: '#FFFFFF',
+                                        border: `2px solid ${isBalanced ? '#059669' : '#A8573C'}`,
+                                        borderRadius: '16px',
+                                        padding: '18px 22px',
+                                        boxShadow: '0 4px 20px rgba(30, 19, 11, 0.06)'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontWeight: 900, fontSize: '15px', color: '#1E130B' }}>
+                                                إجمالي الالتزامات وحقوق الملكية:
+                                            </span>
+                                            <span style={{ fontWeight: 900, fontSize: '18px', color: '#1E130B' }}>
+                                                {formatCurrency(totalLiabilitiesAndEquity)}
+                                            </span>
+                                        </div>
+                                        <div style={{
+                                            marginTop: '10px',
+                                            padding: '8px 12px',
+                                            borderRadius: '8px',
+                                            background: isBalanced ? 'rgba(5, 150, 105, 0.1)' : 'rgba(168, 87, 60, 0.1)',
+                                            color: isBalanced ? '#059669' : '#A8573C',
+                                            fontSize: '12px',
+                                            fontWeight: 800,
+                                            textAlign: 'center'
+                                        }}>
+                                            {isBalanced ? '✓ الميزانية العمومية متوازنة تماماً وفق المعايير المحاسبية المعتمدة' : `⚠️ يوجد فارق توازن قدره ${formatCurrency(balanceDiff)}`}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Official Signatures for A4 Print */}
+                        <div className="print-footer" style={{ display: 'none', justifyContent: 'space-between', marginTop: '50px', padding: '0 40px', direction: 'rtl' }}>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B', marginBottom: '40px' }}>المحاسب المسؤول</div>
+                                <div style={{ borderTop: '1px solid #C29B62', width: '160px', margin: '0 auto', paddingTop: '6px', fontSize: '12px', color: '#6e5d4f' }}>التوقيع والتاريخ</div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B', marginBottom: '40px' }}>المدير المالي (CFO)</div>
+                                <div style={{ borderTop: '1px solid #C29B62', width: '160px', margin: '0 auto', paddingTop: '6px', fontSize: '12px', color: '#6e5d4f' }}>الاعتماد الرسمي</div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B', marginBottom: '40px' }}>ختم صيدلية تاج المودة</div>
+                                <div style={{ border: '2px dashed #C29B62', width: '100px', height: '60px', margin: '0 auto', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#8c6b32' }}>مكان الختم</div>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+        </MasterPage>
+    );
 }

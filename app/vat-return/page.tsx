@@ -1,433 +1,628 @@
 "use client";
 import React from 'react';
 import MasterPage from '@/components/MasterPage';
-import RawasiSidebarManager from '@/components/RawasiSidebarManager';
-import { THEME } from '@/lib/theme';
+import LoadingScreen from '@/components/LoadingScreen';
+import PrintHeader from '@/components/PrintHeader';
 import { formatCurrency } from '@/lib/helpers';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 import { useVATReturnLogic } from './vat_logic';
-import PrintHeader from '@/components/PrintHeader';
 
 export default function VATReturnPage() {
-  const logic = useVATReturnLogic();
-
-  const sidebarActions = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-      <button 
-        className="btn-main-glass blue" 
-        onClick={logic.handleRefresh}
-        disabled={logic.isLoading}
-      >
-        {logic.isLoading ? '⏳ جاري الحساب...' : '🔄 تحديث الإقرار'}
-      </button>
-      <button 
-        className="btn-main-glass white" 
-        onClick={() => window.print()}
-      >
-        🖨️ طباعة الإقرار الضريبي
-      </button>
-    </div>
-  );
+  const {
+    isLoading,
+    dateRange,
+    handleDateChange,
+    setQuarterPreset,
+    setMonthPreset,
+    activeTab,
+    setActiveTab,
+    transactions,
+    zatcaSummary,
+    handleRefresh,
+    exportToExcel
+  } = useVATReturnLogic();
 
   return (
-    <div className="clean-page">
-      <MasterPage icon="🏛️" 
-        title="الإقرار الضريبي (VAT Return)" 
-        subtitle="تقرير شامل لضريبة المدخلات والمخرجات وصافي الضريبة المستحقة لهيئة الزكاة"
-      >
-        <RawasiSidebarManager 
-          actions={sidebarActions}
-          summary={
-            <div className="summary-glass-card">
-              <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>الفترة الضريبية 📅</span>
-              <div style={{fontSize:'11px', color: THEME.primary, fontWeight:900, marginTop:'5px'}}>
-                من: {logic.dateRange.start} <br/> إلى: {logic.dateRange.end}
-              </div>
-            </div>
+    <MasterPage
+      title="إقرار ضريبة القيمة المضافة (ZATCA VAT Return 15%)"
+      subtitle="نموذج الإقرار الضريبي الرسمي المعتمد من هيئة الزكاة والضريبة والجمارك بالمملكة العربية السعودية"
+      icon="🏛️"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', direction: 'rtl', minHeight: '100vh', paddingBottom: '50px' }}>
+        
+        {/* Print Styles */}
+        <style>{`
+          @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: #1E130B !important; }
+            table { width: 100% !important; border-collapse: collapse !important; }
+            th, td { border: 1px solid #C29B62 !important; padding: 6px 10px !important; font-size: 11px !important; }
+            .zatca-print-box { border: 2px solid #1E130B !important; padding: 15px !important; margin-top: 20px !important; }
           }
-        />
+          @media (max-width: 768px) {
+            .vat-kpi-grid { grid-template-columns: 1fr !important; }
+            .vat-filter-row { flex-direction: column !important; }
+          }
+        `}</style>
 
-        {/* شريط الفلاتر */}
-        <div className="filter-bar">
-          <div className="filter-group">
-            <label>من تاريخ:</label>
-            <input 
-              type="date" 
-              value={logic.dateRange.start} 
-              onChange={(e) => logic.handleDateChange('start', e.target.value)} 
-            />
+        <PrintHeader title="إقرار ضريبة القيمة المضافة - هيئة الزكاة والضريبة والجمارك" subtitle={`عن الفترة الضريبية من ${dateRange.start} إلى ${dateRange.end}`} />
+
+        {/* 1. Header Toolbar */}
+        <div className="no-print" style={{
+          background: '#FFFFFF',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
+          borderRadius: '20px',
+          padding: '20px 24px',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '16px'
+        }}>
+          {/* Presets & Dates */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', background: '#FDFBF7', border: '1px solid rgba(194, 155, 98, 0.25)', borderRadius: '12px', padding: '3px' }}>
+              <button
+                onClick={() => setQuarterPreset(1)}
+                style={{ padding: '6px 12px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#6e5d4f', fontWeight: 800, fontSize: '12px', cursor: 'pointer', minHeight: '38px' }}
+              >
+                الربع الأول Q1
+              </button>
+              <button
+                onClick={() => setQuarterPreset(2)}
+                style={{ padding: '6px 12px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#6e5d4f', fontWeight: 800, fontSize: '12px', cursor: 'pointer', minHeight: '38px' }}
+              >
+                الربع الثاني Q2
+              </button>
+              <button
+                onClick={() => setQuarterPreset(3)}
+                style={{ padding: '6px 12px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#6e5d4f', fontWeight: 800, fontSize: '12px', cursor: 'pointer', minHeight: '38px' }}
+              >
+                الربع الثالث Q3
+              </button>
+              <button
+                onClick={() => setQuarterPreset(4)}
+                style={{ padding: '6px 12px', borderRadius: '9px', border: 'none', background: '#C29B62', color: '#FFFFFF', fontWeight: 800, fontSize: '12px', cursor: 'pointer', minHeight: '38px' }}
+              >
+                الربع الرابع Q4
+              </button>
+              <button
+                onClick={setMonthPreset}
+                style={{ padding: '6px 12px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#6e5d4f', fontWeight: 800, fontSize: '12px', cursor: 'pointer', minHeight: '38px' }}
+              >
+                الشهر الحالي
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>من:</span>
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => handleDateChange('start', e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', minHeight: '40px' }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>إلى:</span>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => handleDateChange('end', e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', minHeight: '40px' }}
+              />
+            </div>
           </div>
-          <div className="filter-group">
-            <label>إلى تاريخ:</label>
-            <input 
-              type="date" 
-              value={logic.dateRange.end} 
-              onChange={(e) => logic.handleDateChange('end', e.target.value)} 
-            />
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              onClick={handleRefresh}
+              style={{
+                background: '#FDFBF7',
+                color: '#1E130B',
+                border: '1px solid rgba(194, 155, 98, 0.35)',
+                padding: '10px 16px',
+                borderRadius: '12px',
+                fontWeight: 800,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                minHeight: '44px'
+              }}
+            >
+              <span>تحديث الإقرار</span>
+              <span>🔄</span>
+            </button>
+            <button
+              onClick={() => window.print()}
+              style={{
+                background: '#FDFBF7',
+                color: '#1E130B',
+                border: '1px solid rgba(194, 155, 98, 0.35)',
+                padding: '10px 16px',
+                borderRadius: '12px',
+                fontWeight: 800,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                minHeight: '44px'
+              }}
+            >
+              <span>طباعة الإقرار A4</span>
+              <span>🖨️</span>
+            </button>
+            <button
+              onClick={exportToExcel}
+              style={{
+                background: 'linear-gradient(135deg, #C29B62 0%, #A88348 100%)',
+                color: '#FFFFFF',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '12px',
+                fontWeight: 900,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 14px rgba(194, 155, 98, 0.25)',
+                minHeight: '44px'
+              }}
+            >
+              <span>تصدير نموذج ZATCA</span>
+              <span>📑</span>
+            </button>
           </div>
         </div>
 
-        {logic.isLoading ? (
-          <div className="loading-state">
-            <div className="spinner">⏳</div>
-            جاري احتساب الضريبة بناءً على القيود المحاسبية...
-          </div>
+        {isLoading ? (
+          <LoadingScreen message="جاري مطابقة الفواتير والقيود واحتساب إقرار ضريبة القيمة المضافة..." />
         ) : (
           <>
-            <PrintHeader title="الإقرار الضريبي" subtitle={`عن الفترة من ${logic.dateRange.start} إلى ${logic.dateRange.end}`} />
-
-            {/* حاوية الطباعة العلوية لجمع الملخص والرسم البياني معاً في صفحة واحدة */}
-            <div className="print-top-section">
-              {/* ملخص الإقرار الضريبي */}
-              <div className="vat-summary-grid">
-                
-                {/* ضريبة المخرجات (المبيعات) */}
-                <div className="vat-card output-card">
-                  <div className="vat-icon">🟢</div>
-                  <h3>ضريبة المخرجات (المبيعات)</h3>
-                  <div className="vat-amount">{formatCurrency(logic.summary.totalOutputVAT)}</div>
-                  <div className="vat-base">
-                    المبيعات الخاضعة: <span>{formatCurrency(logic.summary.outputBase)}</span>
-                  </div>
+            {/* 2. Top Luxury KPI Cards Grid */}
+            <div className="vat-kpi-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+              gap: '14px'
+            }}>
+              {/* Output VAT */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(5, 150, 105, 0.35)',
+                borderRadius: '16px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 20px rgba(5, 150, 105, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#059669' }}>ضريبة المخرجات (المبيعات)</span>
+                  <span style={{ fontSize: '18px' }}>🟢</span>
                 </div>
-
-                {/* ضريبة المدخلات (المشتريات) */}
-                <div className="vat-card input-card">
-                  <div className="vat-icon">🔴</div>
-                  <h3>ضريبة المدخلات (المشتريات)</h3>
-                  <div className="vat-amount">{formatCurrency(logic.summary.totalInputVAT)}</div>
-                  <div className="vat-base">
-                    المشتريات الخاضعة: <span>{formatCurrency(logic.summary.inputBase)}</span>
-                  </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#059669', marginTop: '8px' }}>
+                  {formatCurrency(zatcaSummary.box6_totalOutputVAT)}
                 </div>
-
-                {/* صافي الضريبة */}
-                <div className={`vat-card net-card ${logic.summary.netVAT >= 0 ? 'payable' : 'refundable'}`}>
-                  <div className="vat-icon">💰</div>
-                  <h3>الصافي (Net VAT)</h3>
-                  <div className="vat-amount">{formatCurrency(Math.abs(logic.summary.netVAT))}</div>
-                  <div className="vat-base status-badge">
-                    {logic.summary.netVAT >= 0 ? 'مستحقة لهيئة الزكاة' : 'استرداد ضريبي'}
-                  </div>
+                <div style={{ fontSize: '12px', color: '#6e5d4f', marginTop: '4px', fontWeight: 700 }}>
+                  المبيعات الخاضعة: {formatCurrency(zatcaSummary.box6_totalSales)}
                 </div>
-
               </div>
 
-              {/* الرسم البياني (Chart) */}
-              <div className="vat-card vat-chart-container" style={{ marginTop: '20px', padding: '30px', textAlign: 'right', display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ margin: '0 0 25px 0', color: '#122946', fontWeight: 900, fontSize: '20px', display: 'flex', alignItems: 'center' }}>
-                <span style={{ fontSize: '26px', marginLeft: '12px' }}>📊</span> التحليل البياني للضريبة
-              </h3>
-              <div style={{ height: '350px', width: '100%', direction: 'ltr' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={[
-                    { name: 'المدخلات (مشتريات)', value: logic.summary.totalInputVAT, fill: 'url(#colorInput)' },
-                    { name: 'الصافي', value: Math.abs(logic.summary.netVAT), fill: 'url(#colorNet)' },
-                    { name: 'المخرجات (مبيعات)', value: logic.summary.totalOutputVAT, fill: 'url(#colorOutput)' }
-                  ]} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                    <defs>
-                      <linearGradient id="colorInput" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.9}/>
-                        <stop offset="95%" stopColor="#b91c1c" stopOpacity={0.8}/>
-                      </linearGradient>
-                      <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.9}/>
-                        <stop offset="95%" stopColor="#d97706" stopOpacity={0.8}/>
-                      </linearGradient>
-                      <linearGradient id="colorOutput" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.9}/>
-                        <stop offset="95%" stopColor="#059669" stopOpacity={0.8}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
-                    <XAxis dataKey="name" tick={{ fill: '#475569', fontWeight: 900, fontSize: 13 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#475569', fontWeight: 900, fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(val) => val.toLocaleString()} />
-                    <Tooltip 
-                      formatter={(value: any) => [`${formatCurrency(Number(value) || 0)}`, 'قيمة الضريبة']} 
-                      cursor={{ fill: 'rgba(0,0,0,0.02)' }}
-                      contentStyle={{ borderRadius: '16px', fontWeight: 900, textAlign: 'right', direction: 'rtl', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', padding: '15px' }}
-                    />
-                    <Bar dataKey="value" radius={[12, 12, 0, 0]} maxBarSize={60}>
-                      {
-                        [
-                          { name: 'المدخلات (مشتريات)', value: logic.summary.totalInputVAT, fill: 'url(#colorInput)' },
-                          { name: 'الصافي', value: Math.abs(logic.summary.netVAT), fill: 'url(#colorNet)' },
-                          { name: 'المخرجات (مبيعات)', value: logic.summary.totalOutputVAT, fill: 'url(#colorOutput)' }
-                        ].map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))
-                      }
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              {/* Input VAT */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(168, 87, 60, 0.35)',
+                borderRadius: '16px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 20px rgba(168, 87, 60, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#A8573C' }}>ضريبة المدخلات (المشتريات)</span>
+                  <span style={{ fontSize: '18px' }}>🔴</span>
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#A8573C', marginTop: '8px' }}>
+                  {formatCurrency(zatcaSummary.box11_totalInputVAT)}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6e5d4f', marginTop: '4px', fontWeight: 700 }}>
+                  المشتريات الخاضعة: {formatCurrency(zatcaSummary.box11_totalPurchases)}
+                </div>
+              </div>
+
+              {/* Net Tax Due */}
+              <div style={{
+                background: '#FFFFFF',
+                border: `1.5px solid ${zatcaSummary.box15_finalTaxDue >= 0 ? 'rgba(194, 155, 98, 0.4)' : 'rgba(5, 150, 105, 0.4)'}`,
+                borderRadius: '16px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: zatcaSummary.box15_finalTaxDue >= 0 ? '#8c6b32' : '#059669' }}>
+                    {zatcaSummary.box15_finalTaxDue >= 0 ? 'صافي الضريبة واجبة السداد' : 'رصيد ضريبة مستردة'}
+                  </span>
+                  <span style={{ fontSize: '18px' }}>⚖️</span>
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: zatcaSummary.box15_finalTaxDue >= 0 ? '#1E130B' : '#059669', marginTop: '8px' }}>
+                  {formatCurrency(Math.abs(zatcaSummary.box15_finalTaxDue))}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6e5d4f', marginTop: '4px', fontWeight: 700 }}>
+                  {zatcaSummary.box15_finalTaxDue >= 0 ? 'مستحقة لهيئة الزكاة والضريبة (ZATCA)' : 'تُرَحَّل كرصيد دائن للفترة القادمة'}
+                </div>
+              </div>
+
+              {/* Operations Count */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1px solid rgba(194, 155, 98, 0.25)',
+                borderRadius: '16px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>إجمالي الفواتير والعمليات</span>
+                  <span style={{ fontSize: '18px' }}>🧾</span>
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#1E130B', marginTop: '8px' }}>
+                  {transactions.length} <span style={{ fontSize: '14px', color: '#8c6b32' }}>عملية مسجلة</span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#6e5d4f', marginTop: '4px', fontWeight: 700 }}>
+                  نسبة الضريبة القياسية: 15%
+                </div>
               </div>
             </div>
-          </div>
 
-            {/* جدول تفاصيل الحركات */}
-            <h2 className="section-title" style={{ marginTop: '30px' }}>
-              <span>🧾</span> التفاصيل الدقيقة لحركات الضريبة
-            </h2>
-            <div className="table-glass-container">
-              <table className="aqua-table">
-                <thead>
-                  <tr>
-                    <th>تاريخ الحركة</th>
-                    <th>نوع الحركة</th>
-                    <th style={{ width: '40%' }}>البيان / الوصف</th>
-                    <th style={{ textAlign: 'left' }}>المبلغ الأساسي</th>
-                    <th style={{ textAlign: 'left' }}>قيمة الضريبة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logic.transactions.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: '#ef4444', fontWeight: 900 }}>
-                        لا توجد حركات ضريبية في هذه الفترة
-                      </td>
-                    </tr>
-                  ) : (
-                    logic.transactions.map(t => (
-                      <tr key={t.id}>
-                        <td style={{ fontWeight: 800 }}>{t.date}</td>
-                        <td>
-                          {t.type === 'output' ? (
-                            <span className="badge badge-output">مخرجات (مبيعات)</span>
-                          ) : (
-                            <span className="badge badge-input">مدخلات (مصروفات)</span>
-                          )}
-                        </td>
-                        <td style={{ fontSize: '13px', color: '#475569', fontWeight: 700 }}>
-                          {t.description}
-                        </td>
-                        <td style={{ textAlign: 'left', fontWeight: 900, color: '#1e293b' }}>
-                          {formatCurrency(t.base_amount)}
-                        </td>
-                        <td style={{ textAlign: 'left', fontWeight: 900, color: t.type === 'output' ? '#10b981' : '#ef4444' }}>
-                          {formatCurrency(t.vat_amount)}
+            {/* 3. Navigation Tabs */}
+            <div className="no-print" style={{
+              display: 'flex',
+              gap: '10px',
+              borderBottom: '2px solid rgba(194, 155, 98, 0.2)',
+              paddingBottom: '8px'
+            }}>
+              <button
+                onClick={() => setActiveTab('form')}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: activeTab === 'form' ? '#1E130B' : '#FDFBF7',
+                  color: activeTab === 'form' ? '#FFFFFF' : '#6e5d4f',
+                  fontWeight: 900,
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                النموذج الرسمي المعتمد (ZATCA Schedule) 📋
+              </button>
+              <button
+                onClick={() => setActiveTab('chart')}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: activeTab === 'chart' ? '#C29B62' : '#FDFBF7',
+                  color: activeTab === 'chart' ? '#FFFFFF' : '#6e5d4f',
+                  fontWeight: 900,
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                التحليل والمقارنة البيانية (Chart) 📊
+              </button>
+              <button
+                onClick={() => setActiveTab('transactions')}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: activeTab === 'transactions' ? '#8c6b32' : '#FDFBF7',
+                  color: activeTab === 'transactions' ? '#FFFFFF' : '#6e5d4f',
+                  fontWeight: 900,
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                سجل الفواتير والعمليات الضريبية (Audit Log) 🔍
+              </button>
+            </div>
+
+            {/* 4. Tab Contents */}
+
+            {/* TAB 1: ZATCA Official Form */}
+            {activeTab === 'form' && (
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '20px',
+                border: '1px solid rgba(194, 155, 98, 0.25)',
+                padding: '24px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1.5px solid rgba(194, 155, 98, 0.2)', paddingBottom: '14px' }}>
+                  <div>
+                    <h2 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 900, color: '#1E130B' }}>
+                      نموذج إقرار ضريبة القيمة المضافة (ZATCA VAT Return Schedule)
+                    </h2>
+                    <span style={{ fontSize: '13px', color: '#6e5d4f', fontWeight: 600 }}>
+                      الرقم الضريبي للمنشأة: 300000000000003 | صيدلية تاج المودة البيطرية
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 800, padding: '6px 14px', borderRadius: '12px', background: 'rgba(194, 155, 98, 0.15)', color: '#8c6b32' }}>
+                    المطابقة لمعايير الزكاة والضريبة 15% ✓
+                  </span>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ background: '#FDFBF7', borderBottom: '2px solid rgba(194, 155, 98, 0.25)' }}>
+                        <th style={{ padding: '12px 16px', color: '#8c6b32', fontWeight: 900, width: '90px' }}>الخانة</th>
+                        <th style={{ padding: '12px 16px', color: '#1E130B', fontWeight: 900 }}>بيان ضريبة القيمة المضافة</th>
+                        <th style={{ padding: '12px 16px', color: '#1E130B', fontWeight: 900, textAlign: 'left', width: '220px' }}>المبلغ الخاضع للضريبة (SAR)</th>
+                        <th style={{ padding: '12px 16px', color: '#1E130B', fontWeight: 900, textAlign: 'left', width: '180px' }}>مبلغ الضريبة 15% (SAR)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Section 1: Sales / Output VAT */}
+                      <tr style={{ background: 'rgba(194, 155, 98, 0.08)', borderBottom: '1px solid rgba(194, 155, 98, 0.2)' }}>
+                        <td colSpan={4} style={{ padding: '10px 16px', fontWeight: 900, color: '#8c6b32', fontSize: '14px' }}>
+                          أولاً: ضريبة القيمة المضافة على المبيعات (المخرجات)
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>1</td>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#1E130B' }}>المبيعات الخاضعة للنسبة الأساسية (15%)</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 900, color: '#1E130B' }}>{formatCurrency(zatcaSummary.box1_stdSales)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 900, color: '#059669' }}>{formatCurrency(zatcaSummary.box1_stdSalesVAT)}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)', background: '#FDFBF7' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>2</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>المبيعات للمواطنين (خدمات صحية خاصة)</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>3</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>المبيعات المحلية الخاضعة لنسبة الصفر</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>{formatCurrency(zatcaSummary.box3_zeroSales)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)', background: '#FDFBF7' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>4</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>الصادرات</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>5</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>المبيعات المعفاة من الضريبة</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>{formatCurrency(zatcaSummary.box5_exemptSales)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ background: '#FDFBF7', borderBottom: '2px solid rgba(194, 155, 98, 0.3)' }}>
+                        <td style={{ padding: '12px 16px', fontWeight: 900, color: '#8c6b32' }}>6</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 900, color: '#1E130B' }}>إجمالي المبيعات وضريبة المخرجات</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 900, color: '#1E130B' }}>{formatCurrency(zatcaSummary.box6_totalSales)}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 900, color: '#059669', fontSize: '15px' }}>{formatCurrency(zatcaSummary.box6_totalOutputVAT)}</td>
+                      </tr>
+
+                      {/* Section 2: Purchases / Input VAT */}
+                      <tr style={{ background: 'rgba(194, 155, 98, 0.08)', borderBottom: '1px solid rgba(194, 155, 98, 0.2)' }}>
+                        <td colSpan={4} style={{ padding: '10px 16px', fontWeight: 900, color: '#8c6b32', fontSize: '14px' }}>
+                          ثانياً: ضريبة القيمة المضافة على المشتريات والمصروفات (المدخلات)
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>7</td>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#1E130B' }}>المشتريات الخاضعة للنسبة الأساسية (15%)</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 900, color: '#1E130B' }}>{formatCurrency(zatcaSummary.box7_stdPurchases)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 900, color: '#A8573C' }}>{formatCurrency(zatcaSummary.box7_stdPurchasesVAT)}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)', background: '#FDFBF7' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>8</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>الاستيرادات الخاضعة للضريبة بالنسبة الأساسية (تدفع في الجمارك)</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>9</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>المشتريات الخاضعة لنسبة الصفر</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>{formatCurrency(zatcaSummary.box9_zeroPurchases)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)', background: '#FDFBF7' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>10</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>المشتريات المعفاة من الضريبة</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>{formatCurrency(zatcaSummary.box10_exemptPurchases)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ background: '#FDFBF7', borderBottom: '2px solid rgba(194, 155, 98, 0.3)' }}>
+                        <td style={{ padding: '12px 16px', fontWeight: 900, color: '#8c6b32' }}>11</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 900, color: '#1E130B' }}>إجمالي المشتريات وضريبة المدخلات القابلة للخصم</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 900, color: '#1E130B' }}>{formatCurrency(zatcaSummary.box11_totalPurchases)}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 900, color: '#A8573C', fontSize: '15px' }}>{formatCurrency(zatcaSummary.box11_totalInputVAT)}</td>
+                      </tr>
+
+                      {/* Section 3: Net Tax Due */}
+                      <tr style={{ background: 'rgba(194, 155, 98, 0.08)', borderBottom: '1px solid rgba(194, 155, 98, 0.2)' }}>
+                        <td colSpan={4} style={{ padding: '10px 16px', fontWeight: 900, color: '#8c6b32', fontSize: '14px' }}>
+                          ثالثاً: احتساب صافي ضريبة القيمة المضافة
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>12</td>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#1E130B' }}>إجمالي الضريبة المستحقة للفترة (ضريبة المخرجات - ضريبة المدخلات)</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>-</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 900, color: zatcaSummary.box12_netTax >= 0 ? '#1E130B' : '#059669' }}>
+                          {formatCurrency(zatcaSummary.box12_netTax)}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)', background: '#FDFBF7' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>13</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>تصحيحات من فترات سابقة (&lt; 5000 ر.س)</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>-</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.08)' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: 800, color: '#8c6b32' }}>14</td>
+                        <td style={{ padding: '10px 16px', color: '#6e5d4f' }}>رصيد ضريبة القيمة المضافة المرحل من فترات سابقة</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>-</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'left', color: '#6e5d4f' }}>0.00 ر.س</td>
+                      </tr>
+                      <tr style={{ background: '#FFFFFF', borderTop: '2px solid #C29B62' }}>
+                        <td style={{ padding: '14px 16px', fontWeight: 900, color: '#8c6b32', fontSize: '15px' }}>15</td>
+                        <td style={{ padding: '14px 16px', fontWeight: 900, color: '#1E130B', fontSize: '15px' }}>
+                          {zatcaSummary.box15_finalTaxDue >= 0 ? 'صافي الضريبة واجبة السداد للهيئة' : 'صافي رصيد الضريبة المستردة'}
+                        </td>
+                        <td style={{ padding: '14px 16px', textAlign: 'left', color: '#6e5d4f' }}>-</td>
+                        <td style={{ padding: '14px 16px', textAlign: 'left', fontWeight: 900, fontSize: '18px', color: zatcaSummary.box15_finalTaxDue >= 0 ? '#1E130B' : '#059669' }}>
+                          {formatCurrency(Math.abs(zatcaSummary.box15_finalTaxDue))}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ZATCA Official Declaration Notice */}
+                <div style={{
+                  marginTop: '25px',
+                  padding: '16px 20px',
+                  borderRadius: '14px',
+                  background: '#FDFBF7',
+                  border: '1px solid rgba(194, 155, 98, 0.25)',
+                  fontSize: '12px',
+                  color: '#6e5d4f',
+                  lineHeight: '1.8'
+                }}>
+                  <strong style={{ color: '#1E130B' }}>إقرار المكلف:</strong> أقر أنا المفوض عن المنشأة بأن جميع البيانات والمعلومات المذكورة أعلاه صحيحة ومكتملة ومطابقة للفواتير والدفاتر المحاسبية المعتمدة ومطابقة لأحكام نظام ضريبة القيمة المضافة ولائحته التنفيذية الصادرة عن هيئة الزكاة والضريبة والجمارك بالمملكة العربية السعودية.
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: Comparison Chart */}
+            {activeTab === 'chart' && (
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '20px',
+                border: '1px solid rgba(194, 155, 98, 0.25)',
+                padding: '24px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)'
+              }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#1E130B' }}>
+                    📊 مقارنة مدخلات ومخرجات الضريبة وصافي المستحق
+                  </h3>
+                </div>
+                <div style={{ height: '360px', width: '100%' }} dir="ltr">
+                  <ResponsiveContainer>
+                    <BarChart
+                      data={[
+                        { name: 'المدخلات (مشتريات ومصروفات)', amount: zatcaSummary.box11_totalInputVAT, fill: '#A8573C' },
+                        { name: 'الصافي المستحق (Net VAT)', amount: Math.abs(zatcaSummary.box15_finalTaxDue), fill: '#C29B62' },
+                        { name: 'المخرجات (مبيعات)', amount: zatcaSummary.box6_totalOutputVAT, fill: '#059669' }
+                      ]}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1efe9" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fill: '#1E130B', fontSize: 12, fontWeight: 700 }} />
+                      <YAxis tick={{ fill: '#6e5d4f', fontSize: 11 }} tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`} />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(194, 155, 98, 0.06)' }}
+                        contentStyle={{ background: '#FFFFFF', border: '1px solid #C29B62', borderRadius: '12px', color: '#1E130B', textAlign: 'right', fontWeight: 700 }}
+                        formatter={(val: any) => [formatCurrency(Number(val) || 0), 'قيمة الضريبة']}
+                      />
+                      <Bar dataKey="amount" radius={[8, 8, 0, 0]}>
+                        <Cell fill="#A8573C" />
+                        <Cell fill="#C29B62" />
+                        <Cell fill="#059669" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: Transactions Audit Log */}
+            {activeTab === 'transactions' && (
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '20px',
+                border: '1px solid rgba(194, 155, 98, 0.25)',
+                padding: '24px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#1E130B' }}>
+                    🔍 سجل العمليات والفواتير الضريبية التفصيلية
+                  </h3>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#8c6b32' }}>
+                    {transactions.length} عمليات
+                  </span>
+                </div>
+
+                <div style={{ overflowX: 'auto', borderRadius: '14px', border: '1px solid rgba(194, 155, 98, 0.2)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '13px' }}>
+                    <thead style={{ background: '#FDFBF7', borderBottom: '2px solid rgba(194, 155, 98, 0.25)' }}>
+                      <tr>
+                        <th style={{ padding: '12px 14px', color: '#8c6b32', fontWeight: 900 }}>#</th>
+                        <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>التاريخ</th>
+                        <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>النوع</th>
+                        <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>رقم المرجع</th>
+                        <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>اسم الطرف / العميل</th>
+                        <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>البيان</th>
+                        <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>المبلغ الخاضع</th>
+                        <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>الضريبة 15%</th>
+                        <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>الإجمالي</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#6e5d4f', fontWeight: 700 }}>
+                            لا توجد فواتير أو حركات ضريبية مسجلة خلال الفترة المحددة.
+                          </td>
+                        </tr>
+                      ) : (
+                        transactions.map((t, idx) => (
+                          <tr
+                            key={t.id || idx}
+                            style={{
+                              borderBottom: '1px solid rgba(194, 155, 98, 0.1)',
+                              background: idx % 2 === 0 ? '#FFFFFF' : '#FDFBF7'
+                            }}
+                          >
+                            <td style={{ padding: '10px 14px', fontWeight: 800, color: '#8c6b32' }}>{idx + 1}</td>
+                            <td style={{ padding: '10px 14px', color: '#6e5d4f' }}>{t.date}</td>
+                            <td style={{ padding: '10px 14px' }}>
+                              <span style={{
+                                padding: '3px 8px',
+                                borderRadius: '8px',
+                                fontSize: '11px',
+                                fontWeight: 900,
+                                background: t.type === 'output' ? 'rgba(5, 150, 105, 0.1)' : 'rgba(168, 87, 60, 0.1)',
+                                color: t.type === 'output' ? '#059669' : '#A8573C'
+                              }}>
+                                {t.type === 'output' ? 'مخرجات (مبيعات)' : 'مدخلات (مشتريات)'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 14px', color: '#1E130B', fontWeight: 700, fontFamily: 'monospace' }}>{t.ref_number}</td>
+                            <td style={{ padding: '10px 14px', fontWeight: 800, color: '#1E130B' }}>{t.party_name}</td>
+                            <td style={{ padding: '10px 14px', color: '#6e5d4f' }}>{t.description}</td>
+                            <td style={{ padding: '10px 14px', fontWeight: 800, color: '#1E130B' }}>{formatCurrency(t.taxable_amount)}</td>
+                            <td style={{ padding: '10px 14px', fontWeight: 900, color: t.type === 'output' ? '#059669' : '#A8573C' }}>{formatCurrency(t.vat_amount)}</td>
+                            <td style={{ padding: '10px 14px', fontWeight: 900, color: '#1E130B' }}>{formatCurrency(t.total_amount)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
-
-        <style>{`
-          .filter-bar { display: flex; gap: 15px; margin-bottom: 25px; background: rgba(255,255,255,0.2); backdrop-filter: blur(15px); padding: 20px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.3); align-items: center; }
-          .filter-group { display: flex; flex-direction: column; gap: 5px; }
-          .filter-group label { font-size: 12px; font-weight: 900; color: #475569; }
-          .filter-group input { padding: 10px 15px; border-radius: 12px; border: none; outline: none; font-weight: 800; background: rgba(255,255,255,0.7); }
-          
-          .btn-main-glass { width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(15px); font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-          .btn-main-glass.blue { background: linear-gradient(135deg, rgba(14, 165, 233, 0.8), rgba(2, 132, 199, 0.9)); color: white; }
-          .btn-main-glass.white { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255,255,255,0.8); }
-          .btn-main-glass:hover { transform: translateY(-3px); filter: brightness(1.1); }
-          
-          .summary-glass-card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 20px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2); margin-bottom: 25px; }
-          .loading-state { text-align: center; padding: 100px; font-weight: 900; color: #64748b; }
-          .loading-state .spinner { font-size: 40px; margin-bottom: 15px; }
-
-          .section-title { color: #122946; font-weight: 900; margin-top: 40px; margin-bottom: 25px; border-bottom: 2px solid rgba(40,145,200,0.15); padding-bottom: 12px; display: flex; align-items: center; font-size: 20px; }
-          .section-title span { font-size: 26px; margin-left: 12px; }
-
-          .vat-summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-          }
-
-          .vat-card {
-            background: rgba(255,255,255,0.7);
-            backdrop-filter: blur(15px);
-            padding: 30px;
-            border-radius: 24px;
-            border: 1px solid rgba(255,255,255,0.5);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.05);
-            position: relative;
-            overflow: hidden;
-            text-align: center;
-          }
-          
-          .vat-card h3 {
-            font-size: 16px;
-            color: #475569;
-            font-weight: 900;
-            margin: 0 0 15px 0;
-          }
-
-          .vat-amount {
-            font-size: 32px;
-            font-weight: 900;
-            margin-bottom: 15px;
-          }
-
-          .vat-base {
-            font-size: 13px;
-            color: #64748b;
-            font-weight: 800;
-            padding-top: 15px;
-            border-top: 1px dashed rgba(0,0,0,0.1);
-          }
-          .vat-base span {
-            color: #1e293b;
-          }
-
-          .vat-icon {
-            position: absolute;
-            top: -15px;
-            right: -15px;
-            font-size: 120px;
-            opacity: 0.05;
-            transform: rotate(15deg);
-          }
-
-          .output-card .vat-amount { color: #10b981; }
-          .input-card .vat-amount { color: #ef4444; }
-          
-          .net-card {
-            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
-            border-width: 2px;
-          }
-          .net-card.payable { border-color: #f59e0b; }
-          .net-card.payable .vat-amount { color: #d97706; }
-          .net-card.payable .status-badge { color: #d97706; background: rgba(245, 158, 11, 0.1); padding: 5px 10px; border-radius: 8px; display: inline-block; margin-top: 10px; }
-
-          .net-card.refundable { border-color: #10b981; }
-          .net-card.refundable .vat-amount { color: #059669; }
-          .net-card.refundable .status-badge { color: #059669; background: rgba(16, 185, 129, 0.1); padding: 5px 10px; border-radius: 8px; display: inline-block; margin-top: 10px; }
-
-          /* Table Styles */
-          .table-glass-container {
-            background: rgba(255, 255, 255, 0.5);
-            backdrop-filter: blur(15px);
-            border-radius: 24px;
-            border: 1px solid rgba(255,255,255,0.4);
-            padding: 5px;
-            overflow-x: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.03);
-          }
-          .aqua-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-          }
-          .aqua-table th {
-            background: rgba(194, 155, 98, 0.12);
-            color: #2C1A12;
-            font-weight: 900;
-            padding: 18px 20px;
-            text-align: right;
-            font-size: 13px;
-            border-bottom: 2px solid rgba(194, 155, 98, 0.3);
-          }
-          .aqua-table td {
-            padding: 16px 20px;
-            border-bottom: 1px solid rgba(194, 155, 98, 0.12);
-            font-size: 14px;
-            vertical-align: middle;
-            color: #2C1A12;
-          }
-          .aqua-table tbody tr:hover {
-            background: rgba(194, 155, 98, 0.08);
-          }
-          
-          .badge {
-            padding: 6px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 900;
-          }
-          .badge-output {
-            background: rgba(16, 185, 129, 0.15);
-            color: #059669;
-          }
-          .badge-input {
-            background: rgba(239, 68, 68, 0.15);
-            color: #b91c1c;
-          }
-
-          @media (max-width: 768px) {
-            .filter-bar { flex-direction: column !important; align-items: stretch !important; padding: 15px !important; }
-            .filter-group { width: 100% !important; justify-content: space-between !important; }
-            .filter-group input { flex: 1 !important; }
-            .vat-summary-grid { grid-template-columns: 1fr !important; gap: 15px !important; }
-            .vat-card { padding: 15px !important; border-radius: 16px !important; }
-            .vat-amount { font-size: 24px !important; }
-            .vat-chart-container { padding: 15px !important; border-radius: 16px !important; }
-            .table-glass-container { border-radius: 16px !important; overflow-x: auto !important; }
-            .aqua-table { min-width: 600px !important; }
-            .aqua-table th, .aqua-table td { padding: 10px 12px !important; font-size: 12px !important; }
-          }
-
-          @media print {
-            body { 
-                background: white !important; 
-                margin: 0 auto !important; 
-                padding: 0 !important;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: flex-start;
-                width: 100% !important;
-            }
-            .clean-page { 
-                width: 100% !important; 
-                max-width: 210mm !important; /* A4 Width */
-                margin: 0 auto !important; 
-                padding: 0 !important;
-            }
-            
-            /* دمج الملخص والرسم البياني في صف واحد لتوفير المساحة */
-            .print-top-section {
-                display: flex !important;
-                flex-direction: row !important;
-                align-items: stretch !important;
-                gap: 15px !important;
-                width: 100% !important;
-                margin-bottom: 10px !important;
-            }
-            
-            .vat-summary-grid { 
-                display: flex !important; 
-                flex-direction: column !important; 
-                width: 35% !important; 
-                gap: 8px !important; 
-                margin-bottom: 0 !important; 
-            }
-            
-            .vat-card { padding: 10px !important; border-radius: 8px !important; box-shadow: none !important; border: 1px solid #ccc !important; text-align: center; }
-            .vat-amount { font-size: 16px !important; margin-bottom: 2px !important; }
-            .vat-card h3 { font-size: 13px !important; margin-bottom: 2px !important; font-weight: 900; }
-            .vat-base { font-size: 10px !important; padding-top: 5px !important; }
-            
-            /* تصغير وتجهيز الرسم البياني للطباعة بجوار الملخص */
-            .vat-chart-container { 
-                width: 65% !important; 
-                margin-top: 0 !important; 
-                padding: 10px !important; 
-                border: 1px solid #ccc !important; 
-                background: white !important; 
-            }
-            .vat-chart-container h3 { font-size: 14px !important; margin-bottom: 5px !important; }
-            .vat-chart-container > div { height: 200px !important; }
-            
-            /* تنسيق الجدول والمسافات */
-            .section-title { margin-top: 10px !important; margin-bottom: 5px !important; font-size: 14px !important; padding-bottom: 3px !important; text-align: center; justify-content: center; }
-            .section-title span { font-size: 16px !important; }
-            
-            .table-glass-container { padding: 0 !important; background: transparent !important; border: none !important; margin-bottom: 0 !important; width: 100% !important; box-shadow: none !important; }
-            .aqua-table { width: 100% !important; }
-            .aqua-table th, .aqua-table td { padding: 4px !important; font-size: 10px !important; border: 1px solid #475569 !important; text-align: center !important; }
-            .aqua-table th { background: #f1f5f9 !important; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            
-            @page { margin: 0.8cm; size: A4 portrait; }
-          }
-        `}</style>
-      </MasterPage>
-    </div>
+      </div>
+    </MasterPage>
   );
 }
