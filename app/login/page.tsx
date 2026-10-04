@@ -1,5 +1,6 @@
 "use client";
 import React, { Suspense } from 'react';
+import Link from 'next/link';
 import { useLoginLogic } from './login_logic';
 
 // 🏜️ سيم الزجاج الصحراوي (Desert Glassmorphism)
@@ -276,9 +277,9 @@ function LoginPageContent() {
 
           {!isSignUp && (
             <div style={{ textAlign: 'right', marginBottom: '16px' }}>
-              <a href="/forgot-password" style={{ color: '#A8573C', fontSize: '12px', fontWeight: 800, textDecoration: 'none' }}>
+              <Link href="/forgot-password" style={{ color: '#A8573C', fontSize: '12px', fontWeight: 800, textDecoration: 'none' }}>
                 نسيت كلمة المرور؟
-              </a>
+              </Link>
             </div>
           )}
 
