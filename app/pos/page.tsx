@@ -760,6 +760,10 @@ export default function PosPage() {
                     if (scanned) {
                         e.preventDefault();
                         e.stopPropagation();
+                        if (activeEl && activeEl.tagName === 'INPUT') {
+                            (activeEl as HTMLInputElement).value = '';
+                            logic.setSearchQuery('');
+                        }
                         logic.handleBarcodeScan(scanned);
                     }
                     return;

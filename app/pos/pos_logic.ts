@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
@@ -29,6 +29,7 @@ export function usePosLogic() {
     const [isDelegateLocked, setIsDelegateLocked] = useState(false); // القفل إذا كان المستخدم مندوب
     const [manualDiscountAmount, setManualDiscountAmount] = useState<number>(0);
     const [discountType, setDiscountType] = useState<'amount' | 'percentage'>('amount');
+    const lastScanRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
 
     // 🏢 التبديل الآمن بين المستودعات مع إفراغ السلة عبر نافذة الحوار الملكية
     const handleWarehouseChange = async (newWarehouseId: string) => {
@@ -512,7 +513,41 @@ export function usePosLogic() {
         } else {
             cleanCode = String(barcodeOrItem).trim();
             if (!cleanCode) return;
+        }
 
+        // 🛡️ فحص ومنع التكرار اللحظي العرضي لقارئ الباركود (Hardware Scanner Double-Scan Debounce)
+        const now = Date.now();
+        const normCode = String(cleanCode).trim().toLowerCase();
+        if (normCode && lastScanRef.current.code === normCode && (now - lastScanRef.current.time) < 380) {
+            return;
+        }
+        lastScanRef.current = { code: normCode, time: now };
+
+        const playAudio = (isOk: boolean) => {
+            if (typeof window !== 'undefined') {
+                try {
+                    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+                    if (AudioCtx) {
+                        const ctx = new AudioCtx();
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = isOk ? 'sine' : 'triangle';
+                        osc.frequency.setValueAtTime(isOk ? 1760 : 320, ctx.currentTime);
+                        gain.gain.setValueAtTime(isOk ? 0.35 : 0.25, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (isOk ? 0.12 : 0.2));
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start();
+                        osc.stop(ctx.currentTime + (isOk ? 0.12 : 0.2));
+                    }
+                } catch {}
+                if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                    try { navigator.vibrate(isOk ? [60] : [120, 60, 120]); } catch {}
+                }
+            }
+        };
+
+        if (!item) {
             const norm = (s: any) => String(s || '').trim().toLowerCase();
             const normClean = norm(cleanCode);
             const normCleanNoZero = normClean.replace(/^0+/, '');
@@ -525,11 +560,16 @@ export function usePosLogic() {
                 const itemName = norm(i.name);
 
                 return (
-                    itemCode === normClean ||
                     itemBarcode === normClean ||
+                    itemCode === normClean ||
                     itemId === normClean ||
                     itemName === normClean ||
-                    (normCleanNoZero && (itemCode.replace(/^0+/, '') === normCleanNoZero || itemBarcode.replace(/^0+/, '') === normCleanNoZero))
+                    (normCleanNoZero && (
+                        (itemCode && itemCode.replace(/^0+/, '') === normCleanNoZero) || 
+                        (itemBarcode && itemBarcode.replace(/^0+/, '') === normCleanNoZero)
+                    )) ||
+                    // دعم قراءة باركود الأدوية EAN-13 / GS1
+                    (itemBarcode && (itemBarcode.startsWith(normClean) || normClean.startsWith(itemBarcode)) && Math.abs(itemBarcode.length - normClean.length) <= 1)
                 );
             });
 
@@ -547,11 +587,13 @@ export function usePosLogic() {
         }
 
         if (!item) {
+            playAudio(false);
             showToast(`⚠️ الصنف غير موجود أو غير متوفر في هذا المنفذ: ${cleanCode}`, 'error');
             return;
         }
 
         if (item.isExpired) {
+            playAudio(false);
             showToast(`⛔ منع البيع: الصنف (${item.name}) منتهي الصلاحية بتاريخ ${item.expiry_date}! يمنع بيع السلع المنتهية للمستهلكين.`, 'error');
             return;
         }
@@ -589,32 +631,13 @@ export function usePosLogic() {
         });
 
         if (isOutOfStock) {
+            playAudio(false);
             showToast(`⛔ تجاوز المخزون ممنوع! الرصيد المتاح من (${item.name}) هو ${item.available_qty} ${item.unit || ''} فقط`, 'error');
             return;
         }
 
         // 4. نغمة تأكيد الكاشير واهتزاز الجوال
-        if (typeof window !== 'undefined') {
-            try {
-                const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-                if (AudioCtx) {
-                    const ctx = new AudioCtx();
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(1760, ctx.currentTime);
-                    gain.gain.setValueAtTime(0.35, ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    osc.start();
-                    osc.stop(ctx.currentTime + 0.1);
-                }
-            } catch {}
-            if (typeof navigator !== 'undefined' && navigator.vibrate) {
-                try { navigator.vibrate([80]); } catch {}
-            }
-        }
+        playAudio(true);
 
         // 5. إشعار مرئي سريع وواضح للكمية المحدثة
         if (isIncrement) {

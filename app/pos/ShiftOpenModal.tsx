@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
 import { notifyShiftOpened } from '@/lib/notificationService';
+import { executeWithOfflineSync } from '@/lib/offline/offlineExecutor';
 
 
 export default function ShiftOpenModal({ 
@@ -146,28 +147,52 @@ export default function ShiftOpenModal({
             const resolvedShiftUserId = chosenEmp?.userId || currentUserId;
             const resolvedShiftDelegateId = chosenEmp?.partnerId || chosenEmp?.id || targetDelegateId;
 
-            // استدعاء مسار الباك إند المحمي بالكامل
-            const res = await fetch('/api/pos/shifts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    warehouse_id: targetWarehouseId,
-                    delegate_id: resolvedShiftDelegateId || null,
-                    user_id: resolvedShiftUserId || null,
-                    starting_cash: Number(startingCash) || 0
-                })
+            const payload = {
+                warehouse_id: targetWarehouseId,
+                delegate_id: resolvedShiftDelegateId || null,
+                user_id: resolvedShiftUserId || null,
+                starting_cash: Number(startingCash) || 0
+            };
+
+            const execResult = await executeWithOfflineSync({
+                cloudOperation: async () => {
+                    const res = await fetch('/api/pos/shifts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await res.json();
+                    if (!res.ok || !result.success) {
+                        throw new Error(result.error || 'فشل فتح الوردية');
+                    }
+                    return result;
+                },
+                offlineBackup: {
+                    type: 'pos_shift' as any,
+                    action: 'insert',
+                    payload: {
+                        id: `offline-shift-${Date.now()}`,
+                        ...payload,
+                        status: 'open',
+                        opened_at: new Date().toISOString()
+                    }
+                }
             });
 
-            const result = await res.json();
-            if (!res.ok || !result.success) {
-                throw new Error(result.error || 'فشل فتح الوردية');
-            }
-
-            return result;
+            return {
+                ...(execResult.data || {}),
+                is_offline: execResult.isOffline
+            };
         },
         onSuccess: (res: any) => {
+            const isOffline = res?.is_offline;
             const isResumed = res?.is_resumed;
-            showToast(isResumed ? (res?.message || (isEn ? 'Shift resumed successfully 🔄' : 'تم استئناف وردية اليوم بنجاح وتكملة المبيعات عليها 🔄')) : (isEn ? 'Shift opened successfully 🚀' : 'تم فتح الوردية بنجاح 🚀'), 'success');
+            if (isOffline) {
+                showToast(isEn ? 'Shift opened locally in offline mode 📶' : 'تم فتح الوردية محلياً في وضع الأوفلاين بنجاح 📶', 'success');
+            } else {
+                showToast(isResumed ? (res?.message || (isEn ? 'Shift resumed successfully 🔄' : 'تم استئناف وردية اليوم بنجاح وتكملة المبيعات عليها 🔄')) : (isEn ? 'Shift opened successfully 🚀' : 'تم فتح الوردية بنجاح 🚀'), 'success');
+            }
             if (onWarehouseChange && targetWarehouseId !== warehouseId) {
                 onWarehouseChange(targetWarehouseId);
             }
@@ -228,62 +253,63 @@ export default function ShiftOpenModal({
             padding: '15px'
         }}>
             <style>{`
-                .aqua-shift-btn {
-                    background: linear-gradient(135deg, #2891C8 0%, #1C73AB 100%);
+                .royal-shift-btn {
+                    background: linear-gradient(135deg, #C29B62 0%, #A8573C 100%);
                     color: white;
-                    border: 1px solid rgba(255, 255, 255, 0.4);
-                    border-radius: 16px;
+                    border: none;
+                    border-radius: 14px;
                     width: 100%;
+                    min-height: 48px;
                     padding: 14px;
                     font-size: 16px;
                     font-weight: 900;
                     cursor: pointer;
                     transition: all 0.3s ease;
                     box-shadow: 0 4px 15px rgba(194, 155, 98, 0.35);
-                    border-radius: 14px;
-                    border: none;
-                    color: #fff;
                 }
-                .aqua-shift-btn:hover:not(:disabled) {
-                    transform: translateY(-3px);
-                    box-shadow: 0 8px 20px rgba(168, 87, 60, 0.35);
-                    filter: brightness(1.05);
+                .royal-shift-btn:hover:not(:disabled) {
+                    transform: translateY(-2px);
+                    box-shadow: 0 8px 22px rgba(168, 87, 60, 0.35);
+                    filter: brightness(1.06);
                 }
-                .aqua-shift-input {
+                .royal-shift-btn:disabled {
+                    opacity: 0.55;
+                    cursor: not-allowed;
+                    transform: none;
+                }
+                .royal-shift-input {
                     width: 100%;
-                    background: rgba(255, 253, 250, 0.9);
-                    border: 2px solid rgba(194, 155, 98, 0.3);
+                    background: #FDFBF7;
+                    border: 2px solid rgba(194, 155, 98, 0.35);
                     border-radius: 14px;
                     padding: 12px;
                     font-size: 24px;
                     font-weight: 900;
                     text-align: center;
-                    color: #2C1A12;
-                    transition: all 0.3s ease;
+                    color: #1E130B;
+                    transition: all 0.25s ease;
                     outline: none;
                     box-sizing: border-box;
                 }
-                .aqua-shift-input:focus {
+                .royal-shift-input:focus {
                     border-color: #C29B62;
-                    box-shadow: 0 0 15px rgba(194, 155, 98, 0.25);
+                    box-shadow: 0 0 0 3px rgba(194, 155, 98, 0.2);
                     background: #ffffff;
                 }
-                .aqua-glass-card {
-                    background: linear-gradient(135deg, rgba(255, 253, 250, 0.95) 0%, rgba(255, 253, 250, 0.85) 100%);
-                    backdrop-filter: blur(24px) saturate(160%);
-                    WebkitBackdropFilter: blur(24px) saturate(160%);
-                    border: 1px solid rgba(194, 155, 98, 0.3);
+                .royal-solid-card {
+                    background: #FFFFFF;
+                    border: 1.5px solid rgba(194, 155, 98, 0.35);
                     border-radius: 24px;
                     width: 95vw;
                     max-width: 480px;
                     padding: 30px 24px;
                     text-align: right;
-                    box-shadow: 0 15px 40px rgba(44, 26, 18, 0.15);
-                    animation: fadeUp 0.4s ease-out;
+                    box-shadow: 0 15px 40px rgba(30, 19, 11, 0.12);
+                    animation: fadeUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
                     direction: rtl;
                 }
                 @keyframes fadeUp {
-                    from { opacity: 0; transform: translateY(20px); }
+                    from { opacity: 0; transform: translateY(16px); }
                     to { opacity: 1; transform: translateY(0); }
                 }
                 .shift-select-field {
@@ -291,21 +317,23 @@ export default function ShiftOpenModal({
                     padding: 10px 14px;
                     border-radius: 12px;
                     border: 1.5px solid rgba(194, 155, 98, 0.3);
-                    background: rgba(255, 253, 250, 0.9);
+                    background: #FDFBF7;
                     font-size: 13px;
                     font-weight: 700;
-                    color: #2C1A12;
+                    color: #1E130B;
                     outline: none;
                     transition: 0.2s;
                     box-sizing: border-box;
+                    min-height: 44px;
                 }
                 .shift-select-field:focus {
                     border-color: #C29B62;
                     box-shadow: 0 0 0 3px rgba(194, 155, 98, 0.15);
+                    background: #FFFFFF;
                 }
             `}</style>
             
-            <div className="aqua-glass-card" style={{ position: 'relative' }}>
+            <div className="royal-solid-card" style={{ position: 'relative' }}>
                 {onClose && (
                     <button 
                         onClick={onClose} 
@@ -488,12 +516,12 @@ export default function ShiftOpenModal({
                 )}
 
                 <div style={{ textAlign: 'right', marginBottom: '20px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', color: '#1C73AB', fontWeight: 900, fontSize: '13px' }}>
+                    <label style={{ display: 'block', marginBottom: '6px', color: '#1E130B', fontWeight: 900, fontSize: '13px' }}>
                         {isEn ? 'Opening Cash (Amount in register SAR):' : 'العهدة الافتتاحية (المبلغ بالدرج الآن بالريال):'}
                     </label>
                     <input 
                         type="number" 
-                        className="aqua-shift-input"
+                        className="royal-shift-input"
                         value={startingCash} 
                         onChange={(e) => setStartingCash(e.target.value === '' ? '' : Number(e.target.value))}
                         onFocus={(e) => e.target.select()}
@@ -516,7 +544,7 @@ export default function ShiftOpenModal({
                             !!existingWarehouseShift || 
                             !!isConflictWithOtherWarehouse
                         }
-                        className="aqua-shift-btn"
+                        className="royal-shift-btn"
                         style={{ 
                             flex: 2,
                             opacity: (!targetWarehouseId || !!existingWarehouseShift || !!isConflictWithOtherWarehouse) ? 0.6 : 1,
@@ -524,7 +552,7 @@ export default function ShiftOpenModal({
                             background: (existingWarehouseShift || isConflictWithOtherWarehouse)
                                 ? '#94a3b8'
                                 : todayClosedShift
-                                    ? 'linear-gradient(135deg, #4E734F 0%, #2C1A12 100%)'
+                                    ? 'linear-gradient(135deg, #059669 0%, #1E130B 100%)'
                                     : 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)'
                         }}
                     >

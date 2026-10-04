@@ -7,7 +7,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
 import { classifyPaymentMethod } from '@/lib/helpers';
 import { notifyShiftClosed } from '@/lib/notificationService';
-
+import { executeWithOfflineSync } from '@/lib/offline/offlineExecutor';
+import { getPendingSyncItems } from '@/lib/offline/syncStore';
+import { getInventoryItemsList } from '@/lib/cache/resources';
 
 export default function ShiftCloseModal({ 
     isOpen, 
@@ -42,35 +44,78 @@ export default function ShiftCloseModal({
     const calculateZReport = async () => {
         setIsLoadingStats(true);
         try {
-            // Fetch active invoices created during this shift (exclude cancelled)
-            const { data: invoices } = await supabase
-                .from('invoices')
-                .select('id, total_amount, payment_method, lines_data')
-                .eq('shift_id', activeShift.id)
-                .neq('status', 'ملغي'); // Arabic status check remains in logic
+            let shiftInvoices: any[] = [];
+            let expenses: any[] = [];
+            let shiftReceipts: any[] = [];
+            let retItemSet = new Set<string>();
 
-            // Fetch active expenses created during this shift (exclude deleted)
-            const { data: expenses } = await supabase
-                .from('expenses')
-                .select('paid_amount, payment_method')
-                .eq('shift_id', activeShift.id)
-                .neq('is_deleted', true);
+            // 1. Fetch from Supabase if online
+            try {
+                const { data: invData } = await supabase
+                    .from('invoices')
+                    .select('id, total_amount, payment_method, lines_data')
+                    .eq('shift_id', activeShift.id)
+                    .neq('status', 'ملغي');
+                if (invData) shiftInvoices = [...invData];
 
-            // Fetch active standalone receipts collected during this shift
-            const { data: shiftReceipts } = await supabase
-                .from('receipt_vouchers')
-                .select('amount, payment_method, invoice_id')
-                .eq('shift_id', activeShift.id)
-                .neq('status', 'ملغي'); // Arabic status check remains in logic
+                const { data: expData } = await supabase
+                    .from('expenses')
+                    .select('paid_amount, payment_method')
+                    .eq('shift_id', activeShift.id)
+                    .neq('is_deleted', true);
+                if (expData) expenses = [...expData];
 
-            // Fetch returnable items to accurately count bottles
-            const { data: retItems } = await supabase
-                .from('inventory_items')
-                .select('id')
-                .eq('is_returnable_bottle', true);
-            const retItemSet = new Set((retItems || []).map(r => r.id));
+                const { data: rcData } = await supabase
+                    .from('receipt_vouchers')
+                    .select('amount, payment_method, invoice_id')
+                    .eq('shift_id', activeShift.id)
+                    .neq('status', 'ملغي');
+                if (rcData) shiftReceipts = [...rcData];
 
-            const shiftInvoiceIdSet = new Set((invoices || []).map(i => i.id));
+                const { data: retItems } = await supabase
+                    .from('inventory_items')
+                    .select('id')
+                    .eq('is_returnable_bottle', true);
+                if (retItems) {
+                    retItemSet = new Set((retItems || []).map(r => r.id));
+                }
+            } catch (netErr) {
+                console.warn('⚠️ [ShiftClose] Network offline/unavailable, querying local sync queue:', netErr);
+            }
+
+            // 2. Fetch pending invoices from local sync queue (handles offline transactions)
+            try {
+                const pendingItems = await getPendingSyncItems();
+                const shiftId = String(activeShift.id);
+                const existingIds = new Set(shiftInvoices.map(i => String(i.id)));
+
+                pendingItems.forEach(item => {
+                    if (item.table === 'invoices' || item.type === 'invoice') {
+                        const inv = item.payload || item.data;
+                        if (inv && String(inv.shift_id) === shiftId && !existingIds.has(String(inv.id))) {
+                            shiftInvoices.push({
+                                id: inv.id,
+                                total_amount: inv.total_amount,
+                                payment_method: inv.payment_method,
+                                lines_data: inv.lines_data || inv.items
+                            });
+                            existingIds.add(String(inv.id));
+                        }
+                    }
+                });
+            } catch (queueErr) {
+                console.warn('⚠️ [ShiftClose] Error reading pending sync queue:', queueErr);
+            }
+
+            // 3. Fallback for returnable items if Supabase was offline
+            if (retItemSet.size === 0) {
+                try {
+                    const allItems = await getInventoryItemsList();
+                    allItems.filter((it: any) => it.is_returnable_bottle).forEach((it: any) => retItemSet.add(it.id));
+                } catch (e) {}
+            }
+
+            const shiftInvoiceIdSet = new Set(shiftInvoices.map(i => i.id));
 
             let cashSales = 0;
             let cardSales = 0;
@@ -81,7 +126,7 @@ export default function ShiftCloseModal({
             let cashExpenses = 0;
             let soldUnits = 0;
 
-            (invoices || []).forEach(inv => {
+            shiftInvoices.forEach(inv => {
                 const amt = Number(inv.total_amount || 0);
                 const paymentCat = classifyPaymentMethod(inv.payment_method);
                 if (paymentCat === 'cash') cashSales += amt;
@@ -98,8 +143,8 @@ export default function ShiftCloseModal({
                 }
             });
 
-            // Add standalone receipts collected during shift (not already in this shift's invoices)
-            (shiftReceipts || []).forEach((rc: any) => {
+            // Add standalone receipts collected during shift
+            shiftReceipts.forEach((rc: any) => {
                 if (!rc.invoice_id || !shiftInvoiceIdSet.has(rc.invoice_id)) {
                     const rcAmt = Number(rc.amount || 0);
                     const rcCat = classifyPaymentMethod(rc.payment_method);
@@ -108,7 +153,7 @@ export default function ShiftCloseModal({
                 }
             });
 
-            (expenses || []).forEach(exp => {
+            expenses.forEach(exp => {
                 const amt = Number(exp.paid_amount || 0);
                 totalExpenses += amt;
                 const expCat = classifyPaymentMethod(exp.payment_method);
@@ -131,7 +176,7 @@ export default function ShiftCloseModal({
             setBottlesSold(soldUnits);
             setActualBottlesReturned(soldUnits);
         } catch (error) {
-            console.error(error);
+            console.error('Error calculating Z-Report:', error);
         } finally {
             setIsLoadingStats(false);
         }
@@ -146,7 +191,8 @@ export default function ShiftCloseModal({
         mutationFn: async () => {
             if (actualCash === '') throw new Error(isEn ? 'Please enter the actual cash in the register' : 'الرجاء إدخال النقدية الفعلية الموجودة في الدرج');
             
-            const { error } = await supabase.from('pos_shifts').update({
+            const payload = {
+                id: activeShift.id,
                 closed_at: new Date().toISOString(),
                 expected_cash: expectedCash,
                 actual_cash: Number(actualCash),
@@ -160,14 +206,38 @@ export default function ShiftCloseModal({
                 bottles_returned: returnedCount,
                 bottles_shortage: bottlesShortage,
                 status: 'closed'
-            }).eq('id', activeShift.id);
+            };
 
-            if (error) throw new Error(error.message);
+            const result = await executeWithOfflineSync({
+                cloudOperation: async () => {
+                    const { data, error } = await supabase.from('pos_shifts')
+                        .update(payload)
+                        .eq('id', activeShift.id)
+                        .select()
+                        .maybeSingle();
+
+                    if (error) throw new Error(error.message);
+                    return data;
+                },
+                offlineBackup: {
+                    type: 'pos_shift',
+                    action: 'update',
+                    payload
+                }
+            });
+
+            return result;
         },
-        onSuccess: () => {
-            showToast(isEn ? 'Shift closed and register reconciled successfully 🔒' : 'تم إغلاق الوردية وتقفيل الصندوق وعهدة الفوارغ بنجاح 🔒', 'success');
+        onSuccess: (res: any) => {
+            const isOffline = res?.isOffline;
+            if (isOffline) {
+                showToast(isEn ? 'Shift closed and saved locally (will sync once online) 📶' : 'تم إغلاق الوردية وحفظ التقفيل محلياً في وضع الأوفلاين (سيتم المزامنة تلقائياً) 📶', 'success');
+            } else {
+                showToast(isEn ? 'Shift closed and register reconciled successfully 🔒' : 'تم إغلاق الوردية وتقفيل الصندوق وعهدة الفوارغ بنجاح 🔒', 'success');
+            }
             queryClient.invalidateQueries({ queryKey: ['active_pos_shift'] });
             queryClient.invalidateQueries({ queryKey: ['pos_open_shifts'] });
+            queryClient.invalidateQueries({ queryKey: ['pos_today_closed_shift'] });
             
             // 🔔 بث إشعار إغلاق الوردية مع حالة الصندوق
             notifyShiftClosed({
@@ -210,27 +280,24 @@ export default function ShiftCloseModal({
         return (
             <div style={{
                 position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                background: 'rgba(15, 23, 42, 0.65)',
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
+                background: 'rgba(30, 19, 11, 0.65)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 zIndex: 99999,
                 padding: '15px'
             }}>
                 <div style={{
-                    background: 'rgba(255, 255, 255, 0.96)',
-                    backdropFilter: 'blur(40px) saturate(200%)',
+                    background: '#FFFFFF',
                     borderRadius: '24px',
                     width: '95vw',
                     maxWidth: '450px',
                     padding: '35px 25px',
                     textAlign: 'center',
                     direction: 'rtl',
-                    boxShadow: '0 25px 60px rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.8)'
+                    boxShadow: '0 20px 50px rgba(30, 19, 11, 0.15)',
+                    border: '1.5px solid rgba(194, 155, 98, 0.35)'
                 }}>
-                    <div style={{ fontSize: '55px', marginBottom: '12px' }}>ℹ️</div>
-                    <h3 style={{ color: '#C29B62', marginBottom: '10px', fontWeight: 900, fontSize: '20px' }}>{isEn ? 'No active shift' : 'لا توجد وردية نشطة حالياً'}</h3>
+                    <div style={{ fontSize: '50px', marginBottom: '12px' }}>ℹ️</div>
+                    <h3 style={{ color: '#1E130B', marginBottom: '10px', fontWeight: 900, fontSize: '20px' }}>{isEn ? 'No active shift' : 'لا توجد وردية نشطة حالياً'}</h3>
                     <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '25px', fontWeight: 700, lineHeight: '1.6' }}>
                         {isEn ? 'You do not have an active shift to close. You can open a new shift from the top control bar.' : 'لا توجد وردية مفتوحة حالياً لحسابك لإغلاقها. يمكنك فتح وردية جديدة من شريط التحكم بأعلى الشاشة.'}
                     </p>
@@ -245,7 +312,8 @@ export default function ShiftCloseModal({
                             fontWeight: 800,
                             cursor: 'pointer',
                             fontSize: '15px',
-                            boxShadow: '0 4px 15px rgba(168, 87, 60, 0.3)'
+                            boxShadow: '0 4px 15px rgba(168, 87, 60, 0.3)',
+                            minHeight: '44px'
                         }}
                     >
                         {isEn ? 'Got it' : 'حسناً، فهمت'}
@@ -258,18 +326,14 @@ export default function ShiftCloseModal({
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
+            background: 'rgba(30, 19, 11, 0.65)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             zIndex: 99999,
             padding: '15px'
         }}>
             <div style={{
-                background: 'rgba(255, 255, 255, 0.96)',
-                backdropFilter: 'blur(40px) saturate(200%)',
-                WebkitBackdropFilter: 'blur(40px) saturate(200%)',
-                border: '1px solid rgba(255, 255, 255, 0.8)',
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(194, 155, 98, 0.35)',
                 borderRadius: '24px',
                 width: '95vw',
                 maxWidth: '520px',
@@ -278,14 +342,14 @@ export default function ShiftCloseModal({
                 padding: '28px 24px',
                 textAlign: 'right',
                 direction: 'rtl',
-                boxShadow: '0 25px 60px rgba(0, 0, 0, 0.35)',
+                boxShadow: '0 20px 50px rgba(30, 19, 11, 0.15)',
                 position: 'relative'
             }}>
                 {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(0,0,0,0.08)', paddingBottom: '15px', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(194, 155, 98, 0.2)', paddingBottom: '15px', marginBottom: '14px' }}>
                     <div>
-                        <h2 style={{ color: '#1C73AB', margin: 0, fontSize: '20px', fontWeight: 900 }}>🔒 {isEn ? 'Close Register & Shift (Z-Report)' : 'تقفيل الصندوق والوردية (Z-Report)'}</h2>
-                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>
+                        <h2 style={{ color: '#1E130B', margin: 0, fontSize: '20px', fontWeight: 900 }}>🔒 {isEn ? 'Close Register & Shift (Z-Report)' : 'تقفيل الصندوق والوردية (Z-Report)'}</h2>
+                        <span style={{ fontSize: '12px', color: '#8c7662', fontWeight: 700 }}>
                             {isEn ? 'Shift ID:' : 'وردية رقم:'} #{String(activeShift.id).slice(-6)}
                         </span>
                     </div>
@@ -312,8 +376,8 @@ export default function ShiftCloseModal({
 
                 {/* تفاصيل المستودع والمندوب للوردية */}
                 <div style={{
-                    background: 'rgba(28, 115, 171, 0.06)',
-                    border: '1px solid rgba(28, 115, 171, 0.2)',
+                    background: 'rgba(194, 155, 98, 0.08)',
+                    border: '1px solid rgba(194, 155, 98, 0.25)',
                     borderRadius: '16px',
                     padding: '12px 16px',
                     marginBottom: '16px',
@@ -323,34 +387,34 @@ export default function ShiftCloseModal({
                     gap: '10px'
                 }}>
                     <div>
-                        <span style={{ color: '#64748b', fontSize: '11px', display: 'block', fontWeight: 700 }}>🏪 {isEn ? 'Branch:' : 'منفذ البيع:'}</span>
-                        <strong style={{ color: '#1C73AB', fontSize: '13px' }}>{currentWarehouse?.name || (isEn ? 'Unknown Branch' : 'مستودع غير محدد')}</strong>
+                        <span style={{ color: '#8c7662', fontSize: '11px', display: 'block', fontWeight: 700 }}>🏪 {isEn ? 'Branch:' : 'منفذ البيع:'}</span>
+                        <strong style={{ color: '#1E130B', fontSize: '13px' }}>{currentWarehouse?.name || (isEn ? 'Unknown Branch' : 'مستودع غير محدد')}</strong>
                     </div>
                     <div>
-                        <span style={{ color: '#64748b', fontSize: '11px', display: 'block', fontWeight: 700 }}>👤 {isEn ? 'Cashier / Rep:' : 'المندوب / الكاشير:'}</span>
-                        <strong style={{ color: '#0f172a', fontSize: '13px' }}>{currentDelegate?.name || (isEn ? 'Direct Sales' : 'مبيعات مباشرة')}</strong>
+                        <span style={{ color: '#8c7662', fontSize: '11px', display: 'block', fontWeight: 700 }}>👤 {isEn ? 'Cashier / Rep:' : 'المندوب / الكاشير:'}</span>
+                        <strong style={{ color: '#1E130B', fontSize: '13px' }}>{currentDelegate?.name || (isEn ? 'Direct Sales' : 'مبيعات مباشرة')}</strong>
                     </div>
                     <div>
-                        <span style={{ color: '#64748b', fontSize: '11px', display: 'block', fontWeight: 700 }}>🕒 {isEn ? 'Open Time:' : 'وقت الفتح:'}</span>
-                        <strong style={{ color: '#0f172a', fontSize: '12px' }}>
+                        <span style={{ color: '#8c7662', fontSize: '11px', display: 'block', fontWeight: 700 }}>🕒 {isEn ? 'Open Time:' : 'وقت الفتح:'}</span>
+                        <strong style={{ color: '#1E130B', fontSize: '12px' }}>
                             {activeShift?.opened_at ? new Date(activeShift.opened_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '—'}
                         </strong>
                     </div>
                 </div>
 
                 {isLoadingStats ? (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#64748b', fontWeight: 800, fontSize: '15px' }}>
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#8c7662', fontWeight: 800, fontSize: '15px' }}>
                         {isEn ? '⏳ Calculating shift sales...' : '⏳ جاري جرد وحساب مبيعات الوردية...'}
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                         {/* ملخص المبيعات */}
-                        <div style={{ background: 'rgba(248, 250, 252, 0.9)', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '16px' }}>
+                        <div style={{ background: '#FDFBF7', border: '1px solid rgba(194, 155, 98, 0.25)', padding: '16px', borderRadius: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px', fontWeight: 700, color: '#475569' }}>
                                 <span>💵 {isEn ? 'Opening Cash:' : 'العهدة الافتتاحية:'}</span>
-                                <strong style={{ color: '#0f172a' }}>{Number(activeShift.starting_cash || 0).toFixed(2)} {isEn ? 'SAR' : 'ريال'}</strong>
+                                <strong style={{ color: '#1E130B' }}>{Number(activeShift.starting_cash || 0).toFixed(2)} {isEn ? 'SAR' : 'ريال'}</strong>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px', fontWeight: 700, color: '#16a34a' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px', fontWeight: 700, color: '#059669' }}>
                                 <span>💰 {isEn ? 'Cash Sales:' : 'المبيعات النقدية (كاش):'}</span>
                                 <strong>+ {totals.cash.toFixed(2)} {isEn ? 'SAR' : 'ريال'}</strong>
                             </div>
@@ -369,13 +433,13 @@ export default function ShiftCloseModal({
                                 <strong>{totals.credit.toFixed(2)} {isEn ? 'SAR' : 'ريال'}</strong>
                             </div>
                             {Number((totals as any).cashExpenses || 0) > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px', fontWeight: 700, color: '#ef4444' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '14px', fontWeight: 700, color: '#A8573C' }}>
                                     <span>💸 {isEn ? 'Drawer Expenses:' : 'مصروفات الدرج (كاش):'}</span>
                                     <strong>- {Number((totals as any).cashExpenses).toFixed(2)} {isEn ? 'SAR' : 'ريال'}</strong>
                                 </div>
                             )}
-                            <hr style={{ borderColor: '#e2e8f0', margin: '10px 0' }} />
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 900, color: '#2C1A12' }}>
+                            <hr style={{ borderColor: 'rgba(194, 155, 98, 0.2)', margin: '10px 0' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 900, color: '#1E130B' }}>
                                 <span>🏦 {isEn ? 'Expected Cash in Register:' : 'النقدية المتوقعة بالدرج:'}</span>
                                 <span style={{ fontSize: '20px', color: '#C29B62' }}>{expectedCash.toFixed(2)} {isEn ? 'SAR' : 'ريال'}</span>
                             </div>
@@ -383,16 +447,27 @@ export default function ShiftCloseModal({
 
                         {/* إدخال النقدية الفعلية */}
                         <div className="form-group">
-                            <label style={{ fontWeight: 900, color: '#ef4444', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+                            <label style={{ fontWeight: 900, color: '#A8573C', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
                                 💵 {isEn ? 'Actual Cash in Register (Counted):' : 'المبلغ الفعلي الموجود في الدرج الآن (بعد العد):'}
                             </label>
                             <input 
                                 type="number" 
-                                className="glass-input-field" 
                                 value={actualCash} 
                                 onChange={(e) => setActualCash(e.target.value === '' ? '' : Number(e.target.value))}
                                 onFocus={(e) => e.target.select()}
-                                style={{ fontSize: '26px', fontWeight: 900, textAlign: 'center', borderColor: '#ef4444', height: '54px' }}
+                                style={{
+                                    width: '100%',
+                                    fontSize: '26px',
+                                    fontWeight: 900,
+                                    textAlign: 'center',
+                                    border: '2px solid rgba(194, 155, 98, 0.4)',
+                                    borderRadius: '14px',
+                                    height: '54px',
+                                    background: '#FDFBF7',
+                                    color: '#1E130B',
+                                    outline: 'none',
+                                    boxSizing: 'border-box'
+                                }}
                                 placeholder="0.00"
                             />
                         </div>
@@ -400,44 +475,54 @@ export default function ShiftCloseModal({
                         {actualCash !== '' && (
                             <div style={{ 
                                 textAlign: 'center', 
-                                fontSize: '16px', 
+                                fontSize: '15px', 
                                 fontWeight: 900, 
-                                color: difference === 0 ? '#16a34a' : difference > 0 ? '#0284c7' : '#dc2626', 
+                                color: difference === 0 ? '#059669' : difference > 0 ? '#C29B62' : '#A8573C', 
                                 padding: '12px', 
-                                background: difference === 0 ? '#dcfce7' : difference > 0 ? '#e0f2fe' : '#fee2e2', 
+                                background: difference === 0 ? '#ECFDF5' : difference > 0 ? '#FDFBF7' : '#FEF2F2', 
                                 borderRadius: '12px',
-                                border: `1px solid ${difference === 0 ? '#86efac' : difference > 0 ? '#7dd3fc' : '#fca5a5'}`
+                                border: `1px solid ${difference === 0 ? '#A7F3D0' : difference > 0 ? 'rgba(194, 155, 98, 0.4)' : '#FECACA'}`
                             }}>
                                 {difference === 0 
                                     ? (isEn ? '✅ Register matches exactly (No variance)' : '✅ الصندوق مطابق تماماً (لا يوجد عجز أو زيادة)') 
                                     : difference > 0 
-                                        ? `💰 يوجد زيادة بقيمة: +${difference.toFixed(2)} {isEn ? 'SAR' : 'ريال'}` 
-                                        : `⚠️ يوجد عجز بقيمة: -${Math.abs(difference).toFixed(2)} {isEn ? 'SAR' : 'ريال'}`}
+                                        ? (isEn ? `💰 Cash surplus: +${difference.toFixed(2)} SAR` : `💰 يوجد زيادة بقيمة: +${difference.toFixed(2)} ريال`) 
+                                        : (isEn ? `⚠️ Cash shortage: -${Math.abs(difference).toFixed(2)} SAR` : `⚠️ يوجد عجز بقيمة: -${Math.abs(difference).toFixed(2)} ريال`)}
                             </div>
                         )}
 
                         {/* 🔄 مطابقة عهدة فوارغ الجالونات والعبوات */}
-                        <div style={{ background: 'rgba(240, 249, 255, 0.9)', border: '1.5px solid rgba(40, 145, 200, 0.35)', padding: '15px', borderRadius: '16px' }}>
+                        <div style={{ background: '#FDFBF7', border: '1px solid rgba(194, 155, 98, 0.3)', padding: '15px', borderRadius: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '13px', fontWeight: 900, color: '#1C73AB' }}>🔄 {isEn ? 'Sold Returnables Custody:' : 'عهدة العبوات والمستلزمات المستردة:'}</span>
-                                <span style={{ fontSize: '15px', fontWeight: 900, color: '#122946' }}>{bottlesSold} {isEn ? 'Bottles / Gallons' : 'عبوة / جالون'}</span>
+                                <span style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>🔄 {isEn ? 'Sold Returnables Custody:' : 'عهدة العبوات والمستلزمات المستردة:'}</span>
+                                <span style={{ fontSize: '15px', fontWeight: 900, color: '#C29B62' }}>{bottlesSold} {isEn ? 'Bottles / Gallons' : 'عبوة / جالون'}</span>
                             </div>
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px', alignItems: 'center', marginTop: '10px' }}>
-                                <label style={{ fontSize: '12px', fontWeight: 800, color: '#334155' }}>{isEn ? 'Actual returnables received:' : 'عدد الفوارغ المستلمة فعلياً:'}</label>
+                                <label style={{ fontSize: '12px', fontWeight: 800, color: '#1E130B' }}>{isEn ? 'Actual returnables received:' : 'عدد الفوارغ المستلمة فعلياً:'}</label>
                                 <input 
-                                    type="number"
+                                    type="number" 
                                     min="0"
-                                    className="glass-input-field"
                                     value={actualBottlesReturned}
                                     onChange={(e) => setActualBottlesReturned(e.target.value === '' ? '' : Number(e.target.value))}
                                     onFocus={(e) => e.target.select()}
-                                    style={{ fontSize: '18px', fontWeight: 'bold', textAlign: 'center', borderColor: '#C29B62', padding: '6px' }}
+                                    style={{
+                                        fontSize: '18px',
+                                        fontWeight: 'bold',
+                                        textAlign: 'center',
+                                        border: '1.5px solid rgba(194, 155, 98, 0.4)',
+                                        borderRadius: '10px',
+                                        padding: '8px',
+                                        background: '#FFFFFF',
+                                        color: '#1E130B',
+                                        outline: 'none',
+                                        minHeight: '44px'
+                                    }}
                                     placeholder={isEn ? 'Returnables' : 'الفوارغ'}
                                 />
                             </div>
 
-                            <div style={{ marginTop: '10px', fontSize: '12px', fontWeight: 800, textAlign: 'center', padding: '8px', borderRadius: '10px', background: bottlesShortage === 0 ? '#dcfce7' : bottlesShortage > 0 ? '#fee2e2' : '#f0f9ff', color: bottlesShortage === 0 ? '#16a34a' : bottlesShortage > 0 ? '#b91c1c' : '#0369a1' }}>
+                            <div style={{ marginTop: '10px', fontSize: '12px', fontWeight: 800, textAlign: 'center', padding: '8px', borderRadius: '10px', background: bottlesShortage === 0 ? '#ECFDF5' : bottlesShortage > 0 ? '#FEF2F2' : '#FDFBF7', color: bottlesShortage === 0 ? '#059669' : bottlesShortage > 0 ? '#A8573C' : '#C29B62' }}>
                                 {bottlesShortage === 0 
                                     ? (isEn ? '✅ Returnables match exactly' : '✅ الفوارغ مطابقة تماماً') 
                                     : bottlesShortage > 0 
@@ -452,15 +537,15 @@ export default function ShiftCloseModal({
                                 onClick={() => closeShiftMutation.mutate()} 
                                 disabled={closeShiftMutation.isPending || actualCash === ''}
                                 style={{ 
-                                    height: '52px', 
+                                    minHeight: '48px', 
                                     borderRadius: '14px', 
                                     border: 'none', 
-                                    background: (actualCash === '' || closeShiftMutation.isPending) ? '#94a3b8' : 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)', 
+                                    background: (actualCash === '' || closeShiftMutation.isPending) ? '#cbd5e1' : 'linear-gradient(135deg, #A8573C 0%, #1E130B 100%)', 
                                     color: 'white', 
                                     fontWeight: 900, 
                                     fontSize: '16px', 
                                     cursor: (actualCash === '' || closeShiftMutation.isPending) ? 'not-allowed' : 'pointer',
-                                    boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)',
+                                    boxShadow: '0 4px 15px rgba(168, 87, 60, 0.3)',
                                     transition: '0.2s'
                                 }}
                             >
@@ -470,17 +555,17 @@ export default function ShiftCloseModal({
                                 onClick={onClose}
                                 type="button"
                                 style={{
-                                    height: '52px',
+                                    minHeight: '48px',
                                     borderRadius: '14px',
-                                    border: 'none',
-                                    background: '#f1f5f9',
-                                    color: '#64748b',
+                                    border: '1.5px solid rgba(194, 155, 98, 0.3)',
+                                    background: '#FDFBF7',
+                                    color: '#1E130B',
                                     fontWeight: 800,
                                     fontSize: '15px',
                                     cursor: 'pointer'
                                 }}
                             >
-                                إلغاء
+                                {isEn ? 'Cancel' : 'إلغاء'}
                             </button>
                         </div>
                     </div>
