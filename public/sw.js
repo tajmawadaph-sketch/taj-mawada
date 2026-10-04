@@ -52,9 +52,14 @@ self.addEventListener('fetch', (event) => {
           return cached;
         }
 
-        if (request.headers.get('accept')?.includes('text/html')) {
+        // إذا كانت الصفحة المطلوبة (مثل /pos) غير موجودة في الكاش،
+        // حاول إرجاع الصفحة الرئيسية (/) أو صفحة الكاشير لضمان عدم توقف العمل.
+        if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
+          const rootCached = await caches.match('/');
+          if (rootCached) return rootCached;
+
           return new Response(
-            '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>غير متصل</title></head><body style="font-family:sans-serif;text-align:center;padding:50px;direction:rtl;"><h2>أنت حالياً غير متصل بالإنترنت ⚠️</h2><p>يرجى التحقق من اتصال الشبكة وإعادة المحاولة.</p></body></html>',
+            '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>غير متصل</title></head><body style="font-family:sans-serif;text-align:center;padding:50px;direction:rtl;"><h2>أنت حالياً غير متصل بالإنترنت ⚠️</h2><p>يرجى التحقق من اتصال الشبكة وإعادة المحاولة لفتح الكاشير.</p></body></html>',
             {
               headers: { 'Content-Type': 'text/html; charset=utf-8' }
             }

@@ -3,6 +3,8 @@ import LayoutClient from '../components/layout/LayoutClient';
 import "./globals.css";
 import AppClientProviders from '@/components/AppClientProviders';
 import { THEME } from '@/lib/theme';
+import OfflineIndicator from '@/components/OfflineIndicator';
+import PwaRegistry from '@/components/PwaRegistry';
 
 const cairo = Cairo({ 
   subsets: ["arabic"],
@@ -110,6 +112,9 @@ export default function RootLayout({
         </div>
 
         <img src="/taj_logo.png" alt="watermark" className="watermark-bg no-print" decoding="async" fetchPriority="low" />
+
+        <PwaRegistry />
+        <OfflineIndicator />
 
         <AppClientProviders>
             {children}
