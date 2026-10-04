@@ -45,9 +45,19 @@ export function usePromotionsLogic() {
                 if (error) throw error;
             }
         },
-        onSuccess: () => {
+        onSuccess: async () => {
             queryClient.invalidateQueries({ queryKey: ['promotions'] });
-            showToast('تم حفظ العرض الترويجي بنجاح', 'success');
+            queryClient.invalidateQueries({ queryKey: ['active_promotions'] });
+            try {
+                const { data } = await supabase.from('promotions').select('*').eq('status', 'active');
+                if (data) {
+                    const { saveTableLocally } = await import('@/lib/offline/syncStore');
+                    const { invalidateTags } = await import('@/lib/cache/dataCache');
+                    invalidateTags(['promotions']);
+                    await saveTableLocally('promotions', data);
+                }
+            } catch {}
+            showToast('تم حفظ العرض الترويجي وتحديث محرك الكاشير بنجاح 🎁', 'success');
             setIsFormOpen(false);
             setEditingItem(null);
         },
@@ -61,9 +71,19 @@ export function usePromotionsLogic() {
             const { error } = await supabase.from('promotions').delete().eq('id', id);
             if (error) throw error;
         },
-        onSuccess: () => {
+        onSuccess: async () => {
             queryClient.invalidateQueries({ queryKey: ['promotions'] });
-            showToast('تم حذف العرض الترويجي', 'success');
+            queryClient.invalidateQueries({ queryKey: ['active_promotions'] });
+            try {
+                const { data } = await supabase.from('promotions').select('*').eq('status', 'active');
+                if (data) {
+                    const { saveTableLocally } = await import('@/lib/offline/syncStore');
+                    const { invalidateTags } = await import('@/lib/cache/dataCache');
+                    invalidateTags(['promotions']);
+                    await saveTableLocally('promotions', data);
+                }
+            } catch {}
+            showToast('تم حذف العرض الترويجي بنجاح', 'success');
         }
     });
 

@@ -2497,18 +2497,46 @@ export default function PosPage() {
                                                         🌿 {isEn ? 'Tax-Exempt' : 'معفي ضريبياً (0%)'}
                                                     </span>
                                                 )}
-                                                {((item.discount || 0) + (item.promo_discount || 0) > 0) && (
+                                                {item.promo_badge && (
                                                     <span style={{
-                                                        background: 'rgba(239, 68, 68, 0.12)',
-                                                        color: '#ef4444',
-                                                        border: '1px solid rgba(239, 68, 68, 0.28)',
+                                                        background: 'rgba(5, 150, 105, 0.12)',
+                                                        color: '#059669',
+                                                        border: '1px solid rgba(5, 150, 105, 0.3)',
                                                         borderRadius: '6px',
                                                         padding: '1px 6px',
                                                         fontSize: '10px',
                                                         fontWeight: 800,
                                                         whiteSpace: 'nowrap'
                                                     }}>
-                                                        {isEn ? 'Discount:' : 'خصم:'} {formatCurrency((item.discount || 0) + (item.promo_discount || 0))}
+                                                        {item.promo_badge}
+                                                    </span>
+                                                )}
+                                                {Number(item.promo_discount || 0) > 0 && (
+                                                    <span style={{
+                                                        background: 'rgba(194, 155, 98, 0.15)',
+                                                        color: '#8C6B32',
+                                                        border: '1px solid rgba(194, 155, 98, 0.35)',
+                                                        borderRadius: '6px',
+                                                        padding: '1px 6px',
+                                                        fontSize: '10px',
+                                                        fontWeight: 800,
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        وفرت: {formatCurrency(item.promo_discount)}
+                                                    </span>
+                                                )}
+                                                {Number(item.discount || 0) > 0 && (
+                                                    <span style={{
+                                                        background: 'rgba(168, 87, 60, 0.12)',
+                                                        color: '#A8573C',
+                                                        border: '1px solid rgba(168, 87, 60, 0.28)',
+                                                        borderRadius: '6px',
+                                                        padding: '1px 6px',
+                                                        fontSize: '10px',
+                                                        fontWeight: 800,
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        {isEn ? 'Manual Disc:' : 'خصم إضافي:'} {formatCurrency(item.discount)}
                                                     </span>
                                                 )}
                                             </div>
@@ -2587,8 +2615,13 @@ export default function PosPage() {
                             {/* Customer & Payment Method (Side by Side) */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#2C1A12', marginBottom: '3px' }}>
-                                        👤 {isEn ? 'Customer:' : 'العميل:'}
+                                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', fontWeight: 800, color: '#2C1A12', marginBottom: '3px' }}>
+                                        <span>👤 {isEn ? 'Customer:' : 'العميل:'}</span>
+                                        {logic.selectedCustomer && (logic.selectedCustomer.job_role || logic.selectedCustomer.category) && (
+                                            <span style={{ fontSize: '9.5px', background: 'rgba(194, 155, 98, 0.16)', color: '#8C6B32', padding: '1px 5px', borderRadius: '4px', fontWeight: 800 }}>
+                                                👑 {logic.selectedCustomer.job_role || logic.selectedCustomer.category}
+                                            </span>
+                                        )}
                                     </label>
                                     <select 
                                         className="glass-input-field" 
@@ -2774,6 +2807,38 @@ export default function PosPage() {
                                     <span style={{ fontWeight: 900, color: '#2C1A12' }}>{formatCurrency(logic.cartTotal.tax)}</span>
                                 </div>
                             </div>
+
+                            {/* ✨ إجمالي الوفر المحقق للعميل من العروض الترويجية والخصومات */}
+                            {Number(logic.cartTotal.totalCustomerSavings || 0) > 0 && (
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '6px 12px',
+                                    background: 'linear-gradient(135deg, rgba(5, 150, 105, 0.1) 0%, rgba(194, 155, 98, 0.12) 100%)',
+                                    border: '1px solid rgba(5, 150, 105, 0.35)',
+                                    borderRadius: '10px',
+                                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.08)'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ fontSize: '15px' }}>✨</span>
+                                        <span style={{ fontSize: '11.5px', fontWeight: 900, color: '#059669' }}>
+                                            {isEn ? 'Total Customer Savings:' : 'إجمالي الوفر المحقق للعميل:'}
+                                        </span>
+                                    </div>
+                                    <span style={{
+                                        fontSize: '12.5px',
+                                        fontWeight: 900,
+                                        color: '#059669',
+                                        background: '#ECFDF5',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                        border: '1px solid #A7F3D0'
+                                    }}>
+                                        - {formatCurrency(logic.cartTotal.totalCustomerSavings)}
+                                    </span>
+                                </div>
+                            )}
 
                             {/* الإجمالي المطلوب - Desert Glassmorphism Banner */}
                             <div className="pos-total-banner">

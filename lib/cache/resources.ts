@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { cached, invalidateTags, mutateCached } from './dataCache';
 import { saveTableLocally, getTableLocally } from '../offline/syncStore';
 import { InventoryItem, Partner } from '@/types/database';
+import { Promotion } from '../promotions_engine';
 
 /**
  * جلب وتكييش قائمة الأصناف (أكثر طلب مستخدم في نقاط البيع)
@@ -113,4 +114,57 @@ export function updateItemInCacheLocal(itemId: string, updatedFields: Partial<In
     if (!oldList) return [];
     return oldList.map(item => item.id === itemId ? { ...item, ...updatedFields } : item);
   });
+}
+
+/**
+ * جلب وتكييش قائمة العروض الترويجية النشطة مع دعم الأوفلاين الكامل (IndexedDB Fallback)
+ * يتم الجلب بسرعة صفر ثانية لكاشير نقاط البيع
+ */
+export async function getPromotionsList(forceRefresh = false): Promise<Promotion[]> {
+  if (forceRefresh) invalidateTags(['promotions']);
+
+  return cached<Promotion[]>(
+    'promotions_active_list',
+    ['promotions'],
+    async () => {
+      const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+      // 1. إذا كان الكاشير أوفلاين، استخرج فوراً من قاعدة المتصفح المحلية
+      if (!isOnline) {
+        const local = await getTableLocally<Promotion>('promotions');
+        if (local && local.length > 0) return local;
+      }
+
+      // 2. محاولة الجلب السحابي
+      try {
+        const { data, error } = await supabase
+          .from('promotions')
+          .select('*')
+          .eq('status', 'active');
+          
+        if (error) {
+          const local = await getTableLocally<Promotion>('promotions');
+          return local || [];
+        }
+
+        const promos = (data || []) as Promotion[];
+        saveTableLocally('promotions', promos);
+        return promos;
+
+      } catch (err) {
+        console.warn('⚠️ [Resources] تعذر جلب العروض من السحابة، جاري الرجوع لـ IndexedDB:', err);
+        const local = await getTableLocally<Promotion>('promotions');
+        return local || [];
+      }
+    },
+    300 * 1000 // 5 دقائق كاش في الرام
+  );
+}
+
+/**
+ * حفظ قائمة العروض محلياً وتحديث الكاش
+ */
+export async function savePromotionsLocally(promotions: Promotion[]) {
+  invalidateTags(['promotions']);
+  await saveTableLocally('promotions', promotions);
 }

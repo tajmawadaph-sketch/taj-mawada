@@ -10,7 +10,7 @@ import { notifyInvoiceCreated } from '@/lib/notificationService';
 import { distributeManualDiscount, applyPromotions, Promotion, PosCartItem } from '@/lib/promotions_engine';
 import { getLocalExpiryMetadata } from '@/app/expiry-alerts/expiry_alerts_logic';
 import { executeWithOfflineSync } from '@/lib/offline/offlineExecutor';
-import { getInventoryItemsList, getCustomersList } from '@/lib/cache/resources';
+import { getInventoryItemsList, getCustomersList, getPromotionsList } from '@/lib/cache/resources';
 
 
 export function usePosLogic() {
@@ -685,26 +685,24 @@ export function usePosLogic() {
         }
     }, [loadingShift, loadingProfile, selectedWarehouseId, activeShift, hasAutoOpenedShift]);
 
-    // Fetch Active Promotions safely without client 404s
+    // 🎁 Fetch Active Promotions safely with RAM Cache & IndexedDB Offline Protection
     const { data: promotions = [] } = useQuery({
         queryKey: ['active_promotions'],
         queryFn: async () => {
-            try {
-                const res = await fetch('/api/pos/promotions');
-                if (!res.ok) return [];
-                const json = await res.json();
-                return (json.data || []) as Promotion[];
-            } catch {
-                return [];
-            }
+            return await getPromotionsList();
         }
     });
+
+    const selectedCustomer = useMemo(() => {
+        if (!partnerId) return null;
+        return customers.find((c: any) => c.id === partnerId) || null;
+    }, [partnerId, customers]);
 
     const processedCart = useMemo(() => {
         let currentCart = [...cart];
         
         if (promotions.length > 0) {
-            currentCart = applyPromotions(currentCart, promotions);
+            currentCart = applyPromotions(currentCart, promotions, selectedCustomer);
         }
         
         if (manualDiscountAmount > 0) {
@@ -713,12 +711,12 @@ export function usePosLogic() {
              currentCart = currentCart.map(item => {
                  const gross = (item.unit_price || item.price || 0) * (item.qty || item.quantity);
                  const d = (item.discount || 0) + (item.promo_discount || 0);
-                 return { ...item, total: gross - d };
+                 return { ...item, total: Number((gross - d).toFixed(2)) };
              });
         }
         
         return currentCart;
-    }, [cart, promotions, manualDiscountAmount, discountType]);
+    }, [cart, promotions, manualDiscountAmount, discountType, selectedCustomer]);
 
     const cartTotal = useMemo(() => {
         let taxableSubtotal = 0;
@@ -750,12 +748,18 @@ export function usePosLogic() {
             ? Math.round((taxableSubtotal + totalTax + exemptSubtotal) * 100) / 100
             : Math.round((subtotal + tax) * 100) / 100;
 
+        const totalPromoSavings = processedCart.reduce((sum, item) => sum + (item.promo_discount || 0), 0);
+        const totalManualSavings = processedCart.reduce((sum, item) => sum + (item.discount || 0), 0);
+        const totalCustomerSavings = totalPromoSavings + totalManualSavings;
+
         return { 
             subtotal, 
             tax, 
             total,
             taxableSubtotal: Math.round(taxableSubtotal * 100) / 100,
-            exemptSubtotal: Math.round(exemptSubtotal * 100) / 100
+            exemptSubtotal: Math.round(exemptSubtotal * 100) / 100,
+            totalPromoSavings: Math.round(totalPromoSavings * 100) / 100,
+            totalCustomerSavings: Math.round(totalCustomerSavings * 100) / 100
         };
     }, [processedCart, isTaxInclusive]);
 
@@ -1140,7 +1144,8 @@ export function usePosLogic() {
         },
         cartTotal, isTaxInclusive, setIsTaxInclusive,
         paymentMethod, setPaymentMethod,
-        customers, partnerId, setPartnerId,
+        customers, partnerId, setPartnerId, selectedCustomer,
+        promotions,
         delegates, delegateId, setDelegateId, 
         isDelegateLocked: isManagerOrAdmin ? false : (isDelegateLocked || !!activeShift),
         activeFleetOperation,

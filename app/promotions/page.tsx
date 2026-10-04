@@ -21,11 +21,13 @@ export default function PromotionsPage() {
             accessor: 'type', 
             render: (row: any) => {
                 const types: any = {
-                    'BOGO': 'اشتر x واحصل على y',
-                    'THRESHOLD': 'خصم عند بلوغ حد معين',
-                    'CROSS_SELLING': 'شراء صنف مع صنف',
-                    'TIERED': 'خصم متدرج',
-                    'BUNDLE': 'باقة منتجات'
+                    'BOGO': '🎁 اشترِ كمية واحصل على مجاني',
+                    'QUANTITY': '📦 خصم كمية عند تجاوز حد معين',
+                    'TIERED': '📊 خصم كمية متدرج',
+                    'PARTNER_TIER': '👑 خصم فئات الشركاء (خيل/إبل/عيادات)',
+                    'THRESHOLD': '💰 خصم عند بلوغ حد معين للفاتورة',
+                    'CROSS_SELLING': '🔗 شراء صنف مع صنف',
+                    'BUNDLE': '📦 باقة منتجات'
                 };
                 return types[row.type] || row.type;
             }
@@ -151,8 +153,10 @@ function PromotionFormModal({ isOpen, onClose, initialData, onSave, isSaving, in
                     <div className="form-group">
                         <label>نوع العرض</label>
                         <select className="glass-input-field" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value, conditions: {}, rewards: {}})}>
-                            <option value="BOGO">اشتر x واحصل على y مجاناً (أو بخصم)</option>
-                            <option value="THRESHOLD">خصم عند بلوغ حد معين من المشتريات</option>
+                            <option value="BOGO">🎁 اشترِ كمية واحصل على مجاني (أو بخصم)</option>
+                            <option value="QUANTITY">📦 خصم كمية عند تجاوز حد أدنى للعدد</option>
+                            <option value="PARTNER_TIER">👑 خصم فئات الشركاء (مربي خيل، مربي إبل، عيادات بيطرية)</option>
+                            <option value="THRESHOLD">💰 خصم عند بلوغ حد معين من المشتريات</option>
                         </select>
                     </div>
                 </div>
@@ -180,8 +184,10 @@ function PromotionFormModal({ isOpen, onClose, initialData, onSave, isSaving, in
                     </div>
                 </div>
 
-                <div style={{ background: 'rgba(28, 115, 171, 0.05)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(28, 115, 171, 0.15)' }}>
-                    <h4 style={{ margin: '0 0 12px 0', color: THEME.primary }}>إعدادات العرض ({formData.type})</h4>
+                <div style={{ background: '#FDFBF7', padding: '16px', borderRadius: '16px', border: '1.5px solid rgba(194, 155, 98, 0.35)' }}>
+                    <h4 style={{ margin: '0 0 12px 0', color: '#1E130B', fontWeight: 900 }}>
+                        ⚙️ إعدادات وتفاصيل العرض ({formData.type})
+                    </h4>
                     
                     {formData.type === 'BOGO' && (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
@@ -207,28 +213,72 @@ function PromotionFormModal({ isOpen, onClose, initialData, onSave, isSaving, in
                         </div>
                     )}
 
+                    {formData.type === 'QUANTITY' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                            <div className="form-group">
+                                <label>الصنف المستهدف (اختياري: اتركه فارغاً لكل الأصناف)</label>
+                                <select className="glass-input-field" value={formData.conditions.item_id || ''} onChange={e => setFormData({...formData, conditions: {...formData.conditions, item_id: e.target.value}})}>
+                                    <option value="">-- كافة الأصناف في السلة --</option>
+                                    {inventoryItems.map((i: any) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>الحد الأدنى للكمية المستحقة للخصم</label>
+                                <input required type="number" min="2" className="glass-input-field" value={formData.conditions.min_qty || ''} onChange={e => setFormData({...formData, conditions: {...formData.conditions, min_qty: Number(e.target.value)}})} placeholder="مثلاً: 5 حبات" />
+                            </div>
+                            <div className="form-group">
+                                <label>نسبة الخصم على السطر %</label>
+                                <input required type="number" min="1" max="100" className="glass-input-field" value={formData.rewards.discount_percentage || ''} onChange={e => setFormData({...formData, rewards: {...formData.rewards, discount_percentage: Number(e.target.value)}})} placeholder="مثلاً: 10%" />
+                            </div>
+                        </div>
+                    )}
+
+                    {formData.type === 'PARTNER_TIER' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div className="form-group">
+                                <label>فئة الشريك المستهدفة</label>
+                                <select required className="glass-input-field" value={formData.conditions.category || ''} onChange={e => setFormData({...formData, conditions: {...formData.conditions, category: e.target.value}})}>
+                                    <option value="">-- اختر فئة العميل / الشريك --</option>
+                                    <option value="مربي خيل">🐎 مربي خيل (إسطبلات وخيول)</option>
+                                    <option value="مربي إبل">🐫 مربي إبل (هجن وعزب)</option>
+                                    <option value="عيادة بيطرية">🏥 عيادات ومستشفيات بيطرية</option>
+                                    <option value="صيدلية بيطرية">💊 صيدليات بيطرية</option>
+                                    <option value="تاجر جملة">📦 تجار الجملة والموزعين</option>
+                                    <option value="عميل">👤 كافة العملاء المسجلين</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>نسبة الخصم التلقائي %</label>
+                                <input required type="number" min="1" max="100" className="glass-input-field" value={formData.rewards.discount_percentage || ''} onChange={e => setFormData({...formData, rewards: {...formData.rewards, discount_percentage: Number(e.target.value)}})} placeholder="مثلاً: 15%" />
+                            </div>
+                            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                <label>تطبيق الخصم على صنف محدد (اختياري - اتركه فارغاً ليُطبق على كل الفاتورة)</label>
+                                <select className="glass-input-field" value={formData.conditions.item_id || ''} onChange={e => setFormData({...formData, conditions: {...formData.conditions, item_ids: e.target.value ? [e.target.value] : []}})}>
+                                    <option value="">-- كافة الأصناف والخدمات في الفاتورة --</option>
+                                    {inventoryItems.map((i: any) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    )}
+
                     {formData.type === 'THRESHOLD' && (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                             <div className="form-group">
-                                <label>الحد الأدنى لقيمة الفاتورة (الشرط)</label>
-                                <input required type="number" min="0" step="any" className="glass-input-field" value={formData.conditions.min_cart_value || ''} onChange={e => setFormData({...formData, conditions: {...formData.conditions, min_cart_value: Number(e.target.value)}})} />
+                                <label>الحد الأدنى لقيمة الفاتورة (الشرط بالريال)</label>
+                                <input required type="number" min="0" step="any" className="glass-input-field" value={formData.conditions.min_cart_value || ''} onChange={e => setFormData({...formData, conditions: {...formData.conditions, min_cart_value: Number(e.target.value)}})} placeholder="مثلاً: 500 ريال" />
                             </div>
                             <div className="form-group">
-                                <label>مبلغ الخصم الثابت</label>
-                                <input type="number" min="0" step="any" className="glass-input-field" value={formData.rewards.discount_amount || ''} onChange={e => setFormData({...formData, rewards: {...formData.rewards, discount_amount: Number(e.target.value), discount_percentage: null}})} placeholder="أو استخدم نسبة الخصم" />
-                            </div>
-                            <div className="form-group">
-                                <label>أو نسبة الخصم %</label>
-                                <input type="number" min="0" max="100" className="glass-input-field" value={formData.rewards.discount_percentage || ''} onChange={e => setFormData({...formData, rewards: {...formData.rewards, discount_percentage: Number(e.target.value), discount_amount: null}})} placeholder="أو استخدم المبلغ الثابت" />
+                                <label>نسبة الخصم % أو المبلغ الثابت</label>
+                                <input type="number" min="0" max="100" className="glass-input-field" value={formData.rewards.discount_percentage || ''} onChange={e => setFormData({...formData, rewards: {...formData.rewards, discount_percentage: Number(e.target.value), discount_amount: null}})} placeholder="مثلاً: 5%" />
                             </div>
                         </div>
                     )}
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
-                    <button type="button" onClick={onClose} className="btn-secondary">إلغاء</button>
-                    <button type="submit" disabled={isSaving} className="btn-primary">
-                        {isSaving ? 'جاري الحفظ...' : 'حفظ العرض الترويجي'}
+                    <button type="button" onClick={onClose} className="btn-secondary" style={{ minHeight: '44px', borderRadius: '12px', padding: '10px 20px' }}>إلغاء</button>
+                    <button type="submit" disabled={isSaving} className="btn-primary" style={{ minHeight: '44px', borderRadius: '12px', padding: '10px 24px', background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)', border: 'none', color: '#fff', fontWeight: 900 }}>
+                        {isSaving ? '⏳ جاري الحفظ...' : '💾 حفظ العرض الترويجي'}
                     </button>
                 </div>
             </form>
