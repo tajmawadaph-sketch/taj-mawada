@@ -10,6 +10,7 @@ import { useRealtimeListener } from '@/lib/useRealtimeSync';
 import { useRouter, usePathname } from 'next/navigation';
 import { useLanguage } from '@/lib/LanguageContext';
 import { toast } from 'react-hot-toast';
+import OfflineSyncIndicator from './layout/OfflineSyncIndicator';
 
 const PAGE_TITLES_EN: Record<string, string> = {
   // Common Titles
@@ -822,6 +823,7 @@ html, body {
 
         {/* Left side: Header Content, Actions, Avatar */}
         <div className="header-side" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <OfflineSyncIndicator />
           {headerContent}
           
           <div className="header-actions" style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center', borderRight: isRtl ? '2px solid rgba(194, 155, 98, 0.2)' : 'none', borderLeft: !isRtl ? '2px solid rgba(194, 155, 98, 0.2)' : 'none', paddingRight: isRtl ? '10px' : '0', paddingLeft: !isRtl ? '10px' : '0' }}>

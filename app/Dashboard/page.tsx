@@ -5,6 +5,7 @@ import MasterPage from '@/components/MasterPage';
 import LoadingScreen from '@/components/LoadingScreen';
 import { THEME } from '@/lib/theme';
 import { useDashboardLogic } from './dashboard_logic';
+import DataSyncBanner from '@/components/dashboard/DataSyncBanner';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell
@@ -36,6 +37,9 @@ export default function DashboardPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', animation: 'fadeUp 0.6s ease-out', paddingBottom: '50px' }}>
           
+          {/* 📡 شريط تزامن وربط البيانات الحية المربوطة بالسحابة والهارد ديسك */}
+          <DataSyncBanner />
+
           {/* ⏳ إنذار مراقبة تواريخ الصلاحية */}
           {((logic.stats?.expiredItemsCount || 0) > 0 || (logic.stats?.criticalExpiryCount || 0) > 0) && (
             <div 

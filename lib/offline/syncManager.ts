@@ -1,71 +1,121 @@
 // ============================================================================
-// 🔄 محرك المزامنة التلقائية بالخلفية (Background Sync Manager) - المرحلة الثالثة
-// يعالج طابور العمليات المعلقة عند عودة الاتصال بالإنترنت
+// 🔄 معالج الطابور والربط السحابي (Sync Manager Engine)
+// يعمل بنظام FIFO (First In First Out) لضمان صحة التسلسل المحاسبي والمخزني
 // ============================================================================
 
 import { supabase } from '@/lib/supabase';
-import { getPendingSyncItems, updateSyncItemStatus, removeSyncItem } from './syncStore';
+import { 
+  getPendingSyncItems, 
+  updateSyncItemStatus, 
+  markItemCompleted, 
+  markItemFailed 
+} from './syncStore';
 import { invalidateTags } from '../cache/dataCache';
+import { toast } from 'react-hot-toast';
 
-let isSyncing = false; // لمنع تشغيل دالتين مزامنة في نفس اللحظة
+let isSyncing = false; // حماية ضد التنفيذ المتزامن أو التكرار
 
 /**
- * معالجة الطابور: سحب الفواتير ورفعها للسحابة
+ * معالجة طابور المزامنة ورفع السجلات تباعاً إلى قاعدة بيانات Supabase
  */
-export async function processSyncQueue() {
-  // لا تقم بشيء إذا كان هناك مزامنة جارية بالفعل أو لا يوجد نت
+export async function processSyncQueue(options: { silent?: boolean } = {}) {
+  // منع المزامنة إذا كانت هناك عملية جارية أو لا يوجد اتصال بالإنترنت
   if (isSyncing || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-    return;
+    return { success: false, syncedCount: 0, reason: 'offline_or_busy' };
   }
 
   isSyncing = true;
-  // تنبيه الواجهة بأن المزامنة بدأت (لتدوير أيقونة التحميل)
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('tajmawadah-sync-started'));
   }
 
+  let successCount = 0;
+  let failCount = 0;
+
   try {
     const pendingItems = await getPendingSyncItems();
-    if (pendingItems.length === 0) return; // لا يوجد شيء للمزامنة
+    if (pendingItems.length === 0) {
+      return { success: true, syncedCount: 0 };
+    }
 
-    console.log(`🔄 بدء مزامنة ${pendingItems.length} عملية معلقة بالسحابة...`);
+    console.log(`🔄 [Sync Engine] بدء مزامنة ${pendingItems.length} عملية بنظام FIFO...`);
 
-    // الترتيب الزمني (الأقدم أولاً - FIFO) لضمان صحة التسلسل المحاسبي
+    // ترتيب العمليات تصاعدياً بالوقت لضمان التسلسل الصحيح (FIFO)
     pendingItems.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
     for (const item of pendingItems) {
+      // إذا تجاوزت العملية 5 محاولات فاشلة، نتخطاها مؤقتاً لتفادي تجميد الطابور
+      if ((item.retry_count || 0) >= 6) {
+        continue;
+      }
+
       await updateSyncItemStatus(item.id, 'syncing');
 
       try {
-        // تنفيذ العملية بناءً على نوعها
-        if (item.type === 'invoice' && item.action === 'insert') {
-          const { error } = await supabase.from('invoices').insert(item.payload);
+        const targetTable = item.table || (item.type === 'invoice' ? 'invoices' : item.type === 'inventory_transaction' ? 'inventory_transactions' : 'invoices');
+        const rawAction = (item.action || 'insert').toLowerCase();
+        const payloadData = item.payload || item.data;
+
+        // تنفيذ الاستعلام المناسب على Supabase
+        if (rawAction === 'insert') {
+          const { error } = await supabase.from(targetTable).insert(payloadData);
           if (error) throw error;
-        } 
-        else if (item.type === 'inventory_transaction' && item.action === 'insert') {
-          const { error } = await supabase.from('inventory_transactions').insert(item.payload);
+        } else if (rawAction === 'update') {
+          if (!payloadData?.id) throw new Error('معرف السجل مفقود في عملية التحديث');
+          const { error } = await supabase.from(targetTable).update(payloadData).eq('id', payloadData.id);
+          if (error) throw error;
+        } else if (rawAction === 'delete') {
+          const targetId = payloadData?.id || payloadData;
+          const { error } = await supabase.from(targetTable).delete().eq('id', targetId);
           if (error) throw error;
         }
-        // يمكن إضافة المزيد من الأنواع هنا مستقبلاً (عملاء، دفعات، الخ...)
 
-        // عند النجاح: نحذف الفاتورة من الطابور المحلي للأبد
-        await removeSyncItem(item.id);
-        console.log(`✅ تمت مزامنة العملية ${item.id} بنجاح`);
+        // نجحت العملية: تُحذف فوراً من الطابور المحلي
+        await markItemCompleted(item.id);
+        successCount++;
+        console.log(`✅ [Sync Engine] تمت مزامنة السجل (${item.id}) في جدول (${targetTable})`);
+
       } catch (err: any) {
-        // في حالة الفشل (مثلا خلل في البيانات)، نتركها في الطابور ونعلمها كفاشلة لئلا تعيق باقي الفواتير
-        console.error(`❌ فشل في مزامنة العملية ${item.id}`, err);
-        await updateSyncItemStatus(item.id, 'failed', err.message || 'Unknown error');
+        failCount++;
+        console.error(`❌ [Sync Engine] فشل مزامنة السجل (${item.id}):`, err);
+        await markItemFailed(item.id, err.message || 'خطأ غير معروف في السيرفر');
       }
     }
 
-    // إبطال كاش الأصناف والفواتير لتتحدث أرصدة المستودع بالأرقام الجديدة بعد رفع الفواتير
-    invalidateTags(['inventory_items', 'invoices', 'inventory_transactions']);
+    // إبطال كاش الذاكرة الحية لجميع الجداول المتأثرة
+    invalidateTags(['inventory_items', 'invoices', 'inventory_transactions', 'partners', 'accounts']);
+
+    // إطلاق إشعار Toast ملكي فاخر عند نجاح ترحيل العمليات
+    if (successCount > 0 && !options.silent) {
+      toast.success(
+        `تمت مزامنة وترحيل ${successCount} عملية معلقة إلى السحابة بنجاح! 🚀`,
+        {
+          duration: 4000,
+          position: 'bottom-center',
+          style: {
+            background: '#1E130B',
+            color: '#FDFBF7',
+            border: '1px solid rgba(194, 155, 98, 0.4)',
+            borderRadius: '14px',
+            fontSize: '13.5px',
+            fontWeight: 800,
+            boxShadow: '0 10px 30px rgba(30, 19, 11, 0.25)',
+            direction: 'rtl'
+          },
+          iconTheme: {
+            primary: '#C29B62',
+            secondary: '#1E130B'
+          }
+        }
+      );
+    }
+
+    return { success: true, syncedCount: successCount, failedCount: failCount };
 
   } finally {
     isSyncing = false;
-    // تنبيه الواجهة بانتهاء المزامنة
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tajmawadah-sync-finished'));
+      window.dispatchEvent(new CustomEvent('tajmawadah-sync-finished', { detail: { successCount, failCount } }));
     }
   }
 }
