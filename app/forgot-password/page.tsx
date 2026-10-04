@@ -1,26 +1,37 @@
 "use client";
-import React, { Suspense } from 'react';
-import { useLoginLogic } from './login_logic';
+import React, { useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
-// 🏜️ سيم الزجاج الصحراوي (Desert Glassmorphism)
-const DESERT_THEME = {
-  tentBrown: '#2C1A12',
-  goldenSand: '#C29B62',
-  terracotta: '#A8573C',
-  dunePearl: '#FDFBF7',
-  oasisGreen: '#4E734F',
-};
+export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-function LoginPageContent() {
-  const {
-    isSignUp, toggleSignUp,
-    fullName, setFullName,
-    email, setEmail,
-    password, setPassword,
-    isLoading,
-    handleAutoFill,
-    handleSubmit
-  } = useLoginLogic();
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage('');
+    setError('');
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (resetError) {
+        throw resetError;
+      }
+
+      setMessage('تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني بنجاح. يرجى مراجعة صندوق الوارد (أو مجلد المهملات).');
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'حدث خطأ أثناء طلب استعادة كلمة المرور.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="login-wrapper">
@@ -29,8 +40,6 @@ function LoginPageContent() {
         
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
-        @keyframes onAutoFillStart { from {} to {} }
-
         .login-wrapper {
           min-height: 100vh;
           display: flex;
@@ -88,29 +97,10 @@ function LoginPageContent() {
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
-        .logo-container {
-          text-align: center;
-          margin-bottom: 20px;
-        }
-
-        .logo-container img {
-          height: 100px;
-          width: 100px;
-          object-fit: contain;
-          border-radius: 50%;
-          border: 2px solid rgba(194, 155, 98, 0.5);
-          padding: 4px;
-          background: #FFFFFF;
-          box-shadow: 0 8px 20px rgba(44, 26, 18, 0.15);
-          transition: transform 0.3s ease;
-        }
-        
-        .logo-container img:hover { transform: scale(1.06); }
-
         .cinematic-title {
           color: #2C1A12;
           font-weight: 900;
-          font-size: 27px;
+          font-size: 24px;
           text-align: center;
           margin-bottom: 6px;
           letter-spacing: -0.3px;
@@ -119,9 +109,10 @@ function LoginPageContent() {
         .cinematic-subtitle {
           color: rgba(44, 26, 18, 0.65);
           text-align: center;
-          font-size: 14.5px;
+          font-size: 13.5px;
           font-weight: 700;
           margin-bottom: 32px;
+          line-height: 1.6;
         }
 
         .input-group {
@@ -211,104 +202,55 @@ function LoginPageContent() {
           margin-top: 18px;
           cursor: pointer;
           transition: 0.2s;
+          text-align: center;
+          display: block;
+          text-decoration: none;
         }
-        .toggle-btn span { color: #A8573C; text-decoration: underline; font-weight: 800; }
         .toggle-btn:hover { color: #2C1A12; }
-        
-        @media (max-width: 480px) {
-          .glass-card { padding: 34px 22px; border-radius: 22px; }
-          .cinematic-title { font-size: 23px; }
-          .logo-container img { height: 85px; width: 85px; }
-        }
       `}</style>
 
       <div className="glass-card">
-        <div className="logo-container">
-          <img src="/taj_logo.png" alt="صيدلية تاج المودة" />
-        </div>
-        
-        <h1 className="cinematic-title">صيدلية تاج المودة</h1>
-        <p className="cinematic-subtitle">{isSignUp ? 'إنشاء حساب جديد بالمنظومة' : 'منصة رعاية الخيل والإبل - الإدارة الموحدة'}</p>
+        <h1 className="cinematic-title">استعادة كلمة المرور</h1>
+        <p className="cinematic-subtitle">
+          أدخل بريدك الإلكتروني المسجل لدينا وسنرسل لك رابطاً لإعادة تعيين كلمة المرور الخاصة بك.
+        </p>
 
-        <form onSubmit={handleSubmit}>
-          
-          {isSignUp && (
-            <div className="input-group" style={{ animation: 'fadeInUp 0.4s forwards' }}>
+        {message && (
+          <div style={{ background: '#dcfce7', color: '#166534', padding: '12px', borderRadius: '12px', marginBottom: '16px', fontSize: '13px', fontWeight: 700, border: '1px solid #bbf7d0' }}>
+            ✅ {message}
+          </div>
+        )}
+
+        {error && (
+          <div style={{ background: '#fee2e2', color: '#991b1b', padding: '12px', borderRadius: '12px', marginBottom: '16px', fontSize: '13px', fontWeight: 700, border: '1px solid #fecaca' }}>
+            ❌ {error}
+          </div>
+        )}
+
+        {!message && (
+          <form onSubmit={handleResetPassword}>
+            <div className="input-group">
               <input 
-                type="text" 
+                type="email" 
                 className="cinematic-input" 
                 placeholder=" " 
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required={isSignUp} 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required 
               />
-              <label className={`floating-label ${fullName ? 'forced-float' : ''}`}>👤 الاسم الكامل</label>
+              <label className={`floating-label ${email ? 'forced-float' : ''}`}>✉️ البريد الإلكتروني</label>
             </div>
-          )}
 
-          <div className="input-group">
-            <input 
-              type="email" 
-              className="cinematic-input" 
-              placeholder=" " 
-              value={email}
-              onAnimationStart={handleAutoFill}
-              onChange={(e) => setEmail(e.target.value)}
-              required 
-              autoComplete="email"
-            />
-            <label className={`floating-label ${email ? 'forced-float' : ''}`}>✉️ البريد الإلكتروني</label>
-          </div>
+            <button type="submit" className="submit-btn" disabled={isLoading}>
+              {isLoading ? '⏳ جاري الإرسال...' : 'إرسال رابط الاستعادة 📧'}
+            </button>
+          </form>
+        )}
 
-          <div className="input-group">
-            <input 
-              type="password" 
-              className="cinematic-input" 
-              placeholder=" " 
-              value={password}
-              onAnimationStart={handleAutoFill}
-              onChange={(e) => setPassword(e.target.value)}
-              required 
-              autoComplete={isSignUp ? "new-password" : "current-password"}
-            />
-            <label className={`floating-label ${password ? 'forced-float' : ''}`}>🔒 كلمة المرور</label>
-          </div>
-
-          {!isSignUp && (
-            <div style={{ textAlign: 'right', marginBottom: '16px' }}>
-              <a href="/forgot-password" style={{ color: '#A8573C', fontSize: '12px', fontWeight: 800, textDecoration: 'none' }}>
-                نسيت كلمة المرور؟
-              </a>
-            </div>
-          )}
-
-          <button type="submit" className="submit-btn" disabled={isLoading}>
-            {isLoading ? '⏳ جاري المعالجة...' : (isSignUp ? 'إنشاء الحساب 🚀' : 'دخول للنظام 🚀')}
-          </button>
-        </form>
-
-        <button type="button" className="toggle-btn" onClick={toggleSignUp}>
-          {isSignUp ? (
-            <>لديك حساب بالفعل؟ <span>سجل دخولك من هنا</span></>
-          ) : (
-            <>مستخدم جديد للمنصة؟ <span>إنشاء حساب جديد</span></>
-          )}
-        </button>
-
-        <div style={{ textAlign: 'center', marginTop: '22px' }}>
-          <p style={{ color: 'rgba(44, 26, 18, 0.5)', fontSize: '11.5px', fontWeight: 700 }}>
-            جميع الحقوق محفوظة © {new Date().getFullYear()} <br/> صيدلية تاج المودة البيطرية (رعاية الخيول والإبل)
-          </p>
-        </div>
+        <Link href="/login" className="toggle-btn">
+          العودة إلى صفحة تسجيل الدخول
+        </Link>
       </div>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<div style={{height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#2C1A12', color: '#FDFBF7'}}>جاري التحميل...</div>}>
-      <LoginPageContent />
-    </Suspense>
   );
 }
