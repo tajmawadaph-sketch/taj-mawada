@@ -10,6 +10,7 @@ import { notifyInvoiceCreated } from '@/lib/notificationService';
 import { distributeManualDiscount, applyPromotions, Promotion, PosCartItem } from '@/lib/promotions_engine';
 import { getLocalExpiryMetadata } from '@/app/expiry-alerts/expiry_alerts_logic';
 import { executeWithOfflineSync } from '@/lib/offline/offlineExecutor';
+import { getInventoryItemsList, getCustomersList } from '@/lib/cache/resources';
 
 
 export function usePosLogic() {
@@ -303,36 +304,24 @@ export function usePosLogic() {
         queryFn: async () => {
             if (!selectedWarehouseId) return [];
 
-            // 1. Fetch Item Master Catalog with tax_rate and expiry columns
-            let catalog: any[] = [];
-            const { data: catData, error: catErr } = await supabase
-                .from('inventory_items')
-                .select('id, name, default_price, suggested_price, unit, code, barcode, reorder_level, current_quantity, is_returnable_bottle, tax_rate, expiry_date, batch_number, alert_before_days')
-                .order('name');
-
-            if (catErr) {
-                // Resilient fallback if expiry columns are not yet applied via migration
-                const { data: fbData, error: fbErr } = await supabase
-                    .from('inventory_items')
-                    .select('id, name, default_price, suggested_price, unit, code, barcode, reorder_level, current_quantity, is_returnable_bottle, tax_rate')
-                    .order('name');
-                if (fbErr) throw fbErr;
-                catalog = fbData || [];
-            } else {
-                catalog = catData || [];
-            }
+            // 1. Fetch Item Master Catalog with RAM Cache & IndexedDB Offline Fallback
+            const catalog = await getInventoryItemsList();
 
             const localExp = getLocalExpiryMetadata();
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            // 2. Fetch inventory for selected warehouse
-            const { data: whInv, error: whErr } = await supabase
-                .from('warehouse_inventory')
-                .select('id, quantity, item_id')
-                .eq('warehouse_id', selectedWarehouseId);
-
-            if (whErr) throw whErr;
+            // 2. Fetch inventory for selected warehouse with offline protection
+            let whInv: any[] = [];
+            try {
+                const { data: invData, error: whErr } = await supabase
+                    .from('warehouse_inventory')
+                    .select('id, quantity, item_id')
+                    .eq('warehouse_id', selectedWarehouseId);
+                if (!whErr && invData) whInv = invData;
+            } catch (whErr) {
+                console.warn('⚠️ [POS Logic] تعذر جلب أرصدة المستودع سحابياً، سيتم الاعتماد على رصيد الكاش المحلي:', whErr);
+            }
 
             const whMap = new Map();
             (whInv || []).forEach((row: any) => {
@@ -411,12 +400,11 @@ export function usePosLogic() {
         return inventoryItems.filter((i: any) => i.isNearExpiry).length;
     }, [inventoryItems]);
 
-    // Fetch customers
+    // Fetch customers with RAM Cache & IndexedDB Offline Fallback
     const { data: customers = [] } = useQuery({
         queryKey: ['pos_customers'],
         queryFn: async () => {
-            const { data } = await supabase.from('partners').select('id, name').in('partner_type', ['عميل', 'نقدي']);
-            return data || [];
+            return getCustomersList();
         }
     });
 
