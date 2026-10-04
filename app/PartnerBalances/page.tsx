@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase'; 
 import PrintStatement from './printstatement'; 
 import LoadingScreen from '@/components/LoadingScreen';
-import { showGlobalToast } from '@/lib/toast-context';
+import { showGlobalToast, showGlobalConfirm } from '@/lib/toast-context';
 
 export default function PartnerBalancesPage() {
     const [data, setData] = useState<any[]>([]);
@@ -173,7 +173,14 @@ export default function PartnerBalancesPage() {
     const handleToggleActive = async (partnerId: string, currentStatus: boolean, e: React.MouseEvent) => {
         e.stopPropagation(); 
         const actionName = currentStatus ? 'إيقاف/أرشفة' : 'تفعيل';
-        if (!window.confirm(`هل أنت متأكد من ${actionName} هذا الحساب؟`)) return;
+        const confirmed = await showGlobalConfirm({
+            title: `${actionName} الحساب`,
+            message: `هل أنت متأكد من ${actionName} هذا الحساب؟`,
+            confirmText: `نعم، ${actionName}`,
+            cancelText: 'إلغاء',
+            type: currentStatus ? 'danger' : 'primary'
+        });
+        if (!confirmed) return;
 
         try {
             const { error } = await supabase

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { THEME } from '@/lib/theme';
 import { SERVICE_TYPES } from './service_operations_logic';
 import { formatCurrency } from '@/lib/helpers';
+import { showGlobalToast } from '@/lib/toast-context';
 
 interface ServiceOperationModalProps {
     isOpen: boolean;
@@ -41,15 +42,15 @@ export default function ServiceOperationModal({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!description.trim()) {
-            alert('يرجى كتابة تفاصيل وبيان العملية');
+            showGlobalToast('يرجى كتابة تفاصيل وبيان العملية', 'warning');
             return;
         }
         if (numAmount <= 0) {
-            alert('يرجى إدخال مبلغ صحيح للعملية');
+            showGlobalToast('يرجى إدخال مبلغ صحيح للعملية', 'warning');
             return;
         }
         if (hasCommission && !employeeId) {
-            alert('يرجى اختيار الموظف/المندوب المستحق للعمولة');
+            showGlobalToast('يرجى اختيار الموظف/المندوب المستحق للعمولة', 'warning');
             return;
         }
 

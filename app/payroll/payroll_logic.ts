@@ -289,7 +289,10 @@ export function usePayrollLogic() {
 
     const exportToExcel = () => {
         const liveData = latestFilteredRef.current;
-        if (liveData.length === 0) return alert("لا يوجد بيانات لتصديرها!");
+        if (liveData.length === 0) {
+            showToast("لا يوجد بيانات لتصديرها!", "warning");
+            return;
+        }
         
         // 1. مصفوفة أسماء الأشهر باللغة العربية ليعطى مظهر ملوكي للعنوان 📑
         const arabicMonths = [

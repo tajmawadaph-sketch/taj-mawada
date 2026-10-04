@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { formatCurrency, formatDate } from '@/lib/helpers';
 import { MAIN_WAREHOUSE_ID } from '@/lib/inventory_engine';
 import { ACC } from '@/lib/account-ids';
+import { showGlobalToast } from '@/lib/toast-context';
 
 interface SettlementActionModalProps {
     isOpen: boolean;
@@ -119,7 +120,7 @@ export default function SettlementActionModal({
 
         // Check if already in list
         if (returnRows.some(r => r.itemId === found.id)) {
-            alert('هذا الصنف موجود بالفعل في القائمة');
+            showGlobalToast('هذا الصنف موجود بالفعل في القائمة', 'warning');
             return;
         }
 
@@ -304,12 +305,12 @@ export default function SettlementActionModal({
         if (!trip) return;
 
         if (actualCashHandedOver < 0) {
-            alert('المبلغ المورد لا يمكن أن يكون سالباً');
+            showGlobalToast('المبلغ المورد لا يمكن أن يكون سالباً', 'warning');
             return;
         }
 
         if (!trip.driverId) {
-            alert('خطأ: لا يوجد معرف شريك/مندوب (driver_id) مربوط بهذه الرحلة!');
+            showGlobalToast('خطأ: لا يوجد معرف شريك/مندوب (driver_id) مربوط بهذه الرحلة!', 'error');
             return;
         }
 

@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import RawasiSmartTable from '@/components/rawasismarttable';
 import AquaModalWrapper from '@/components/AquaModalWrapper';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
+import { showGlobalConfirm } from '@/lib/toast-context';
 
 export default function WarehousesPage() {
   const logic = useWarehousesLogic();
@@ -161,8 +162,15 @@ export default function WarehousesPage() {
                   {selectedIds.length > 0 && (
                       <button 
                           className="btn-main-glass red" 
-                          onClick={() => {
-                              if (window.confirm(`هل أنت متأكد من حذف ${selectedIds.length} مستودع؟`)) {
+                          onClick={async () => {
+                              const confirmed = await showGlobalConfirm({
+                                  title: 'حذف المستودعات المحددة',
+                                  message: `هل أنت متأكد من حذف ${selectedIds.length} مستودع؟`,
+                                  confirmText: 'نعم، حذف',
+                                  cancelText: 'إلغاء',
+                                  type: 'danger'
+                              });
+                              if (confirmed) {
                                   selectedIds.forEach(id => {
                                       const row = logic.warehouses.find((w: any) => w.id === id);
                                       if (row && row.type !== 'main' && row.type !== 'vehicle') {

@@ -7,6 +7,7 @@ import ServiceOperationModal from './ServiceOperationModal';
 import ServiceOperationPrintModal from './ServiceOperationPrintModal';
 import { formatCurrency, formatDate } from '@/lib/helpers';
 import Link from 'next/link';
+import { showGlobalToast } from '@/lib/toast-context';
 
 export default function ServiceOperationsPage() {
     const logic = useServiceOperationsLogic();
@@ -44,7 +45,7 @@ export default function ServiceOperationsPage() {
 
     const handleExportCSV = () => {
         if (!state.operations.length) {
-            alert('لا توجد بيانات لتصديرها');
+            showGlobalToast('لا توجد بيانات لتصديرها', 'warning');
             return;
         }
 

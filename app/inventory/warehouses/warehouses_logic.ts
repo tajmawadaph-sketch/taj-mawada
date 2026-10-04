@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
 
 export function useWarehousesLogic() {
-  const { showToast } = useToast();
+  const { showToast, showConfirm } = useToast();
   const queryClient = useQueryClient();
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,8 +71,15 @@ export function useWarehousesLogic() {
     onError: (err: any) => showToast('لا يمكن الحذف، قد يكون مرتبطاً بحركات مخزنية: ' + err.message, 'error')
   });
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذا المستودع/المنفذ؟')) {
+  const handleDelete = async (id: string) => {
+    const confirmed = await showConfirm({
+      title: 'حذف المستودع',
+      message: 'هل أنت متأكد من حذف هذا المستودع/المنفذ؟',
+      confirmText: 'نعم، حذف',
+      cancelText: 'إلغاء',
+      type: 'danger'
+    });
+    if (confirmed) {
       deleteMutation.mutate(id);
     }
   };

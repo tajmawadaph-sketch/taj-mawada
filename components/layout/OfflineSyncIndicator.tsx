@@ -16,6 +16,7 @@ import {
   Server
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { showGlobalConfirm } from '@/lib/toast-context';
 
 export default function OfflineSyncIndicator() {
   const { 
@@ -39,7 +40,14 @@ export default function OfflineSyncIndicator() {
 
   const handleClearQueue = async () => {
     if (pendingCount === 0) return;
-    if (window.confirm('هل أنت متأكد من تفريغ طابور المزامنة المحلي؟ سيتم إلغاء العمليات غير المرحّلة.')) {
+    const confirmed = await showGlobalConfirm({
+      title: 'تفريغ طابور المزامنة',
+      message: 'هل أنت متأكد من تفريغ طابور المزامنة المحلي؟ سيتم إلغاء وتجاهل كافة العمليات غير المرحّلة إلى السحابة.',
+      confirmText: 'نعم، تفريغ الطابور',
+      cancelText: 'إلغاء',
+      type: 'danger'
+    });
+    if (confirmed) {
       await clearSyncQueue();
       toast.success('تم تفريغ طابور العمليات المعلقة محلياً.', {
         style: {

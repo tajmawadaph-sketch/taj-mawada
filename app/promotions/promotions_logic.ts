@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
 
 export function usePromotionsLogic() {
-    const { showToast } = useToast();
+    const { showToast, showConfirm } = useToast();
     const queryClient = useQueryClient();
 
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -77,8 +77,15 @@ export function usePromotionsLogic() {
         setIsFormOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        if (window.confirm('هل أنت متأكد من حذف هذا العرض؟')) {
+    const handleDelete = async (id: string) => {
+        const confirmed = await showConfirm({
+            title: 'حذف العرض الترويجي',
+            message: 'هل أنت متأكد من حذف هذا العرض؟',
+            confirmText: 'نعم، حذف',
+            cancelText: 'إلغاء',
+            type: 'danger'
+        });
+        if (confirmed) {
             deleteMutation.mutate(id);
         }
     };

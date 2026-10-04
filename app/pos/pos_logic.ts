@@ -14,7 +14,7 @@ import { getInventoryItemsList, getCustomersList } from '@/lib/cache/resources';
 
 
 export function usePosLogic() {
-    const { showToast } = useToast();
+    const { showToast, showConfirm } = useToast();
     const queryClient = useQueryClient();
 
     // 🔄 مزامنة فورية - تحديث المخزون والفواتير والورديات تلقائياً
@@ -30,14 +30,18 @@ export function usePosLogic() {
     const [manualDiscountAmount, setManualDiscountAmount] = useState<number>(0);
     const [discountType, setDiscountType] = useState<'amount' | 'percentage'>('amount');
 
-    // 🏢 التبديل الآمن بين المستودعات مع إفراغ السلة لمنع تداخل أرصدة الفروع
-    const handleWarehouseChange = (newWarehouseId: string) => {
+    // 🏢 التبديل الآمن بين المستودعات مع إفراغ السلة عبر نافذة الحوار الملكية
+    const handleWarehouseChange = async (newWarehouseId: string) => {
         if (!newWarehouseId || newWarehouseId === selectedWarehouseId) return;
         if (cart.length > 0) {
-            const confirmMsg = "تنبيه: التبديل إلى فرع أو مستودع آخر سيقوم بإفراغ سلة المشتريات الحالية لضمان استقلالية المخزون والوردية لكل فرع.\n\nهل تريد المتابعة وتغيير الفرع؟";
-            if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) {
-                return;
-            }
+            const confirmed = await showConfirm({
+                title: "تغيير منفذ البيع / الفرع",
+                message: "التبديل إلى فرع أو مستودع آخر سيقوم بإفراغ سلة المشتريات الحالية لضمان استقلالية المخزون والوردية لكل فرع. هل تريد المتابعة وتغيير الفرع؟",
+                confirmText: "نعم، تفريغ السلة وتغيير الفرع",
+                cancelText: "إلغاء",
+                type: "warning"
+            });
+            if (!confirmed) return;
             setCart([]);
         }
         setSelectedWarehouseId(newWarehouseId);

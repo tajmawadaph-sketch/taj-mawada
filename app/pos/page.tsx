@@ -13,6 +13,7 @@ import ShiftCloseModal from './ShiftCloseModal';
 import OpenShiftsModal from './OpenShiftsModal';
 import ShiftDetailsModal from './ShiftDetailsModal';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
+import { showGlobalConfirm } from '@/lib/toast-context';
 import { FaPlus, FaMinus, FaTrash, FaCheckCircle, FaBarcode } from 'react-icons/fa';
 
 const formatCurrency = (amount: number) => {
@@ -2394,8 +2395,15 @@ export default function PosPage() {
                             {logic.cart.length > 0 && (
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        if (window.confirm(isEn ? 'Are you sure you want to clear the current cart?' : 'هل تريد بالتأكيد إفراغ السلة الحالية؟')) {
+                                    onClick={async () => {
+                                        const confirmed = await showGlobalConfirm({
+                                            title: isEn ? 'Clear Cart' : 'إفراغ سلة المشتريات',
+                                            message: isEn ? 'Are you sure you want to clear the current cart?' : 'هل تريد بالتأكيد إفراغ كافة الأصناف في السلة الحالية؟',
+                                            confirmText: isEn ? 'Clear Cart' : 'نعم، إفراغ السلة',
+                                            cancelText: isEn ? 'Cancel' : 'إلغاء',
+                                            type: 'danger'
+                                        });
+                                        if (confirmed) {
                                             logic.cart.forEach((it: any) => logic.removeFromCart(it.id));
                                         }
                                     }}

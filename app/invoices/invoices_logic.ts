@@ -22,7 +22,7 @@ const updateInventoryQty = async (itemId: string, warehouseId: string, qtyChange
 
 export function useInvoicesLogic() {
     const router = useRouter();
-    const { showToast } = useToast(); 
+    const { showToast, showConfirm } = useToast(); 
     const queryClient = useQueryClient();
     const { profile, can } = useAuth();
     
@@ -836,19 +836,34 @@ export function useInvoicesLogic() {
         handlePostSelected: () => postMutation.mutate(), 
         handleUnpostSelected: () => unpostMutation.mutate(), 
         warehouseItems,
-        handleDeleteSelected: () => {
+        handleDeleteSelected: async () => {
             const posted = invoices.filter((inv:any) => selectedIds.includes(String(inv.id)) && (inv.is_posted || ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(inv.status || '').trim().toLowerCase())));
             if (posted.length > 0) {
                 return showToast("⚠️ لا يمكن حذف فواتير معتمدة ومرحلة. يرجى فك الترحيل أولاً.", "error");
             }
-            if (!selectedIds.length || !confirm("هل أنت متأكد من الحذف النهائي للفواتير والقيود المرتبطة بها؟")) return;
+            if (!selectedIds.length) return;
+            const confirmed = await showConfirm({
+                title: 'حذف الفواتير المحددة',
+                message: 'هل أنت متأكد من الحذف النهائي للفواتير والقيود المرتبطة بها؟',
+                confirmText: 'نعم، حذف الفواتير',
+                cancelText: 'إلغاء',
+                type: 'danger'
+            });
+            if (!confirmed) return;
             deleteMutation.mutate();
         },
         handleDeleteSingle: async (inv: any) => {
             if (inv.is_posted || ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(inv.status || '').trim().toLowerCase())) {
                 return showToast("⚠️ لا يمكن حذف فاتورة معتمدة ومرحلة، يرجى فك الترحيل أولاً.", "error");
             }
-            if (!confirm(`تحذير: هل أنت متأكد من حذف الفاتورة #${inv.invoice_number} نهائياً؟`)) return;
+            const confirmed = await showConfirm({
+                title: 'حذف الفاتورة',
+                message: `تحذير: هل أنت متأكد من حذف الفاتورة #${inv.invoice_number} نهائياً؟`,
+                confirmText: 'نعم، حذف',
+                cancelText: 'إلغاء',
+                type: 'danger'
+            });
+            if (!confirmed) return;
             try {
                 await directDeleteInvoices([inv.id]);
                 showToast(`تم حذف الفاتورة #${inv.invoice_number} بنجاح 🗑️`, "success");
@@ -864,7 +879,14 @@ export function useInvoicesLogic() {
             setTogglingId(String(inv.id));
             try {
                 if (isApproved) {
-                    if (!confirm(`هل أنت متأكد من فك ترحيل واعتماد الفاتورة #${inv.invoice_number}؟`)) return;
+                    const confirmed = await showConfirm({
+                        title: 'فك ترحيل الفاتورة',
+                        message: `هل أنت متأكد من فك ترحيل واعتماد الفاتورة #${inv.invoice_number}؟`,
+                        confirmText: 'نعم، فك الترحيل',
+                        cancelText: 'إلغاء',
+                        type: 'warning'
+                    });
+                    if (!confirmed) return;
                     await directUnpostInvoices([inv.id]);
                     showToast(`تم فك اعتماد الفاتورة #${inv.invoice_number} 🔄`, "warning");
                 } else {

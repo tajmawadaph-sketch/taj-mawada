@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import AquaModalWrapper from '@/components/AquaModalWrapper';
 import { THEME } from '@/lib/theme';
+import { showGlobalToast } from '@/lib/toast-context';
 
 interface InvoiceReturnModalProps {
     isOpen: boolean;
@@ -124,7 +125,7 @@ export default function InvoiceReturnModal({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (returnSummary.selectedItems.length === 0) {
-            alert("يرجى اختيار صنف واحد على الأقل لإرجاعه وتحديد كميته.");
+            showGlobalToast("يرجى اختيار صنف واحد على الأقل لإرجاعه وتحديد كميته.", 'warning');
             return;
         }
 
