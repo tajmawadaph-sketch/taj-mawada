@@ -239,6 +239,27 @@ export default function ExpenseFormModal({
                             strict={false}
                         />
                     </div>
+                    <div style={{ zIndex: 76, position: 'relative' }}>
+                        <SmartCombo 
+                            label="🏢 مركز التكلفة (Cost Center)" 
+                            icon="🏢" 
+                            options={[
+                                { id: 'CC-MAIN', name: 'الإدارة العامة والمقر الرئيسي' },
+                                { id: 'CC-PHARMACY', name: 'صيدلية تاج المودة (الفرع الرئيسي)' },
+                                { id: 'CC-CLINIC', name: 'العيادة البيطرية والاستشارات' },
+                                { id: 'CC-FLEET', name: 'أسطول سيارات وفانات التوزيع' },
+                                { id: 'CC-WAREHOUSE', name: 'المستودع المركزي للأدوية' },
+                            ]}
+                            displayCol="name" 
+                            initialDisplay={record?.cost_center_name || record?.cost_center || ''} 
+                            onSelect={(val:any) => {
+                                const ccName = typeof val === 'object' && val !== null ? val.name : val;
+                                const ccId = typeof val === 'object' && val !== null ? val.id : '';
+                                setRecord({...record, cost_center: ccName, cost_center_id: ccId, cost_center_name: ccName});
+                            }} 
+                            strict={false}
+                        />
+                    </div>
                     <div style={{ zIndex: 75, position: 'relative' }}>
                         <SmartCombo label="📁 التصنيف الرئيسي *" icon="📁" options={EXPENSE_CATEGORIES} initialDisplay={record?.main_category} onSelect={(val:any) => {
                             const selectedCategory = typeof val === 'object' && val !== null ? val.name : val;

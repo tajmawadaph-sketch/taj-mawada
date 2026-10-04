@@ -78,6 +78,8 @@ export default function ReportsPage() {
           <ReportLinkCard href="/financial-statements" icon="📉" title="قائمة الدخل (Income Statement)" desc="الإيرادات - تكلفة المبيعات - المصروفات، لمعرفة صافي الربح." />
           <ReportLinkCard href="/financial-statements" icon="🏛️" title="المركز المالي (Balance Sheet)" desc="عرض الأصول، الخصوم، وحقوق الملكية لمعرفة قوة الشركة." />
           <ReportLinkCard href="/vat-return" icon="📜" title="الإقرار الضريبي (VAT Return)" desc="تقرير جاهز لهيئة الزكاة يفصل ضريبة المدخلات والمخرجات." />
+          <ReportLinkCard href="/fixed-assets" icon="🏗️" title="سجل الأصول الثابتة والإهلاك الآلي" desc="إدارة الأصول الرأسمالية (الشاحنات، الأجهزة، الكاشير) واحتساب وترحيل قيود الإهلاك." />
+          <ReportLinkCard href="/financial-center" icon="💎" title="غرفة القيادة والتحكم بالسيولة (Liquidity)" desc="متابعة فورية لأرصدة البنوك والصناديق ورأس المال العامل ونسب الملاءة." />
         </div>
 
         {/* 2. تقارير التشغيل وحركة المناديب */}
