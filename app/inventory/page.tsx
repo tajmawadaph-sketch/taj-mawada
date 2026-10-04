@@ -10,7 +10,8 @@ import LoadingScreen from '@/components/LoadingScreen';
 import SecureAction from '@/components/SecureAction';
 import { useConfirm } from '@/components/ConfirmContext';
 import InventoryActionModal from '@/components/InventoryActionModal';
-import InventoryItemModal from '@/components/InventoryItemModal'; 
+import InventoryItemModal from '@/components/InventoryItemModal';
+import StocktakingModal from '@/components/StocktakingModal';
 
 export default function InventoryPage() {
   const logic = useInventoryLogic();
@@ -18,6 +19,7 @@ export default function InventoryPage() {
   
   const [mounted, setMounted] = useState(false);
   const [actionType, setActionType] = useState<'in' | 'out' | 'waste' | 'empty_return'>('in');
+  const [isStocktakingModalOpen, setIsStocktakingModalOpen] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -280,6 +282,15 @@ export default function InventoryPage() {
               <span>➕</span>
               <span>إضافة صنف جديد</span>
             </button>
+            <button 
+              type="button" 
+              className="btn-main-glass"
+              style={{ width: '100%', borderColor: 'rgba(194, 155, 98, 0.4)', color: '#8c6b32' }}
+              onClick={() => setIsStocktakingModalOpen(true)}
+            >
+              <span>📋</span>
+              <span>الجرد الدوري والتسويات</span>
+            </button>
             <Link href="/expiry-alerts" style={{ textDecoration: 'none', width: '100%' }}>
               <button 
                 type="button" 
@@ -466,6 +477,21 @@ export default function InventoryPage() {
 
                   <button 
                     type="button"
+                    onClick={() => setIsStocktakingModalOpen(true)}
+                    className="btn-main-glass" 
+                    style={{ 
+                      background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)', 
+                      color: 'white', 
+                      fontSize: '13px', 
+                      fontWeight: 800,
+                      boxShadow: '0 4px 14px rgba(194, 155, 98, 0.3)'
+                    }}
+                  >
+                    📋 الجرد الدوري ومطابقة الأرصدة
+                  </button>
+
+                  <button 
+                    type="button"
                     onClick={() => logic.handleSyncBalances()}
                     disabled={logic.isSyncing}
                     className="btn-main-glass" 
@@ -543,6 +569,13 @@ export default function InventoryPage() {
                 actionType={actionType}
                 onSuccess={logic.refreshData}
                 items={logic.items || []}
+              />
+
+              <StocktakingModal
+                isOpen={isStocktakingModalOpen}
+                onClose={() => setIsStocktakingModalOpen(false)}
+                warehouseId={logic.selectedWarehouseId}
+                onSuccess={logic.fetchData}
               />
             </>
           )}

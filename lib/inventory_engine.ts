@@ -62,10 +62,10 @@ export async function syncAllWarehouseBalances() {
       if (!whBalances[srcWh]) whBalances[srcWh] = {};
       if (whBalances[srcWh][tx.item_id] === undefined) whBalances[srcWh][tx.item_id] = 0;
 
-      if (tx.type === 'in' || tx.type === 'transfer_in' || tx.type === 'empty_return') {
+      if (tx.type === 'in' || tx.type === 'transfer_in' || tx.type === 'empty_return' || tx.type === 'adjustment_in') {
         whBalances[srcWh][tx.item_id] += qty;
         itemTotals[tx.item_id] = (itemTotals[tx.item_id] || 0) + qty;
-      } else if (tx.type === 'waste') {
+      } else if (tx.type === 'waste' || tx.type === 'adjustment_out') {
         whBalances[srcWh][tx.item_id] -= qty;
         itemTotals[tx.item_id] = (itemTotals[tx.item_id] || 0) - qty;
       } else if (tx.type === 'out' || tx.type === 'transfer_out' || tx.type === 'sales_deduction') {
@@ -205,7 +205,21 @@ export async function executeApproveTransaction(transactionId: string, options?:
     let creditNotes = '';
     let partnerIdForLine: string | null = null;
 
-    if (txn.type === 'in' || txn.type === 'transfer_in') {
+    if (txn.type === 'adjustment_in') {
+      // تسوية جردية بالزيادة (فائض مخزني): من حـ/ 126 مخزون البضائع (مدين) إلى حـ/ 44 إيرادات أخرى (دائن)
+      headerDesc = `تسوية جردية (فائض مخزني) #${txn.transaction_number || ''} - صنف: ${itemName} (كمية: ${qty})`;
+      debitAcc = ACC.INVENTORY;
+      creditAcc = ACC.OTHER_REVENUE;
+      debitNotes = 'إثبات زيادة وفائض جردي في المخزون (مدين)';
+      creditNotes = 'إيرادات وأرباح تسويات جردية (دائن)';
+    } else if (txn.type === 'adjustment_out') {
+      // تسوية جردية بالعجز (نقص مخزني): من حـ/ 528 خسائر عجز وتوالف مخزنية (مدين) إلى حـ/ 126 مخزون البضائع (دائن)
+      headerDesc = `تسوية جردية (عجز مخزني) #${txn.transaction_number || ''} - صنف: ${itemName} (كمية: ${qty})`;
+      debitAcc = ACC.WASTE_LOSS;
+      creditAcc = ACC.INVENTORY;
+      debitNotes = 'خسائر عجز جردي مخزني (مدين)';
+      creditNotes = 'تسوية وتخفيض مخزون البضائع (دائن)';
+    } else if (txn.type === 'in' || txn.type === 'transfer_in') {
       // توريد مخزني / شراء: من حـ/ 126 مخزون البضائع (مدين) إلى حـ/ 219 فواتير قيد الاستلام أو المورد (دائن)
       headerDesc = `توريد مخزني #${txn.transaction_number || ''} - صنف: ${itemName} (كمية: ${qty})`;
       debitAcc = ACC.INVENTORY;
