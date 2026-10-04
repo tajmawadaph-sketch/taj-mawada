@@ -7,7 +7,7 @@ import { useToast } from '@/lib/toast-context';
 import { THEME } from '@/lib/theme';
 import SearchableSelect from './SearchableSelect';
 import { BarcodeCameraButton } from './BarcodeScannerWidget';
-import { executeApproveTransaction, syncAllWarehouseBalances } from '@/lib/inventory_engine';
+import { executeApproveTransaction, syncAllWarehouseBalances, getItemBatchesFEFO } from '@/lib/inventory_engine';
 import { saveLocalExpiryMetadata } from '@/app/expiry-alerts/expiry_alerts_logic';
 
 const generateBatchNumber = () => {
@@ -29,6 +29,7 @@ interface InventoryActionModalProps {
 export default function InventoryActionModal({ isOpen, onClose, actionType, onSuccess, items, initialData }: InventoryActionModalProps) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const [fefoSuggestedBatch, setFefoSuggestedBatch] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     transaction_number: '',
@@ -300,6 +301,39 @@ export default function InventoryActionModal({ isOpen, onClose, actionType, onSu
     ? '🗑️' 
     : '🔄';
 
+  const handleItemSelect = async (itemId: string) => {
+    const selected = (items || []).find(i => i.id === itemId);
+    const cost = selected ? (selected.last_purchase_price || selected.default_price || 0) : 0;
+    
+    let suggestedBatch = '';
+    let suggestedExp = '';
+    let fefoInfo: any = null;
+
+    if (actionType === 'out' || actionType === 'waste') {
+      try {
+        const batches = await getItemBatchesFEFO(itemId, formData.warehouse_id, selected?.available_qty, selected);
+        const valid = batches.filter(b => !b.isExpired);
+        const primary = valid[0] || batches[0] || null;
+        if (primary) {
+          suggestedBatch = primary.batch_number;
+          suggestedExp = primary.expiry_date || '';
+          fefoInfo = primary;
+        }
+      } catch (e) {
+        console.warn('FEFO lookup error:', e);
+      }
+    }
+
+    setFefoSuggestedBatch(fefoInfo);
+    setFormData(prev => ({
+      ...prev,
+      item_id: itemId,
+      unit_price: (actionType === 'out' || actionType === 'waste') ? cost : prev.unit_price,
+      batch_number: (actionType === 'out' || actionType === 'waste') ? (suggestedBatch || prev.batch_number) : prev.batch_number,
+      expiry_date: (actionType === 'out' || actionType === 'waste') ? (suggestedExp || prev.expiry_date) : prev.expiry_date
+    }));
+  };
+
   return (
     <AquaModalWrapper
         isOpen={isOpen}
@@ -446,11 +480,7 @@ export default function InventoryActionModal({ isOpen, onClose, actionType, onSu
                       value: item.id
                     }))}
                     value={formData.item_id}
-                    onChange={val => {
-                       const selected = (items || []).find(i => i.id === val);
-                       const cost = selected ? (selected.last_purchase_price || selected.default_price || 0) : 0;
-                       setFormData(prev => ({ ...prev, item_id: val, unit_price: (actionType === 'out' || actionType === 'waste') ? cost : prev.unit_price }));
-                    }}
+                    onChange={val => handleItemSelect(val)}
                     placeholder="-- ابحث عن الصنف --"
                   />
                 </div>
@@ -458,12 +488,7 @@ export default function InventoryActionModal({ isOpen, onClose, actionType, onSu
                   onScan={(barcode) => {
                     const selected = (items || []).find(i => String(i.code) === barcode || String(i.id) === barcode);
                     if (selected) {
-                      const cost = selected.last_purchase_price || selected.default_price || 0;
-                      setFormData(prev => ({
-                        ...prev,
-                        item_id: selected.id,
-                        unit_price: (actionType === 'out' || actionType === 'waste') ? cost : prev.unit_price
-                      }));
+                      handleItemSelect(selected.id);
                       showToast(`تم اختيار الصنف: ${selected.name}`, 'success');
                     } else {
                       showToast(`لم يتم العثور على صنف بالباركود: ${barcode}`, 'error');
@@ -591,6 +616,56 @@ export default function InventoryActionModal({ isOpen, onClose, actionType, onSu
                       className="glass-input-field" 
                       value={formData.production_date}
                       onChange={e => setFormData({ ...formData, production_date: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ⏳ تخصيص تشغيلة الصرف بنظام FEFO */}
+            {(actionType === 'out' || actionType === 'waste') && formData.item_id && (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(255, 253, 250, 0.95) 0%, rgba(246, 241, 232, 0.85) 100%)',
+                border: '1.5px solid rgba(194, 155, 98, 0.45)',
+                borderRadius: '16px',
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px dashed rgba(194, 155, 98, 0.3)', paddingBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#C29B62', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>⏳</span>
+                    <span>تخصيص التشغيلة بنظام FEFO (الأقرب انتهاءً أولاً)</span>
+                  </span>
+                  {fefoSuggestedBatch && (
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: fefoSuggestedBatch.isNearExpiry ? '#A8573C' : '#059669', background: 'rgba(255,255,255,0.7)', padding: '2px 8px', borderRadius: '6px' }}>
+                      {fefoSuggestedBatch.isNearExpiry ? `⚠️ قريبة الانتهاء (${fefoSuggestedBatch.days_left} يوم)` : `✅ صالحة (${fefoSuggestedBatch.days_left ? `${fefoSuggestedBatch.days_left} يوم` : 'بدون تاريخ'})`}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 900, color: THEME.primary, marginBottom: '4px', display: 'block' }}>
+                      🏷️ التشغيلة المسحوبة (Batch #)
+                    </label>
+                    <input 
+                      type="text" 
+                      className="glass-input-field" 
+                      value={formData.batch_number}
+                      onChange={e => setFormData({ ...formData, batch_number: e.target.value })}
+                      placeholder="رقم التشغيلة..."
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 900, color: '#A8573C', marginBottom: '4px', display: 'block' }}>
+                      📅 تاريخ انتهاء التشغيلة
+                    </label>
+                    <input 
+                      type="date" 
+                      className="glass-input-field" 
+                      value={formData.expiry_date}
+                      onChange={e => setFormData({ ...formData, expiry_date: e.target.value })}
                     />
                   </div>
                 </div>

@@ -120,13 +120,40 @@ export default function InventoryTransactionsPage() {
         if (!row.batch_number && !row.expiry_date) {
           return <span style={{ color: '#94a3b8', fontSize: '11px' }}>-</span>;
         }
+
+        let daysLeft: number | null = null;
+        if (row.expiry_date) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const exp = new Date(row.expiry_date);
+          exp.setHours(0, 0, 0, 0);
+          daysLeft = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        }
+
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            {row.batch_number && (
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#2C1A12', background: 'rgba(194, 155, 98, 0.15)', padding: '1px 6px', borderRadius: '4px', width: 'fit-content' }}>
-                🏷️ {row.batch_number}
-              </span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+              {row.batch_number && (
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E130B', background: 'rgba(194, 155, 98, 0.18)', border: '1px solid rgba(194, 155, 98, 0.35)', padding: '1px 6px', borderRadius: '4px', width: 'fit-content' }}>
+                  🏷️ {row.batch_number}
+                </span>
+              )}
+              {daysLeft !== null && (
+                daysLeft <= 0 ? (
+                  <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#dc2626', background: '#fee2e2', border: '1px solid #f87171', padding: '1px 5px', borderRadius: '4px' }}>
+                    ⛔ منتهي
+                  </span>
+                ) : daysLeft <= 60 ? (
+                  <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #f59e0b', padding: '1px 5px', borderRadius: '4px' }}>
+                    ⏳ {daysLeft} يوم
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#059669', background: 'rgba(5, 150, 105, 0.12)', border: '1px solid rgba(5, 150, 105, 0.25)', padding: '1px 5px', borderRadius: '4px' }}>
+                    ساري ({daysLeft} ي)
+                  </span>
+                )
+              )}
+            </div>
             {row.expiry_date && (
               <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#A8573C' }}>
                 📅 انتهاء: {row.expiry_date}

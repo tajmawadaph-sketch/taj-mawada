@@ -2330,6 +2330,20 @@ export default function PosPage() {
                                                 <div className="pos-item-name" title={item.name}>
                                                     {item.name}
                                                 </div>
+                                                {item.batch_number && (
+                                                    <div style={{
+                                                        fontSize: '10px',
+                                                        fontWeight: 800,
+                                                        color: item.isNearExpiry ? '#A8573C' : '#8C6B32',
+                                                        marginTop: '3px',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px'
+                                                    }}>
+                                                        <span>🏷️ {item.batch_number}</span>
+                                                        {item.expiry_date && <span style={{ opacity: 0.85, fontSize: '9px' }}>({item.expiry_date})</span>}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {/* 3. أسفل البطاقة: المخزون المتوفر + السعر وزر الإضافة السريع */}
@@ -2523,6 +2537,48 @@ export default function PosPage() {
                                                         whiteSpace: 'nowrap'
                                                     }}>
                                                         وفرت: {formatCurrency(item.promo_discount)}
+                                                    </span>
+                                                )}
+                                                {/* ⏳ شارة تشغيلة FEFO والصلاحية */}
+                                                {(item.batch_number || item.expiry_date) && (
+                                                    <span style={{
+                                                        background: item.isNearExpiry ? 'rgba(168, 87, 60, 0.12)' : 'rgba(194, 155, 98, 0.14)',
+                                                        color: item.isNearExpiry ? '#A8573C' : '#8C6B32',
+                                                        border: `1px solid ${item.isNearExpiry ? 'rgba(168, 87, 60, 0.35)' : 'rgba(194, 155, 98, 0.35)'}`,
+                                                        borderRadius: '6px',
+                                                        padding: '1px 6px',
+                                                        fontSize: '10px',
+                                                        fontWeight: 800,
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        🏷️ {item.batch_number || 'دفعة'} {item.expiry_date ? `(ص: ${item.expiry_date})` : ''}
+                                                    </span>
+                                                )}
+                                                {item.isNearExpiry && (
+                                                    <span style={{
+                                                        background: '#fef3c7',
+                                                        color: '#b45309',
+                                                        border: '1px solid #f59e0b',
+                                                        borderRadius: '6px',
+                                                        padding: '1px 6px',
+                                                        fontSize: '10px',
+                                                        fontWeight: 800,
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        ⏳ قريبة الانتهاء ({item.days_left} يوم)
+                                                    </span>
+                                                )}
+                                                {item.batch_allocations && item.batch_allocations.length > 1 && (
+                                                    <span style={{
+                                                        background: 'rgba(30, 19, 11, 0.08)',
+                                                        color: '#1E130B',
+                                                        borderRadius: '6px',
+                                                        padding: '1px 6px',
+                                                        fontSize: '9.5px',
+                                                        fontWeight: 800,
+                                                        whiteSpace: 'nowrap'
+                                                    }} title={item.batch_allocations.map((a: any) => `${a.quantity} من ${a.batch_number}`).join(' | ')}>
+                                                        📦 {item.batch_allocations.length} تشغيلات
                                                     </span>
                                                 )}
                                                 {Number(item.discount || 0) > 0 && (

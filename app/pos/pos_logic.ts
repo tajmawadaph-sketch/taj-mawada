@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
 import { useRealtimeInvalidate } from '@/lib/useRealtimeSync';
 import { SALES_ACCOUNTS, CASH_ACCOUNTS, ACC } from '@/lib/account-ids';
-import { syncAllWarehouseBalances } from '@/lib/inventory_engine';
+import { syncAllWarehouseBalances, calculateItemBatchesFEFO, allocateItemQtyFEFO, ItemBatchInfo, FEFOAllocationResult } from '@/lib/inventory_engine';
 import { notifyInvoiceCreated } from '@/lib/notificationService';
 import { distributeManualDiscount, applyPromotions, Promotion, PosCartItem } from '@/lib/promotions_engine';
 import { getLocalExpiryMetadata } from '@/app/expiry-alerts/expiry_alerts_logic';
@@ -333,6 +333,27 @@ export function usePosLogic() {
                 whMap.set(row.item_id, row);
             });
 
+            // 3. Fetch approved batch transactions for FEFO allocation in this warehouse
+            let batchTransactions: any[] = [];
+            try {
+                const { data: txData, error: txErr } = await supabase
+                    .from('inventory_transactions')
+                    .select('item_id, type, quantity, batch_number, expiry_date, production_date, warehouse_id, destination_warehouse_id')
+                    .eq('status', 'approved')
+                    .or(`warehouse_id.eq.${selectedWarehouseId},destination_warehouse_id.eq.${selectedWarehouseId}`);
+                if (!txErr && txData) batchTransactions = txData;
+            } catch (txErr) {
+                console.warn('⚠️ [POS Logic] تعذر جلب حركات التشغيلات FEFO سحابياً:', txErr);
+            }
+
+            const txByItem = new Map<string, any[]>();
+            (batchTransactions || []).forEach((tx: any) => {
+                if (!tx.item_id) return;
+                const list = txByItem.get(tx.item_id) || [];
+                list.push(tx);
+                txByItem.set(tx.item_id, list);
+            });
+
             return (catalog || []).map((item: any) => {
                 const whRow = whMap.get(item.id);
                 // 🛡️ حماية صارمة لمنع احتساب وعرض أي كمية سالبة نهائياً
@@ -348,15 +369,34 @@ export function usePosLogic() {
                 const isNear = availableQty > reorderLvl && availableQty <= reorderLvl * 1.5;
 
                 const cachedMeta = localExp[item.id] || {};
-                const expiryDate = item.expiry_date || cachedMeta.expiry_date || null;
-                const batchNum = item.batch_number || cachedMeta.batch_number || null;
-                const alertDays = Number(item.alert_before_days || cachedMeta.alert_before_days || 30);
+                const itemTxns = txByItem.get(item.id) || [];
 
-                let daysLeft: number | null = null;
-                let isExpired = false;
-                let isNearExpiry = false;
+                // ⏳ حساب تشغيلات الصنف بنظام FEFO (الأقرب انتهاءً أولاً)
+                const fefoBatches = calculateItemBatchesFEFO(
+                    itemTxns,
+                    {
+                        expiry_date: item.expiry_date || cachedMeta.expiry_date || null,
+                        batch_number: item.batch_number || cachedMeta.batch_number || null,
+                        production_date: item.production_date || null,
+                        alert_before_days: Number(item.alert_before_days || cachedMeta.alert_before_days || 60)
+                    },
+                    selectedWarehouseId,
+                    availableQty
+                );
 
-                if (expiryDate) {
+                // العثور على التشغيلة الأقرب انتهاءً الصالحة للبيع
+                const validBatches = fefoBatches.filter(b => !b.isExpired);
+                const primaryBatch = validBatches[0] || fefoBatches[0] || null;
+
+                const expiryDate = primaryBatch?.expiry_date || item.expiry_date || cachedMeta.expiry_date || null;
+                const batchNum = primaryBatch?.batch_number || item.batch_number || cachedMeta.batch_number || null;
+                const alertDays = Number(item.alert_before_days || cachedMeta.alert_before_days || 60);
+
+                let daysLeft = primaryBatch?.days_left ?? null;
+                let isExpired = primaryBatch ? primaryBatch.isExpired : false;
+                let isNearExpiry = primaryBatch ? primaryBatch.isNearExpiry : false;
+
+                if (!primaryBatch && expiryDate) {
                     const exp = new Date(expiryDate);
                     exp.setHours(0, 0, 0, 0);
                     const diffTime = exp.getTime() - today.getTime();
@@ -386,7 +426,8 @@ export function usePosLogic() {
                     alert_before_days: alertDays,
                     days_left: daysLeft,
                     isExpired,
-                    isNearExpiry
+                    isNearExpiry,
+                    fefo_batches: fefoBatches
                 };
             });
         },
@@ -432,29 +473,49 @@ export function usePosLogic() {
             setIsShiftOpenModalOpen(true);
             return;
         }
-        if (item.isExpired) {
-            setTimeout(() => showToast(`⛔ منع البيع: الصنف (${item.name}) منتهي الصلاحية بتاريخ ${item.expiry_date}! يمنع بيع السلع منتهية الصلاحية.`, 'error'), 0);
+
+        const existingItem = cart.find(i => i.id === item.id);
+        const targetQty = (existingItem ? existingItem.qty : 0) + qty;
+        const batches = item.fefo_batches || [];
+        const alloc = allocateItemQtyFEFO(batches, targetQty);
+
+        if (item.isExpired || (alloc.hasExpired && alloc.fulfilledQty === 0)) {
+            setTimeout(() => showToast(`⛔ منع البيع الصارم: الصنف (${item.name}) منتهي الصلاحية بتاريخ ${item.expiry_date}! يمنع نظام هيئة الغذاء والدواء بيع السلع منتهية الصلاحية.`, 'error'), 0);
             return;
         }
-        if (item.isNearExpiry) {
-            setTimeout(() => showToast(`⏳ تنبيه: الصنف (${item.name}) قارب على انتهاء الصلاحية (متبقي ${item.days_left} يوم)!`, 'warning'), 0);
+
+        if (alloc.hasNearExpiry || item.isNearExpiry) {
+            const days = alloc.minDaysLeft ?? item.days_left;
+            const bNum = alloc.primaryBatch?.batch_number || item.batch_number;
+            setTimeout(() => showToast(`⏳ تنبيه FEFO: الصنف (${item.name}) تشغيلة [${bNum || 'غير محددة'}] قارب على انتهاء الصلاحية (متبقي ${days} يوم)!`, 'warning'), 0);
         }
+
         setCart(prev => {
             const existing = prev.find(i => i.id === item.id);
             const unitPrice = price !== undefined ? price : (existing ? existing.unit_price : (item.suggested_price || 0));
+            const newQty = existing ? existing.qty + qty : qty;
             
-            if (existing) {
-                if (existing.qty + qty > item.available_qty) {
-                    setTimeout(() => showToast(`⛔ تجاوز المخزون ممنوع! الكمية المطلوبة (${existing.qty + qty}) تتجاوز الرصيد المتوفر (${item.available_qty})`, 'error'), 0);
-                    return prev;
-                }
-                return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + qty, unit_price: unitPrice } : i);
-            }
-            if (qty > item.available_qty) {
-                setTimeout(() => showToast(`⛔ تجاوز المخزون ممنوع! الكمية المطلوبة (${qty}) تتجاوز الرصيد المتوفر (${item.available_qty})`, 'error'), 0);
+            if (newQty > item.available_qty) {
+                setTimeout(() => showToast(`⛔ تجاوز المخزون ممنوع! الكمية المطلوبة (${newQty}) تتجاوز الرصيد المتوفر (${item.available_qty})`, 'error'), 0);
                 return prev;
             }
-            return [...prev, { ...item, qty, unit_price: unitPrice }];
+
+            const itemAlloc = allocateItemQtyFEFO(batches, newQty);
+            const cartItemData = {
+                ...item,
+                qty: newQty,
+                unit_price: unitPrice,
+                batch_number: itemAlloc.primaryBatch?.batch_number || item.batch_number || null,
+                expiry_date: itemAlloc.primaryBatch?.expiry_date || item.expiry_date || null,
+                days_left: itemAlloc.primaryBatch?.days_left ?? item.days_left ?? null,
+                isNearExpiry: itemAlloc.hasNearExpiry || item.isNearExpiry,
+                batch_allocations: itemAlloc.allocations
+            };
+
+            if (existing) {
+                return prev.map(i => i.id === item.id ? cartItemData : i);
+            }
+            return [...prev, cartItemData];
         });
     };
 
@@ -592,14 +653,21 @@ export function usePosLogic() {
             return;
         }
 
-        if (item.isExpired) {
+        const existingItem = cart.find(c => c.id === item.id);
+        const targetQty = (existingItem ? existingItem.qty : 0) + 1;
+        const scanBatches = item.fefo_batches || [];
+        const scanAlloc = allocateItemQtyFEFO(scanBatches, targetQty);
+
+        if (item.isExpired || (scanAlloc.hasExpired && scanAlloc.fulfilledQty === 0)) {
             playAudio(false);
             showToast(`⛔ منع البيع: الصنف (${item.name}) منتهي الصلاحية بتاريخ ${item.expiry_date}! يمنع بيع السلع المنتهية للمستهلكين.`, 'error');
             return;
         }
 
-        if (item.isNearExpiry) {
-            showToast(`⏳ تنبيه كاشير: الصنف (${item.name}) قارب على انتهاء الصلاحية (متبقي ${item.days_left} يوم)`, 'warning');
+        if (scanAlloc.hasNearExpiry || item.isNearExpiry) {
+            const days = scanAlloc.minDaysLeft ?? item.days_left;
+            const bNo = scanAlloc.primaryBatch?.batch_number || item.batch_number;
+            showToast(`⏳ تنبيه FEFO كاشير: (${item.name}) تشغيلة [${bNo || ''}] قريبة الانتهاء (متبقي ${days} يوم)`, 'warning');
         }
 
         // 3. إضافة حبة أولى إذا لم يكن في السلة، أو زيادة العدد إذا كان موجوداً مسبقاً
@@ -610,24 +678,34 @@ export function usePosLogic() {
         setCart(prev => {
             const existing = prev.find(c => c.id === item.id);
             const unitPrice = item.suggested_price || item.default_price || (existing ? existing.unit_price : 0);
+            const newQty = existing ? existing.qty + 1 : 1;
 
-            if (existing) {
-                if (existing.qty + 1 > item.available_qty) {
-                    isOutOfStock = true;
-                    return prev;
-                }
-                isIncrement = true;
-                finalQty = existing.qty + 1;
-                return prev.map(c => c.id === item.id ? { ...c, qty: existing.qty + 1, unit_price: unitPrice } : c);
-            }
-
-            if (1 > item.available_qty) {
+            if (newQty > item.available_qty) {
                 isOutOfStock = true;
                 return prev;
             }
 
-            finalQty = 1;
-            return [...prev, { ...item, qty: 1, unit_price: unitPrice }];
+            if (existing) {
+                isIncrement = true;
+            }
+            finalQty = newQty;
+
+            const itemAlloc = allocateItemQtyFEFO(scanBatches, newQty);
+            const cartItemData = {
+                ...item,
+                qty: newQty,
+                unit_price: unitPrice,
+                batch_number: itemAlloc.primaryBatch?.batch_number || item.batch_number || null,
+                expiry_date: itemAlloc.primaryBatch?.expiry_date || item.expiry_date || null,
+                days_left: itemAlloc.primaryBatch?.days_left ?? item.days_left ?? null,
+                isNearExpiry: itemAlloc.hasNearExpiry || item.isNearExpiry,
+                batch_allocations: itemAlloc.allocations
+            };
+
+            if (existing) {
+                return prev.map(c => c.id === item.id ? cartItemData : c);
+            }
+            return [...prev, cartItemData];
         });
 
         if (isOutOfStock) {
@@ -652,13 +730,35 @@ export function usePosLogic() {
     };
 
     const updateCartItemQty = (id: string, qty: number) => {
+        if (qty <= 0) {
+            setCart(prev => prev.filter(i => i.id !== id));
+            return;
+        }
         const item = inventoryItems.find((i: any) => i.id === id);
         if (item && qty > item.available_qty) {
             showToast(`⛔ تجاوز المخزون ممنوع! الرصيد المتاح لهذا الصنف هو ${item.available_qty} فقط`, 'error');
             return;
         }
-        if (qty <= 0) {
-            setCart(prev => prev.filter(i => i.id !== id));
+        if (item) {
+            const batches = item.fefo_batches || [];
+            const alloc = allocateItemQtyFEFO(batches, qty);
+            if (alloc.hasNearExpiry) {
+                const days = alloc.minDaysLeft ?? item.days_left;
+                const bNo = alloc.primaryBatch?.batch_number || item.batch_number;
+                showToast(`⏳ تنبيه FEFO: التشغيلة الأقرب انتهاءً [${bNo || ''}] متبقي لها ${days} يوم.`, 'warning');
+            }
+            setCart(prev => prev.map(i => {
+                if (i.id !== id) return i;
+                return {
+                    ...i,
+                    qty,
+                    batch_number: alloc.primaryBatch?.batch_number || i.batch_number || null,
+                    expiry_date: alloc.primaryBatch?.expiry_date || i.expiry_date || null,
+                    days_left: alloc.primaryBatch?.days_left ?? i.days_left ?? null,
+                    isNearExpiry: alloc.hasNearExpiry || i.isNearExpiry,
+                    batch_allocations: alloc.allocations
+                };
+            }));
             return;
         }
         setCart(prev => prev.map(i => i.id === id ? { ...i, qty } : i));
@@ -784,7 +884,10 @@ export function usePosLogic() {
                 total: item.total !== undefined ? item.total : (((item.quantity || item.qty) * (item.selected_price || item.unit_price || item.price || 0)) - ((item.discount || 0) + (item.promo_discount || 0))),
                 tax_rate: (item.tax_rate !== undefined && item.tax_rate !== null) ? Number(item.tax_rate) : 15,
                 warehouse_id: selectedWarehouseId,
-                is_returnable_bottle: Boolean(item.is_returnable_bottle)
+                is_returnable_bottle: Boolean(item.is_returnable_bottle),
+                batch_number: item.batch_number || null,
+                expiry_date: item.expiry_date || null,
+                batch_allocations: item.batch_allocations || null
             }));
 
             const totalInvoiceDiscount = processedCart.reduce((sum, item) => sum + (item.discount || 0) + (item.promo_discount || 0), 0);
@@ -880,24 +983,32 @@ export function usePosLogic() {
                         }
                     }
 
-                    // Deduct from warehouse and create inventory transaction history
+                    // Deduct from warehouse and create inventory transaction history with FEFO batches
                     for (let line of linesData) {
-                        const txNumber = 'TX-POS-' + Math.floor(Math.random() * 1000000);
-                        await supabase.from('inventory_transactions').insert([{
-                            transaction_number: txNumber,
-                            transaction_date: new Date().toISOString().split('T')[0],
-                            type: 'sales_deduction',
-                            quantity: line.quantity,
-                            item_id: line.item_id,
-                            partner_id: partnerId || null,
-                            unit_price: line.unit_price,
-                            total_price: (line as any).total_price || (line as any).total || (line.quantity * line.unit_price),
-                            status: 'approved',
-                            invoice_id: insertedInv?.id || null,
-                            warehouse_id: line.warehouse_id,
-                            shift_id: activeShift?.id,
-                            fleet_operation_id: fleetOpId
-                        }]);
+                        const allocations: any[] = (line.batch_allocations && line.batch_allocations.length > 0)
+                            ? line.batch_allocations
+                            : [{ batch_number: line.batch_number || null, expiry_date: line.expiry_date || null, quantity: line.quantity }];
+
+                        for (const alloc of allocations) {
+                            const txNumber = 'TX-POS-' + Math.floor(Math.random() * 1000000);
+                            await supabase.from('inventory_transactions').insert([{
+                                transaction_number: txNumber,
+                                transaction_date: new Date().toISOString().split('T')[0],
+                                type: 'sales_deduction',
+                                quantity: alloc.quantity,
+                                item_id: line.item_id,
+                                partner_id: partnerId || null,
+                                unit_price: line.unit_price,
+                                total_price: alloc.quantity * line.unit_price,
+                                status: 'approved',
+                                invoice_id: insertedInv?.id || null,
+                                warehouse_id: line.warehouse_id,
+                                shift_id: activeShift?.id,
+                                fleet_operation_id: fleetOpId,
+                                batch_number: alloc.batch_number || line.batch_number || null,
+                                expiry_date: alloc.expiry_date || line.expiry_date || null
+                            }]);
+                        }
 
                         const { data: invItem } = await supabase.from('warehouse_inventory')
                             .select('quantity, id').eq('item_id', line.item_id).eq('warehouse_id', line.warehouse_id).maybeSingle();

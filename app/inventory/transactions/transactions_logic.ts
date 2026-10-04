@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { showGlobalToast } from '@/lib/toast-context';
+import { showGlobalToast, useToast } from '@/lib/toast-context';
 import { useRealtimeListener, emitTableChange } from '@/lib/useRealtimeSync';
 import { executeApproveTransaction, executeUnapproveTransaction, syncAllWarehouseBalances } from '@/lib/inventory_engine';
 import { saveLocalExpiryMetadata } from '@/app/expiry-alerts/expiry_alerts_logic';
 
 export function useInventoryTransactionsLogic() {
+  const { showToast, showConfirm } = useToast();
   const [rawRecords, setRawRecords] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -176,8 +177,14 @@ export function useInventoryTransactionsLogic() {
       showGlobalToast("لا توجد حركات معلقة للاعتماد.", 'warning');
       return;
     }
-    const confirmApprove = confirm(`هل أنت متأكد من اعتماد جميع الحركات المخزنية المعلقة (${pendingList.length}) دفعة واحدة وتحديث أرصدة المستودعات وترحيل القيود؟`);
-    if (!confirmApprove) return;
+    const confirmed = await showConfirm({
+      title: "اعتماد الحركات المعلقة",
+      message: `هل أنت متأكد من اعتماد جميع الحركات المخزنية المعلقة (${pendingList.length}) دفعة واحدة وتحديث أرصدة المستودعات وترحيل القيود؟`,
+      confirmText: "نعم، اعتماد الكل",
+      cancelText: "إلغاء",
+      type: "warning"
+    });
+    if (!confirmed) return;
 
     // ⚡ تحديث تفاؤلي فوري في الـ State ليختفي الإشعار وتتغير الحالة على الفور بدون ريفرش
     const pendingIds = new Set(pendingList.map(t => t.id));
@@ -225,8 +232,14 @@ export function useInventoryTransactionsLogic() {
   };
 
   const handleUnapproveTransaction = async (transaction: any) => {
-    const confirmUnpost = confirm("⚠️ تحذير: سيتم فك اعتماد الحركة وإرجاع كمية المستودع (ومسح القيود إن وجدت). هل أنت متأكد؟");
-    if (!confirmUnpost) return;
+    const confirmed = await showConfirm({
+      title: "فك اعتماد الحركة المخزنية",
+      message: "⚠️ تحذير: سيتم فك اعتماد الحركة وإرجاع كمية المستودع (ومسح القيود إن وجدت). هل أنت متأكد؟",
+      confirmText: "نعم، فك الاعتماد",
+      cancelText: "إلغاء",
+      type: "danger"
+    });
+    if (!confirmed) return;
 
     // ⚡ تحديث تفاؤلي فوري
     setRawRecords(prev => prev.map(r => r.id === transaction.id ? { ...r, status: 'pending' } : r));
@@ -253,7 +266,14 @@ export function useInventoryTransactionsLogic() {
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذه الحركة نهائياً؟')) return;
+    const confirmed = await showConfirm({
+      title: "حذف الحركة المخزنية",
+      message: "هل أنت متأكد من حذف هذه الحركة نهائياً من سجلات النظام؟",
+      confirmText: "نعم، حذف نهائي",
+      cancelText: "إلغاء",
+      type: "danger"
+    });
+    if (!confirmed) return;
 
     // ⚡ تحديث تفاؤلي فوري
     setRawRecords(prev => prev.filter(r => r.id !== id));

@@ -366,3 +366,313 @@ export async function executeUnapproveTransaction(transactionId: string) {
 
   return { success: true };
 }
+
+// ============================================================================
+// ⏳ محرك تخصيص التشغيلات والصلاحيات بنظام FEFO (First-Expire, First-Out)
+// يتوافق مع المعايير الدوائية الصارمة لهيئة الغذاء والدواء السعودية (SFDA)
+// ============================================================================
+
+export interface ItemBatchInfo {
+  batch_number: string;
+  expiry_date: string | null;
+  production_date?: string | null;
+  available_qty: number;
+  days_left: number | null;
+  isExpired: boolean;
+  isNearExpiry: boolean;
+  alert_before_days: number;
+  status: 'expired' | 'critical' | 'warning' | 'safe' | 'no_date';
+}
+
+export interface FEFOAllocationItem {
+  batch_number: string;
+  expiry_date: string | null;
+  production_date?: string | null;
+  quantity: number;
+  days_left: number | null;
+  isNearExpiry: boolean;
+  isExpired: boolean;
+}
+
+export interface FEFOAllocationResult {
+  allocations: FEFOAllocationItem[];
+  fulfilledQty: number;
+  remainingQty: number;
+  primaryBatch: FEFOAllocationItem | null;
+  hasNearExpiry: boolean;
+  hasExpired: boolean;
+  minDaysLeft: number | null;
+}
+
+/**
+ * 🧮 حساب وتصنيف تشغيلات الصنف بنظام FEFO في الذاكرة
+ */
+export function calculateItemBatchesFEFO(
+  transactions: any[],
+  itemMeta?: { expiry_date?: string | null; batch_number?: string | null; production_date?: string | null; alert_before_days?: number },
+  targetWarehouseId?: string,
+  fallbackQty = 0
+): ItemBatchInfo[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const alertDays = Number(itemMeta?.alert_before_days || 60);
+
+  // batchMap: { [batchNumber]: { batch_number, expiry_date, production_date, in_qty, out_qty } }
+  const batchMap: Record<string, {
+    batch_number: string;
+    expiry_date: string | null;
+    production_date?: string | null;
+    in_qty: number;
+    out_qty: number;
+  }> = {};
+
+  (transactions || []).forEach(tx => {
+    const qty = Number(tx.quantity) || 0;
+    if (qty <= 0) return;
+
+    const rawBatch = (tx.batch_number || '').trim();
+    const batchKey = rawBatch || (itemMeta?.batch_number ? String(itemMeta.batch_number).trim() : 'DEFAULT');
+    const expiry = tx.expiry_date || itemMeta?.expiry_date || null;
+    const prod = tx.production_date || itemMeta?.production_date || null;
+
+    if (!batchMap[batchKey]) {
+      batchMap[batchKey] = {
+        batch_number: batchKey,
+        expiry_date: expiry,
+        production_date: prod,
+        in_qty: 0,
+        out_qty: 0
+      };
+    } else {
+      if (!batchMap[batchKey].expiry_date && expiry) {
+        batchMap[batchKey].expiry_date = expiry;
+      }
+      if (!batchMap[batchKey].production_date && prod) {
+        batchMap[batchKey].production_date = prod;
+      }
+    }
+
+    const srcWh = tx.warehouse_id || MAIN_WAREHOUSE_ID;
+    const destWh = tx.destination_warehouse_id;
+
+    const isMatchSrc = !targetWarehouseId || targetWarehouseId === 'all' || srcWh === targetWarehouseId;
+    const isMatchDest = targetWarehouseId && targetWarehouseId !== 'all' && destWh === targetWarehouseId;
+
+    if (['in', 'transfer_in', 'empty_return'].includes(tx.type)) {
+      if (isMatchSrc) {
+        batchMap[batchKey].in_qty += qty;
+      }
+    } else if (['out', 'transfer_out'].includes(tx.type)) {
+      if (isMatchSrc) {
+        batchMap[batchKey].out_qty += qty;
+      }
+      if (isMatchDest) {
+        // انتقال إلى المستودع المستهدف
+        batchMap[batchKey].in_qty += qty;
+      }
+    } else if (['sales_deduction', 'waste'].includes(tx.type)) {
+      if (isMatchSrc) {
+        batchMap[batchKey].out_qty += qty;
+      }
+    }
+  });
+
+  const result: ItemBatchInfo[] = [];
+
+  for (const bKey of Object.keys(batchMap)) {
+    const b = batchMap[bKey];
+    const netQty = Math.max(0, b.in_qty - b.out_qty);
+    if (netQty <= 0) continue;
+
+    let daysLeft: number | null = null;
+    let isExpired = false;
+    let isNearExpiry = false;
+    let status: ItemBatchInfo['status'] = 'no_date';
+
+    if (b.expiry_date) {
+      const expDate = new Date(b.expiry_date);
+      expDate.setHours(0, 0, 0, 0);
+      const diff = expDate.getTime() - today.getTime();
+      daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+
+      if (daysLeft <= 0) {
+        isExpired = true;
+        status = 'expired';
+      } else if (daysLeft <= alertDays) {
+        isNearExpiry = true;
+        status = 'critical';
+      } else if (daysLeft <= 90) {
+        status = 'warning';
+      } else {
+        status = 'safe';
+      }
+    }
+
+    result.push({
+      batch_number: b.batch_number,
+      expiry_date: b.expiry_date,
+      production_date: b.production_date,
+      available_qty: netQty,
+      days_left: daysLeft,
+      isExpired,
+      isNearExpiry,
+      alert_before_days: alertDays,
+      status
+    });
+  }
+
+  // إذا لم نجد أي تشغيلات مسجلة بالحركات ولكن يوجد رصيد فعلي للصنف، ننشئ تشغيلة افتراضية
+  if (result.length === 0 && fallbackQty > 0) {
+    const fallbackExp = itemMeta?.expiry_date || null;
+    let daysLeft: number | null = null;
+    let isExpired = false;
+    let isNearExpiry = false;
+    let status: ItemBatchInfo['status'] = 'no_date';
+
+    if (fallbackExp) {
+      const expDate = new Date(fallbackExp);
+      expDate.setHours(0, 0, 0, 0);
+      const diff = expDate.getTime() - today.getTime();
+      daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+
+      if (daysLeft <= 0) {
+        isExpired = true;
+        status = 'expired';
+      } else if (daysLeft <= alertDays) {
+        isNearExpiry = true;
+        status = 'critical';
+      } else if (daysLeft <= 90) {
+        status = 'warning';
+      } else {
+        status = 'safe';
+      }
+    }
+
+    result.push({
+      batch_number: itemMeta?.batch_number || 'DEFAULT',
+      expiry_date: fallbackExp,
+      production_date: itemMeta?.production_date || null,
+      available_qty: fallbackQty,
+      days_left: daysLeft,
+      isExpired,
+      isNearExpiry,
+      alert_before_days: alertDays,
+      status
+    });
+  }
+
+  // 🎯 ترتيب FEFO الصارم: الأقرب انتهاءً أولاً (First-Expire, First-Out)
+  result.sort((a, b) => {
+    // 1. الأصناف التي لها تاريخ صلاحية تأتي أولاً مرتبة تصاعدياً
+    if (a.expiry_date && b.expiry_date) {
+      return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+    }
+    if (a.expiry_date && !b.expiry_date) return -1;
+    if (!a.expiry_date && b.expiry_date) return 1;
+    // 2. إذا لم يكن لأي منهما تاريخ، ترتيب حسب رقم التشغيلة
+    return a.batch_number.localeCompare(b.batch_number);
+  });
+
+  return result;
+}
+
+/**
+ * 📦 جلب تشغيلات صنف معين بنظام FEFO مع دعم الأوفلاين
+ */
+export async function getItemBatchesFEFO(
+  itemId: string,
+  warehouseId?: string,
+  fallbackQty = 0,
+  fallbackMeta?: { expiry_date?: string | null; batch_number?: string | null; alert_before_days?: number }
+): Promise<ItemBatchInfo[]> {
+  try {
+    const { data: txns, error } = await supabase
+      .from('inventory_transactions')
+      .select('type, quantity, batch_number, expiry_date, production_date, warehouse_id, destination_warehouse_id, status')
+      .eq('item_id', itemId)
+      .eq('status', 'approved');
+
+    if (error) throw error;
+
+    return calculateItemBatchesFEFO(txns || [], fallbackMeta, warehouseId, fallbackQty);
+  } catch (err) {
+    console.warn(`[FEFO Engine] تعذر جلب حركات التشغيلات للصنف ${itemId} سحابياً، سيتم استخدام البيانات المحلية:`, err);
+    return calculateItemBatchesFEFO([], fallbackMeta, warehouseId, fallbackQty);
+  }
+}
+
+/**
+ * 🎯 تخصيص الكمية المطلوبة للبيع آلياً من التشغيلات بنظام FEFO
+ * يسحب آلياً من التشغيلة الأقرب انتهاءً، مع منع سحب المنتهي الصلاحية للمستهلكين
+ */
+export function allocateItemQtyFEFO(
+  batches: ItemBatchInfo[],
+  requestedQty: number,
+  allowExpired = false
+): FEFOAllocationResult {
+  if (requestedQty <= 0) {
+    return {
+      allocations: [],
+      fulfilledQty: 0,
+      remainingQty: 0,
+      primaryBatch: null,
+      hasNearExpiry: false,
+      hasExpired: false,
+      minDaysLeft: null
+    };
+  }
+
+  // استبعاد التشغيلات المنتهية للبيع إلا إذا سُمح بذلك صراحة
+  const validBatches = allowExpired ? batches : batches.filter(b => !b.isExpired);
+  const hasExpired = batches.some(b => b.isExpired);
+
+  let remaining = requestedQty;
+  let fulfilled = 0;
+  const allocations: FEFOAllocationItem[] = [];
+  let minDaysLeft: number | null = null;
+  let hasNearExpiry = false;
+
+  for (const batch of validBatches) {
+    if (batch.available_qty <= 0) continue;
+
+    const take = Math.min(batch.available_qty, remaining);
+    if (take <= 0) continue;
+
+    if (batch.days_left !== null) {
+      if (minDaysLeft === null || batch.days_left < minDaysLeft) {
+        minDaysLeft = batch.days_left;
+      }
+    }
+    if (batch.isNearExpiry) {
+      hasNearExpiry = true;
+    }
+
+    allocations.push({
+      batch_number: batch.batch_number,
+      expiry_date: batch.expiry_date,
+      production_date: batch.production_date,
+      quantity: take,
+      days_left: batch.days_left,
+      isNearExpiry: batch.isNearExpiry,
+      isExpired: batch.isExpired
+    });
+
+    remaining -= take;
+    fulfilled += take;
+
+    if (remaining <= 0) break;
+  }
+
+  const primaryBatch = allocations.length > 0 ? allocations[0] : null;
+
+  return {
+    allocations,
+    fulfilledQty: fulfilled,
+    remainingQty: remaining,
+    primaryBatch,
+    hasNearExpiry,
+    hasExpired,
+    minDaysLeft
+  };
+}
