@@ -1,13 +1,14 @@
 "use client";
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { formatCurrency, formatDate } from '@/lib/helpers';
-import { THEME } from '@/lib/theme';
+import { formatCurrency, formatDate, tafqeet } from '@/lib/helpers';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface StatementPrintModalProps {
     isOpen: boolean;
     onClose: () => void;
     partnerName: string;
+    partnerType?: string;
     dateFrom: string;
     dateTo: string;
     openingBalance: number;
@@ -22,7 +23,7 @@ interface StatementPrintModalProps {
 }
 
 export default function StatementPrintModal({
-    isOpen, onClose, partnerName, dateFrom, dateTo,
+    isOpen, onClose, partnerName, partnerType = 'شريك', dateFrom, dateTo,
     openingBalance, currentBalance, totalDebit, totalCredit, 
     attendanceCount = 0, totalLaborAmount = 0, totalViolations = 0, totalPayments = 0,
     statementLines = []
@@ -31,12 +32,10 @@ export default function StatementPrintModal({
     const [mounted, setMounted] = useState(false);
     const [printFormat, setPrintFormat] = useState<'a4' | 'thermal'>('a4');
 
-    // 🛡️ تفعيل المودال بشكل آمن لمنع أخطاء الـ SSR في Next.js
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    // 🛡️ منع تمرير الصفحة الخلفية عند فتح المودال
     useEffect(() => {
         if (isOpen) document.body.style.overflow = 'hidden';
         else document.body.style.overflow = 'auto';
@@ -46,323 +45,504 @@ export default function StatementPrintModal({
     if (!isOpen || !mounted) return null;
 
     const handlePrint = () => {
+        const titleSafe = partnerName ? `كشف_حساب_${partnerName.replace(/\s+/g, '_')}` : 'كشف_حساب_شريك';
+        document.title = titleSafe;
         window.print();
     };
 
     const safeLines = Array.isArray(statementLines) ? [...statementLines] : [];
-    const printLines = safeLines.reverse();
+    // Lines in chronological order for official statements
+    const printLines = safeLines.slice().reverse();
 
-    // 🚀 تصميم المودال بالكامل
+    const isCreditBalance = currentBalance >= 0;
+    const balanceAbsolute = Math.abs(currentBalance);
+    const tafqeetText = tafqeet(balanceAbsolute);
+    const balanceStatusLabel = isCreditBalance ? 'رصيد دائن مستحق له' : 'رصيد مدين مستحق عليه';
+
+    // Official QR payload
+    const qrPayload = JSON.stringify({
+        org: "صيدلية تاج المودة البيطرية",
+        doc: "كشف حساب شريك تحليلي",
+        partner: partnerName || '---',
+        type: partnerType,
+        period: `${dateFrom || 'البداية'} إلى ${dateTo || 'تاريخه'}`,
+        opening_bal: openingBalance.toFixed(2),
+        total_debit: totalDebit.toFixed(2),
+        total_credit: totalCredit.toFixed(2),
+        closing_bal: currentBalance.toFixed(2),
+        status: isCreditBalance ? "CREDIT" : "DEBIT",
+        verified: true,
+        issued_at: new Date().toISOString()
+    });
+
     const modalContent = (
-        <div className="print-modal-overlay">
-            <div className="print-modal-content">
+        <div className="statement-print-overlay">
+            <div className="statement-print-modal">
                 
+                {/* شريط التحكم العلوي (غير مطبوع) */}
                 <div className="no-print controls-bar">
-                    <button type="button" onClick={handlePrint} className="btn-print">🖨️ طباعة المستند</button>
-                    <button type="button" onClick={() => setPrintFormat(f => f === 'a4' ? 'thermal' : 'a4')} className="btn-print" style={{ background: '#f59e0b', color: 'white' }}>
-                        تغيير للطباعة {printFormat === 'a4' ? 'الحرارية 🧾' : 'A4 📄'}
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <button type="button" onClick={handlePrint} className="btn-royal-print">
+                            🖨️ طباعة الكشف الرسمي
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => setPrintFormat(f => f === 'a4' ? 'thermal' : 'a4')} 
+                            className="btn-royal-format"
+                        >
+                            {printFormat === 'a4' ? '🧾 التحويل للطباعة الحرارية (80mm)' : '📄 التحويل للطباعة الورقية (A4)'}
+                        </button>
+                    </div>
+                    <button type="button" onClick={onClose} className="btn-royal-close">
+                        إغلاق ✕
                     </button>
-                    <button type="button" onClick={onClose} className="btn-close">إغلاق ✕</button>
                 </div>
 
                 {printFormat === 'a4' ? (
-                <div className="a4-paper" ref={printRef} id="printable-area">
+                /* =================== تصميم ورقة A4 الملكية =================== */
+                <div className="a4-sheet" ref={printRef} id="printable-statement">
                     
-                    <div className="print-header">
-                        <div className="company-info">
-                            <h1 style={{ color: '#122946' }}>صيدلية تاج المودة البيطرية</h1>
-                            <p>إدارة الحسابات العامة - تقرير أداء مالي</p>
+                    {/* ترويسة التقرير الملكية */}
+                    <div className="royal-report-header">
+                        <div className="company-meta">
+                            <div className="brand-badge">
+                                <span className="crown-icon">👑</span>
+                                <span className="org-name">صيدلية تاج المودة البيطرية</span>
+                            </div>
+                            <div className="org-sub">سجل تجاري: 1010000000 | الرقم الضريبي: 310000000000003</div>
+                            <div className="org-dept">إدارة الحسابات العامة والرقابة المالية - المملكة العربية السعودية</div>
                         </div>
-                        <div className="report-title">
-                            <h2>كشف حساب تفصيلي</h2>
-                            <span className="date-issued">تاريخ الإصدار: {new Date().toLocaleDateString('ar-SA')}</span>
+
+                        <div className="qr-box-header">
+                            <QRCodeSVG 
+                                value={qrPayload} 
+                                size={88} 
+                                level="M" 
+                                fgColor="#1E130B"
+                                bgColor="#FFFFFF" 
+                            />
+                            <div className="qr-caption">كشف مالي مشفر ومعتمد</div>
                         </div>
                     </div>
 
-                    <div className="header-divider"></div>
+                    <div className="gold-divider-line"></div>
 
-                    <div className="partner-info-box">
-                        <div className="info-row">
-                            <strong> الموظف / الجهة:</strong>
-                            <span style={{ fontSize: '18px', color: '#122946', fontWeight: 900 }}>{partnerName || '---'}</span>
+                    {/* عنوان الكشف وتاريخ الإصدار */}
+                    <div className="title-banner">
+                        <div className="statement-heading">
+                            <h2>كشف حساب مالي تحليلي</h2>
+                            <span className="statement-code">STATEMENT LEDGER REPORT</span>
                         </div>
-                        <div className="info-row">
-                            <strong>الفترة المحددة:</strong>
+                        <div className="issue-meta">
+                            <div><strong>تاريخ الإصدار:</strong> {new Date().toLocaleDateString('ar-SA')}</div>
+                            <div><strong>وقت الطباعة:</strong> {new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</div>
+                        </div>
+                    </div>
+
+                    {/* بيانات الشريك والفترة */}
+                    <div className="partner-details-card">
+                        <div className="detail-item">
+                            <label>اسم الشريك / الحساب:</label>
+                            <span className="partner-name-highlight">{partnerName || '---'}</span>
+                        </div>
+                        <div className="detail-item">
+                            <label>الفترة المحاسبية:</label>
                             <span>
-                                {dateFrom ? `من ${formatDate(dateFrom)} ` : 'من بداية التعامل '}
+                                {dateFrom ? `من ${formatDate(dateFrom)} ` : 'من بداية الحركات '}
                                 {dateTo ? `إلى ${formatDate(dateTo)}` : 'حتى تاريخه'}
+                            </span>
+                        </div>
+                        <div className="detail-item">
+                            <label>العملة الرسمية:</label>
+                            <span>ريال سعودي (SAR)</span>
+                        </div>
+                        <div className="detail-item">
+                            <label>حالة الرصيد:</label>
+                            <span className={`status-pill ${isCreditBalance ? 'credit' : 'debit'}`}>
+                                {balanceStatusLabel}
                             </span>
                         </div>
                     </div>
 
-                    {/* 🚀 1. ملخص الحركات (التشغيلي) */}
-                    <div className="summary-print-grid operational-grid">
+                    {/* شبكة الأرصدة التراكمية */}
+                    <div className="balances-summary-grid">
                         <div className="summary-box">
-                            <small>أيام الحضور (الكمية)</small>
-                            <b style={{ color: '#122946' }}>{attendanceCount} يوم</b>
+                            <span className="box-lbl">الرصيد الافتتاحي</span>
+                            <span className={`box-val ${openingBalance >= 0 ? 'text-success' : 'text-danger'}`}>
+                                {formatCurrency(Math.abs(openingBalance))}
+                            </span>
+                            <small className="box-hint">{openingBalance >= 0 ? '(له / دائن)' : '(عليه / مدين)'}</small>
                         </div>
                         <div className="summary-box">
-                            <small>إجمالي يوميات العمالة</small>
-                            <b style={{ color: '#122946' }}>{formatCurrency(totalLaborAmount)}</b>
+                            <span className="box-lbl">إجمالي الحركات المدينة (عليه)</span>
+                            <span className="box-val text-danger">{formatCurrency(totalDebit)}</span>
+                            <small className="box-hint">المسحوبات والفواتير</small>
                         </div>
                         <div className="summary-box">
-                            <small>إجمالي الغرامات (عليه)</small>
-                            <b style={{ color: THEME.danger }}>{formatCurrency(totalViolations)}</b>
+                            <span className="box-lbl">إجمالي الحركات الدائنة (له)</span>
+                            <span className="box-val text-success">{formatCurrency(totalCredit)}</span>
+                            <small className="box-hint">الدفعات والمستحقات</small>
                         </div>
-                        <div className="summary-box">
-                            <small>الدفعات المنصرفة</small>
-                            <b style={{ color: THEME.primary }}>{formatCurrency(totalPayments)}</b>
+                        <div className="summary-box highlight-box">
+                            <span className="box-lbl">صافي الرصيد الختامي</span>
+                            <span className={`box-val big ${isCreditBalance ? 'text-success' : 'text-danger'}`}>
+                                {formatCurrency(balanceAbsolute)}
+                            </span>
+                            <small className="box-hint strong">{isCreditBalance ? '(مستحق له)' : '(مستحق عليه)'}</small>
                         </div>
                     </div>
 
-                    {/* 🚀 2. ملخص الأرصدة (المالي الشامل) */}
-                    <div className="summary-print-grid financial-grid">
-                        <div className="summary-box">
-                            <small>رصيد افتتاحي</small>
-                            <b style={{ color: openingBalance >= 0 ? THEME.success : THEME.danger }}>
-                                {formatCurrency(Math.abs(openingBalance))} {openingBalance >= 0 ? '(له)' : '(عليه)'}
-                            </b>
-                        </div>
-                        <div className="summary-box">
-                            <small>إجمالي الدائن (له)</small>
-                            <b style={{ color: THEME.success }}>{formatCurrency(totalCredit)}</b>
-                        </div>
-                        <div className="summary-box">
-                            <small>إجمالي المدين (عليه)</small>
-                            <b style={{ color: THEME.danger }}>{formatCurrency(totalDebit)}</b>
-                        </div>
-                        <div className="summary-box final-balance">
-                            <small>الرصيد الصافي (النهائي)</small>
-                            <b style={{ color: currentBalance >= 0 ? THEME.success : THEME.danger }}>
-                                {formatCurrency(Math.abs(currentBalance))} {currentBalance >= 0 ? '(له)' : '(عليه)'}
-                            </b>
-                        </div>
+                    {/* تفقيط المبلغ كتابياً */}
+                    <div className="tafqeet-banner">
+                        <span className="tafqeet-label">المبلغ كتابةً:</span>
+                        <span className="tafqeet-text">فقط {tafqeetText} ريال سعودي لا غير {isCreditBalance ? '(رصيد مستحق له)' : '(رصيد مدين مستحق عليه)'}.</span>
                     </div>
 
-                    <table className="print-table">
+                    {/* جدول الحركات التفصيلية */}
+                    <table className="royal-statement-table">
                         <thead>
                             <tr>
                                 <th style={{ width: '12%' }}>التاريخ</th>
-                                <th style={{ width: '15%' }}>نوع الحركة</th>
-                                <th style={{ width: '35%' }}>البيان / الوصف</th>
+                                <th style={{ width: '14%' }}>نوع السند</th>
+                                <th style={{ width: '38%' }}>البيان والتفاصيل المحاسبية</th>
                                 <th style={{ width: '12%' }}>مدين (عليه)</th>
                                 <th style={{ width: '12%' }}>دائن (له)</th>
-                                <th style={{ width: '14%' }}>الرصيد التراكمي</th>
+                                <th style={{ width: '12%' }}>الرصيد التراكمي</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr className="opening-row">
-                                <td>{dateFrom ? formatDate(dateFrom) : '---'}</td>
-                                <td>رصيد سابق</td>
-                                <td><strong>رصيد افتتاحي للمبالغ السابقة</strong></td>
-                                <td>{openingBalance < 0 ? formatCurrency(Math.abs(openingBalance)) : '-'}</td>
-                                <td>{openingBalance > 0 ? formatCurrency(openingBalance) : '-'}</td>
-                                <td dir="ltr" className="balance-cell" style={{ color: openingBalance >= 0 ? THEME.success : THEME.danger }}>
-                                    {formatCurrency(Math.abs(openingBalance))}
-                                    <span className="balance-dir">{openingBalance >= 0 ? '(له)' : '(عليه)'}</span>
+                            {/* صف الرصيد الافتتاحي */}
+                            <tr className="opening-balance-row">
+                                <td style={{ fontWeight: 800 }}>{dateFrom ? formatDate(dateFrom) : '---'}</td>
+                                <td><span className="badge-type gold">رصيد افتتاحي</span></td>
+                                <td className="desc-text font-bold">🔹 رصيد سابق منقول ما قبل بداية الفترة</td>
+                                <td className="num-col text-danger">{openingBalance < 0 ? formatCurrency(Math.abs(openingBalance)) : '-'}</td>
+                                <td className="num-col text-success">{openingBalance > 0 ? formatCurrency(openingBalance) : '-'}</td>
+                                <td className="num-col balance-col" dir="ltr" style={{ color: openingBalance >= 0 ? '#059669' : '#A8573C' }}>
+                                    {formatCurrency(Math.abs(openingBalance))} {openingBalance >= 0 ? '(له)' : '(عليه)'}
                                 </td>
                             </tr>
 
+                            {/* صفوف الحركات */}
                             {printLines.map((line: any, idx: number) => (
                                 <tr key={line.id || idx}>
-                                    <td>{formatDate(line.date)}</td>
-                                    <td>{line.v_type}</td>
-                                    <td className="desc-cell">{line.description}</td>
-                                    <td style={{ color: line.debit > 0 ? THEME.danger : '#000' }}>
+                                    <td style={{ fontWeight: 700 }}>{formatDate(line.date)}</td>
+                                    <td>
+                                        <span className={`badge-type ${
+                                            line.v_type?.includes('صرف') || line.v_type?.includes('غرامة') ? 'red' : 
+                                            line.v_type?.includes('قبض') || line.v_type?.includes('يومية') ? 'green' : 'neutral'
+                                        }`}>
+                                            {line.v_type || 'قيد يومية'}
+                                        </span>
+                                    </td>
+                                    <td className="desc-text">{line.description}</td>
+                                    <td className="num-col" style={{ color: line.debit > 0 ? '#A8573C' : '#6b7280' }}>
                                         {line.debit > 0 ? formatCurrency(line.debit) : '-'}
                                     </td>
-                                    <td style={{ color: line.credit > 0 ? THEME.success : '#000' }}>
+                                    <td className="num-col" style={{ color: line.credit > 0 ? '#059669' : '#6b7280' }}>
                                         {line.credit > 0 ? formatCurrency(line.credit) : '-'}
                                     </td>
-                                    <td dir="ltr" className="balance-cell" style={{ color: line.balance >= 0 ? THEME.success : THEME.danger }}>
-                                        {formatCurrency(Math.abs(line.balance))}
-                                        <span className="balance-dir">{line.balance >= 0 ? '(له)' : '(عليه)'}</span>
+                                    <td className="num-col balance-col" dir="ltr" style={{ color: line.balance >= 0 ? '#059669' : '#A8573C' }}>
+                                        {formatCurrency(Math.abs(line.balance))} {line.balance >= 0 ? '(له)' : '(عليه)'}
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
+                        <tfoot>
+                            <tr className="totals-row">
+                                <td colSpan={3} style={{ textAlign: 'left', paddingLeft: '20px', fontWeight: 900 }}>الإجماليات وحركة الفترة:</td>
+                                <td className="num-col text-danger">{formatCurrency(totalDebit)}</td>
+                                <td className="num-col text-success">{formatCurrency(totalCredit)}</td>
+                                <td className="num-col balance-col" dir="ltr" style={{ color: isCreditBalance ? '#059669' : '#A8573C', fontWeight: 900 }}>
+                                    {formatCurrency(balanceAbsolute)} {isCreditBalance ? '(له)' : '(عليه)'}
+                                </td>
+                            </tr>
+                        </tfoot>
                     </table>
 
-                    {/* 🚀 التواقيع تم إجبارها لتكون في نهاية الصفحة تماماً */}
-                    <div className="print-signatures">
-                        <div className="sig-box"><p>المحاسب</p><div className="sig-line"></div></div>
-                        <div className="sig-box"><p>المراجعة</p><div className="sig-line"></div></div>
-                        <div className="sig-box"><p>المدير المالي</p><div className="sig-line"></div></div>
-                        <div className="sig-box"><p>توقيع المورد / الشريك</p><div className="sig-line"></div></div>
+                    {/* تواقيع الاعتماد الرسمية */}
+                    <div className="royal-signatures-footer">
+                        <div className="sig-item">
+                            <span className="sig-title">المحاسب المالي</span>
+                            <div className="sig-space"></div>
+                            <span className="sig-dots">..............................</span>
+                        </div>
+                        <div className="sig-item">
+                            <span className="sig-title">المراجعة والتدقيق</span>
+                            <div className="sig-space"></div>
+                            <span className="sig-dots">..............................</span>
+                        </div>
+                        <div className="sig-item">
+                            <span className="sig-title">المدير المالي</span>
+                            <div className="sig-space"></div>
+                            <span className="sig-dots">..............................</span>
+                        </div>
+                        <div className="sig-item">
+                            <span className="sig-title">مصادقة وتوقيع الشريك</span>
+                            <div className="sig-space"></div>
+                            <span className="sig-dots">..............................</span>
+                        </div>
                     </div>
+
+                    {/* تذييل الورقة */}
+                    <div className="report-footer-note">
+                        <span>صدر هذا الكشف رسمياً وآلياً بواسطة نظام تاج المودة ERP & POS - غير صالح بدون الاعتمادات الرسمية.</span>
+                    </div>
+
                 </div>
                 ) : (
-                <div className="thermal-preview-box">
-                    <div style={{ fontSize: '18px', fontWeight: 900, marginBottom: '5px' }}>صيدلية تاج المودة البيطرية</div>
-                    <div>كشف حساب | Account Statement</div>
-                    <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
-                    
-                    <div style={{ textAlign: 'right', marginBottom: '10px' }}>
-                        <div>الجهة: {partnerName || '---'}</div>
-                        <div>الفترة: {dateFrom ? formatDate(dateFrom) : 'البداية'} - {dateTo ? formatDate(dateTo) : 'تاريخه'}</div>
-                        <div>تاريخ الإصدار: {new Date().toLocaleDateString('ar-SA')}</div>
+                /* =================== تصميم الإيصال الحراري 80mm =================== */
+                <div className="thermal-receipt-container" id="printable-statement">
+                    <div className="th-center">
+                        <div className="th-title">صيدلية تاج المودة البيطرية</div>
+                        <div className="th-sub">كشف حساب مالي مختصر</div>
+                        <div className="th-dash">--------------------------------</div>
                     </div>
 
-                    <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
-
-                    <div style={{ textAlign: 'right', marginBottom: '10px' }}>
-                        <div>رصيد افتتاحي: {formatCurrency(Math.abs(openingBalance))} {openingBalance >= 0 ? '(له)' : '(عليه)'}</div>
+                    <div className="th-meta">
+                        <div><strong>الجهة:</strong> {partnerName || '---'}</div>
+                        <div><strong>الفترة:</strong> {dateFrom ? formatDate(dateFrom) : 'البداية'} إلى {dateTo ? formatDate(dateTo) : 'تاريخه'}</div>
+                        <div><strong>تاريخ الطباعة:</strong> {new Date().toLocaleDateString('ar-SA')}</div>
                     </div>
 
-                    <table>
+                    <div className="th-dash">--------------------------------</div>
+
+                    <div className="th-balances">
+                        <div>الرصيد الافتتاحي: {formatCurrency(Math.abs(openingBalance))} {openingBalance >= 0 ? '(له)' : '(عليه)'}</div>
+                        <div>إجمالي المدين (عليه): {formatCurrency(totalDebit)}</div>
+                        <div>إجمالي الدائن (له): {formatCurrency(totalCredit)}</div>
+                    </div>
+
+                    <div className="th-dash">--------------------------------</div>
+
+                    <table className="th-table">
                         <thead>
                             <tr>
                                 <th>التاريخ</th>
                                 <th>البيان</th>
-                                <th>له/عليه</th>
+                                <th>المبلغ</th>
                             </tr>
                         </thead>
                         <tbody>
                             {printLines.map((line: any, idx: number) => {
-                                const isCredit = line.credit > 0;
-                                const amt = isCredit ? line.credit : line.debit;
+                                const isCr = line.credit > 0;
+                                const amt = isCr ? line.credit : line.debit;
                                 return (
                                     <tr key={idx}>
                                         <td>{formatDate(line.date)}</td>
                                         <td style={{ textAlign: 'right' }}>{line.description}</td>
-                                        <td>{amt.toFixed(2)} {isCredit ? 'له' : 'عليه'}</td>
+                                        <td dir="ltr">{amt.toFixed(2)} {isCr ? 'له' : 'عليه'}</td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
 
-                    <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
+                    <div className="th-dash">--------------------------------</div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginTop: '10px', fontWeight: 'bold' }}>
-                        <span>الرصيد النهائي:</span>
-                        <span>{formatCurrency(Math.abs(currentBalance))} {currentBalance >= 0 ? '(له)' : '(عليه)'}</span>
+                    <div className="th-final">
+                        <span>الرصيد الصافي:</span>
+                        <span>{formatCurrency(balanceAbsolute)} {isCreditBalance ? '(له)' : '(عليه)'}</span>
                     </div>
 
-                    <div style={{ borderBottom: '1px dashed #000', margin: '10px 0' }}></div>
+                    <div className="th-tafqeet">
+                        فقط {tafqeetText} ريال لا غير.
+                    </div>
 
-                    <div style={{ fontSize: '11px', marginTop: '10px', textAlign: 'center' }}>
-                        تم الإصدار عبر نظام تاج المودة
+                    <div className="th-qr">
+                        <QRCodeSVG value={qrPayload} size={90} level="M" />
+                    </div>
+
+                    <div className="th-footer">
+                        نظام تاج المودة لإدارة الصيدليات والأسطول
                     </div>
                 </div>
                 )}
+
             </div>
 
             <style>{`
-                .print-modal-overlay { position: fixed; inset: 0; background: rgba(44, 34, 27, 0.85); backdrop-filter: blur(8px); z-index: 9999999; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; padding: 40px 20px; direction: rtl; }
-                .print-modal-content { width: 100%; max-width: 900px; animation: fadeIn 0.3s ease-out; }
-                
-                @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-                .controls-bar { display: flex; justify-content: space-between; margin-bottom: 20px; background: white; border: 1px solid rgba(40, 145, 200, 0.3); padding: 15px 25px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: sticky; top: 10px; z-index: 10; }
-                .btn-print { background: linear-gradient(135deg, #2891C8 0%, #a48141 100%); color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 15px rgba(40, 145, 200, 0.3); }
-                .btn-print:hover { transform: translateY(-2px); filter: brightness(1.1); }
-                .btn-close { background: #fdfaf6; color: #4a3b32; border: 1px solid #2891C8; padding: 12px 24px; border-radius: 12px; font-weight: 900; font-size: 16px; cursor: pointer; transition: 0.2s; }
-                .btn-close:hover { background: #eaddcf; }
-
-                /* 🚀 Thermal Styles */
-                .thermal-preview-box {
-                    width: 80mm; background: white; padding: 10px; margin: 0 auto; color: black;
-                    font-family: 'Courier New', Courier, monospace; font-size: 13px; font-weight: bold;
-                    text-align: center; direction: rtl; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-                    min-height: auto;
+                .statement-print-overlay {
+                    position: fixed; inset: 0; background: rgba(30, 19, 11, 0.88);
+                    backdrop-filter: blur(8px); z-index: 9999999; display: flex;
+                    justify-content: center; align-items: flex-start; overflow-y: auto;
+                    padding: 30px 15px; direction: rtl; font-family: 'Cairo', sans-serif;
                 }
-                .thermal-preview-box table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                .thermal-preview-box th, .thermal-preview-box td { border-bottom: 1px dashed #000; padding: 4px 0; font-size: 12px; }
-
-                /* 🚀 جعل الورقة تتمدد كـ Flex Column لدفع التواقيع للأسفل */
-                .a4-paper { 
-                    background: white; padding: 40px 50px; border-radius: 8px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); 
-                    min-height: 297mm; color: #122946; margin-bottom: 40px; 
-                    display: flex; flex-direction: column; 
+                .statement-print-modal { width: 100%; max-width: 960px; }
+                .controls-bar {
+                    display: flex; justify-content: space-between; align-items: center;
+                    margin-bottom: 20px; background: #FFFFFF; border: 1px solid rgba(194, 155, 98, 0.3);
+                    padding: 14px 22px; border-radius: 16px; box-shadow: 0 8px 25px rgba(30, 19, 11, 0.12);
+                    position: sticky; top: 10px; z-index: 100;
                 }
-                
-                .print-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-                .company-info h1 { margin: 0 0 5px 0; font-size: 22px; font-weight: 900; color: #122946; }
-                .company-info p { margin: 0; color: #8a7a6b; font-size: 14px; font-weight: 700; }
-                .report-title h2 { margin: 0 0 5px 0; font-size: 26px; color: ${THEME.goldAccent}; font-weight: 900; border-bottom: 3px solid ${THEME.goldAccent}; padding-bottom: 5px; }
-                .date-issued { display: block; font-size: 12px; color: #8a7a6b; font-weight: 700; }
-
-                .header-divider { height: 4px; background: linear-gradient(90deg, #122946, ${THEME.goldAccent}, #122946); margin-bottom: 25px; border-radius: 4px; }
-
-                .partner-info-box { background: #fdfaf6; border: 1px solid #eaddcf; padding: 20px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; }
-                .info-row { display: flex; flex-direction: column; gap: 5px; }
-                .info-row strong { color: #8a7a6b; font-size: 13px; }
-                .info-row span { font-weight: 800; font-size: 15px; color: #122946; }
-
-                /* 🚀 تعديلات الـ Grid لتقسيم الملخصات */
-                .summary-print-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 15px; }
-                .financial-grid { margin-bottom: 30px; }
-                .summary-box { background: white; border: 2px solid #eaddcf; padding: 15px; border-radius: 12px; text-align: center; }
-                
-                /* تمييز الملخص التشغيلي بلون خفيف */
-                .operational-grid .summary-box { background: rgba(40, 145, 200, 0.05); border-color: rgba(40, 145, 200, 0.2); }
-                
-                .summary-box.final-balance { border-color: ${THEME.goldAccent}; background: #fdfaf6; }
-                .summary-box small { display: block; color: #8a7a6b; font-weight: 900; font-size: 11px; margin-bottom: 5px; }
-                .summary-box b { font-size: 16px; font-weight: 900; }
-
-                .print-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; font-size: 12px; }
-                .print-table th { background: #fdfaf6; color: #122946; font-weight: 900; padding: 14px 10px; border: none; border-bottom: 2px solid ${THEME.goldAccent}; text-align: center; }
-                .print-table td { padding: 12px 10px; border: none; text-align: center; font-weight: 700; color: #122946; }
-                
-                .print-table tbody tr:nth-child(even) td { background-color: rgba(40, 145, 200, 0.06); }
-                .print-table .opening-row td { background-color: transparent; font-weight: 900; color: #122946; border-bottom: 1px dashed rgba(0,0,0,0.1); }
-                
-                .print-table .desc-cell { text-align: right; font-weight: 800; }
-                .balance-cell { font-weight: 900 !important; }
-                .balance-dir { display: inline-block; margin-right: 4px; font-size: 11px; color: #8a7a6b; }
-
-                /* 🚀 دفع التواقيع لنهاية الحاوية (أسفل الصفحة) */
-                .print-signatures { 
-                    display: flex; justify-content: space-between; 
-                    margin-top: auto; 
-                    padding-top: 50px; 
-                    page-break-inside: avoid; 
+                .btn-royal-print {
+                    background: linear-gradient(135deg, #C29B62 0%, #a48141 100%); color: #FFFFFF;
+                    border: none; padding: 10px 22px; border-radius: 12px; font-weight: 900;
+                    font-size: 14px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 14px rgba(194, 155, 98, 0.35);
+                    display: flex; align-items: center; gap: 8px;
                 }
-                .sig-box { text-align: center; width: 22%; }
-                .sig-box p { font-size: 14px; font-weight: 900; color: #8a7a6b; margin-bottom: 60px; }
-                .sig-line { border-bottom: 1px dashed #2891C8; width: 100%; }
+                .btn-royal-print:hover { transform: translateY(-1px); filter: brightness(1.06); }
+                .btn-royal-format {
+                    background: #FDFBF7; color: #1E130B; border: 1px solid rgba(194, 155, 98, 0.4);
+                    padding: 10px 18px; border-radius: 12px; font-weight: 800; font-size: 13px;
+                    cursor: pointer; transition: 0.2s;
+                }
+                .btn-royal-format:hover { background: #f7f2ea; }
+                .btn-royal-close {
+                    background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;
+                    padding: 10px 20px; border-radius: 12px; font-weight: 900; font-size: 14px;
+                    cursor: pointer; transition: 0.2s;
+                }
+                .btn-royal-close:hover { background: #fecaca; }
+
+                /* ================= A4 Sheet Styles ================= */
+                .a4-sheet {
+                    background: #FFFFFF; padding: 40px 45px; border-radius: 12px;
+                    box-shadow: 0 20px 45px rgba(30, 19, 11, 0.2); min-height: 297mm;
+                    color: #1E130B; margin-bottom: 40px; display: flex; flex-direction: column;
+                }
+                .royal-report-header { display: flex; justify-content: space-between; align-items: center; }
+                .company-meta { display: flex; flex-direction: column; gap: 4px; }
+                .brand-badge { display: flex; align-items: center; gap: 8px; }
+                .crown-icon { font-size: 26px; }
+                .org-name { font-size: 22px; font-weight: 900; color: #1E130B; }
+                .org-sub { font-size: 12px; color: #6b7280; font-weight: 700; }
+                .org-dept { font-size: 12px; color: #C29B62; font-weight: 800; }
+                .qr-box-header { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+                .qr-caption { font-size: 10px; font-weight: 800; color: #6b7280; text-align: center; }
+                .gold-divider-line {
+                    height: 3px; background: linear-gradient(90deg, #1E130B, #C29B62, #1E130B);
+                    margin: 18px 0; border-radius: 3px;
+                }
+                .title-banner { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
+                .statement-heading h2 { margin: 0; font-size: 22px; font-weight: 900; color: #1E130B; }
+                .statement-code { font-size: 11px; font-weight: 800; color: #C29B62; letter-spacing: 1px; }
+                .issue-meta { font-size: 11px; color: #4b5563; font-weight: 700; text-align: left; }
+                .partner-details-card {
+                    background: #FDFBF7; border: 1px solid rgba(194, 155, 98, 0.25);
+                    padding: 14px 18px; border-radius: 12px; margin-bottom: 18px;
+                    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;
+                }
+                .detail-item { display: flex; flex-direction: column; gap: 3px; }
+                .detail-item label { font-size: 11px; font-weight: 800; color: #786b59; }
+                .detail-item span { font-size: 14px; font-weight: 800; color: #1E130B; }
+                .partner-name-highlight { font-size: 16px !important; font-weight: 900 !important; color: #1E130B !important; }
+                .status-pill {
+                    display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px;
+                    font-weight: 900; width: fit-content;
+                }
+                .status-pill.credit { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+                .status-pill.debit { background: #fef2f2; color: #A8573C; border: 1px solid #fecaca; }
+
+                .balances-summary-grid {
+                    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;
+                }
+                .summary-box {
+                    background: #FFFFFF; border: 1px solid rgba(194, 155, 98, 0.25);
+                    padding: 12px 14px; border-radius: 12px; text-align: center;
+                    display: flex; flex-direction: column; justify-content: center;
+                }
+                .summary-box.highlight-box {
+                    background: #FDFBF7; border: 2px solid #C29B62;
+                    box-shadow: 0 4px 14px rgba(194, 155, 98, 0.15);
+                }
+                .box-lbl { font-size: 11px; color: #786b59; font-weight: 800; margin-bottom: 4px; }
+                .box-val { font-size: 17px; font-weight: 900; }
+                .box-val.big { font-size: 20px; }
+                .box-hint { font-size: 10px; color: #9ca3af; font-weight: 700; margin-top: 2px; }
+                .box-hint.strong { color: #1E130B; font-weight: 900; }
+                .text-success { color: #059669; }
+                .text-danger { color: #A8573C; }
+
+                .tafqeet-banner {
+                    background: #FDFBF7; border-right: 4px solid #C29B62; padding: 10px 16px;
+                    border-radius: 8px; margin-bottom: 20px; font-size: 13px; font-weight: 800;
+                    color: #1E130B; border-top: 1px solid rgba(194, 155, 98, 0.15);
+                    border-bottom: 1px solid rgba(194, 155, 98, 0.15);
+                }
+                .tafqeet-label { color: #C29B62; margin-left: 6px; font-weight: 900; }
+
+                .royal-statement-table {
+                    width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 12px;
+                }
+                .royal-statement-table th {
+                    background: #1E130B; color: #FFFFFF; font-weight: 900;
+                    padding: 10px 8px; text-align: center; border: none; font-size: 12px;
+                }
+                .royal-statement-table td {
+                    padding: 9px 8px; border-bottom: 1px solid #f1ece4;
+                    text-align: center; color: #1E130B; font-size: 12px;
+                }
+                .royal-statement-table tbody tr:nth-child(even) td { background-color: #fdfaf6; }
+                .opening-balance-row td { background-color: #faf5ee !important; border-bottom: 2px solid rgba(194, 155, 98, 0.3) !important; }
+                .desc-text { text-align: right !important; font-weight: 800; color: #1E130B; }
+                .num-col { font-family: monospace; font-weight: 900; font-size: 12px; }
+                .balance-col { font-weight: 900; }
+                .badge-type {
+                    padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 900; display: inline-block;
+                }
+                .badge-type.red { background: #fee2e2; color: #991b1b; }
+                .badge-type.green { background: #ecfdf5; color: #065f46; }
+                .badge-type.gold { background: #fef3c7; color: #92400e; }
+                .badge-type.neutral { background: #f3f4f6; color: #374151; }
+
+                .totals-row td {
+                    background: #faf5ee !important; border-top: 2px solid #1E130B !important;
+                    border-bottom: 2px solid #1E130B !important; font-weight: 900 !important; font-size: 13px !important;
+                }
+
+                .royal-signatures-footer {
+                    display: flex; justify-content: space-between; margin-top: auto;
+                    padding-top: 35px; page-break-inside: avoid;
+                }
+                .sig-item { text-align: center; width: 22%; }
+                .sig-title { font-size: 12px; font-weight: 900; color: #1E130B; }
+                .sig-space { height: 45px; }
+                .sig-dots { font-size: 11px; color: #9ca3af; }
+                .report-footer-note {
+                    margin-top: 25px; border-top: 1px dashed rgba(194, 155, 98, 0.3);
+                    padding-top: 10px; text-align: center; font-size: 10px; color: #9ca3af; font-weight: 700;
+                }
+
+                /* ================= Thermal 80mm Styles ================= */
+                .thermal-receipt-container {
+                    width: 80mm; background: #FFFFFF; padding: 12px; margin: 0 auto;
+                    color: #000000; font-family: 'Courier New', monospace; font-size: 12px;
+                    font-weight: bold; text-align: center; direction: rtl; box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+                }
+                .th-title { font-size: 16px; font-weight: 900; }
+                .th-sub { font-size: 12px; margin-top: 2px; }
+                .th-dash { font-size: 11px; margin: 6px 0; }
+                .th-meta { text-align: right; font-size: 11px; line-height: 1.5; }
+                .th-balances { text-align: right; font-size: 11px; line-height: 1.5; }
+                .th-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10px; }
+                .th-table th, .th-table td { border-bottom: 1px dashed #000000; padding: 4px 1px; }
+                .th-final { display: flex; justify-content: space-between; font-size: 13px; font-weight: 900; margin-top: 6px; }
+                .th-tafqeet { font-size: 10px; margin-top: 4px; text-align: right; }
+                .th-qr { margin: 12px auto; display: flex; justify-content: center; }
+                .th-footer { font-size: 9px; margin-top: 6px; }
+
+                /* ================= Print Media Rules ================= */
+                @media print {
+                    @page { size: A4 portrait; margin: 8mm; }
+                    html, body { width: 210mm !important; margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }
+                    .statement-print-overlay {
+                        position: absolute !important; inset: 0 !important; background: #FFFFFF !important;
+                        padding: 0 !important; margin: 0 !important; display: block !important;
+                    }
+                    .statement-print-modal { width: 100% !important; max-width: none !important; }
+                    .no-print { display: none !important; }
+                    #printable-statement {
+                        box-shadow: none !important; border-radius: 0 !important;
+                        padding: 0 !important; width: 100% !important; min-height: auto !important;
+                    }
+                    .royal-statement-table th { background-color: #1E130B !important; color: #FFFFFF !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    .opening-balance-row td { background-color: #faf5ee !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    .royal-statement-table tbody tr:nth-child(even) td { background-color: #fdfaf6 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    .totals-row td { background-color: #faf5ee !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    tr { page-break-inside: avoid; }
+                }
             `}</style>
-            
-            {printFormat === 'a4' && (
-                <style>{`
-                    @media print {
-                        html, body { width: 210mm !important; margin: 0 !important; padding: 0 !important; background: white !important; }
-                        .print-modal-overlay { 
-                            position: absolute !important; left: 0 !important; top: 0 !important; right: 0 !important; 
-                            background: white !important; padding: 0 !important; margin: 0 !important; 
-                        }
-                        #printable-area, #printable-area * { visibility: visible !important; }
-                        #printable-area { 
-                            position: relative !important; width: 100% !important; margin: 0 !important; 
-                            padding: 0 !important; box-shadow: none !important; display: flex !important;
-                            flex-direction: column !important; min-height: 100vh !important;
-                        }
-                        .no-print { display: none !important; }
-                        .print-table th { border: none !important; border-bottom: 2px solid #000 !important; border-top: 1px solid #000 !important; }
-                        .print-table td { border: none !important; }
-                        .print-table tbody tr:nth-child(even) td { background-color: #f7f3ed !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                        tr { page-break-inside: avoid; }
-                        @page { size: A4 portrait; margin: 10mm; }
-                    }
-                `}</style>
-            )}
-
-            {printFormat === 'thermal' && (
-                <style>{`
-                    @media print {
-                        @page { size: 80mm auto; margin: 0 !important; }
-                        html, body, .print-modal-overlay { width: 80mm !important; margin: 0 !important; padding: 0 !important; background: white !important; }
-                        .thermal-preview-box {
-                            position: absolute !important; top: 0 !important; left: 0 !important; 
-                            width: 80mm !important; margin: 0 !important; padding: 5px !important; 
-                            border: none !important; box-shadow: none !important;
-                        }
-                        .no-print { display: none !important; }
-                    }
-                `}</style>
-            )}
         </div>
     );
 

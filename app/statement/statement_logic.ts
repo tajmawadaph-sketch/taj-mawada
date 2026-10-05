@@ -61,7 +61,7 @@ export function useStatementLogic() {
         queryKey: ['partner_info', effectivePartnerId],
         queryFn: async () => {
             if (!effectivePartnerId) return null;
-            const { data, error } = await supabase.from('partners').select('name').eq('id', effectivePartnerId).single();
+            const { data, error } = await supabase.from('partners').select('name, partner_type').eq('id', effectivePartnerId).single();
             if (error) return null; return data;
         },
         enabled: !!effectivePartnerId,
@@ -386,7 +386,7 @@ export function useStatementLogic() {
     };
 
     return {
-        partnerId: effectivePartnerId, partnerName: partnerInfo?.name || '', isLoading, dateFrom, dateTo, globalSearch,
+        partnerId: effectivePartnerId, partnerName: partnerInfo?.name || '', partnerType: partnerInfo?.partner_type || '', isLoading, dateFrom, dateTo, globalSearch,
         setPartnerId, setDateFrom, setDateTo, setGlobalSearch, exportToExcel,
         
         downloadIndividualWorkerPDFs, // 🚀 ممررة للزر وتعمل بكفاءة ومربوطة بالـ ZIP والـ Backend

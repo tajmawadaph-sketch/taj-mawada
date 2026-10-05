@@ -1,7 +1,6 @@
 "use client";
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, Suspense } from 'react';
 import { useStatementLogic } from './statement_logic';
-import { THEME } from '@/lib/theme';
 import MasterPage from '@/components/MasterPage';
 import RawasiSidebarManager from '@/components/RawasiSidebarManager';
 import RawasiSmartTable from '@/components/rawasismarttable';
@@ -11,22 +10,56 @@ import { formatCurrency, formatDate } from '@/lib/helpers';
 import StatementPrintModal from './StatementPrintModal'; 
 import ExportLoadingModal from '@/components/ExportLoadingModal'; 
 
-import { Suspense } from 'react';
-
 function PartnerStatementContent() {
     const logic = useStatementLogic();
     const [mounted, setMounted] = useState(false);
     
-    // 🚀 حالة التحكم في المودال (الطباعة الفردية)
+    // حالة التحكم في مودال الطباعة الرسمية
     const [isPrintOpen, setIsPrintOpen] = useState(false);
     const [selectedPartnerName, setSelectedPartnerName] = useState('');
 
     useEffect(() => { setMounted(true); }, []);
 
-    // 🚀 حساب المسميات بشكل ديناميكي بناءً على حالة التواريخ
+    // تحديد الفترات السريعة
+    const setQuickDateRange = (range: 'today' | 'this_month' | 'quarter' | 'year' | 'all') => {
+        const now = new Date();
+        if (range === 'all') {
+            logic.setDateFrom('');
+            logic.setDateTo('');
+            return;
+        }
+        if (range === 'today') {
+            const todayStr = now.toISOString().split('T')[0];
+            logic.setDateFrom(todayStr);
+            logic.setDateTo(todayStr);
+            return;
+        }
+        if (range === 'this_month') {
+            const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+            logic.setDateFrom(start);
+            logic.setDateTo(end);
+            return;
+        }
+        if (range === 'quarter') {
+            const qMonth = Math.floor(now.getMonth() / 3) * 3;
+            const start = new Date(now.getFullYear(), qMonth, 1).toISOString().split('T')[0];
+            const end = new Date(now.getFullYear(), qMonth + 3, 0).toISOString().split('T')[0];
+            logic.setDateFrom(start);
+            logic.setDateTo(end);
+            return;
+        }
+        if (range === 'year') {
+            const start = `${now.getFullYear()}-01-01`;
+            const end = `${now.getFullYear()}-12-31`;
+            logic.setDateFrom(start);
+            logic.setDateTo(end);
+            return;
+        }
+    };
+
     const isPeriodSelected = Boolean(logic.dateFrom || logic.dateTo);
-    const summarySuffix = isPeriodSelected ? 'للفترة المحددة' : '(تراكمي نهائي)';
-    const netTitle = isPeriodSelected ? 'صافي حساب الفترة المحددة' : 'صافي الحساب (النهائي)';
+    const summarySuffix = isPeriodSelected ? 'خلال الفترة' : '(تراكمي)';
 
     const columns = useMemo(() => [
         { 
@@ -34,33 +67,45 @@ function PartnerStatementContent() {
             accessor: 'date', 
             render: (row: any) => {
                 if (!row) return null; 
-                return <span style={{fontWeight: 700, color: '#8a7a6b'}}>{row.date === '---' ? '---' : formatDate(row.date)}</span>;
+                return <span style={{ fontWeight: 800, color: '#1E130B' }}>{row.date === '---' ? '---' : formatDate(row.date)}</span>;
             }
         },
         { 
-            header: 'النوع', 
+            header: 'نوع السند', 
             accessor: 'v_type', 
             render: (row: any) => {
                 if (!row) return null; 
-                
-                let badgeColor = 'green'; 
-                if (row.v_type === 'سند صرف' || row.v_type === 'قيد غرامة') badgeColor = 'red';
-                else if (row.v_type === 'يومية عمالة') badgeColor = 'blue';
-                else if (row.v_type === 'رصيد سابق') badgeColor = 'sand';
+                let badgeClass = 'bg-stone-100 text-stone-700 border-stone-200';
+                if (row.v_type?.includes('صرف') || row.v_type?.includes('غرامة')) {
+                    badgeClass = 'bg-rose-50 text-rose-700 border-rose-200';
+                } else if (row.v_type?.includes('قبض') || row.v_type?.includes('يومية')) {
+                    badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                } else if (row.v_type?.includes('فاتورة')) {
+                    badgeClass = 'bg-amber-50 text-amber-800 border-amber-200';
+                } else if (row.v_type?.includes('افتتاحي') || row.v_type?.includes('سابق')) {
+                    badgeClass = 'bg-amber-100 text-[#C29B62] border-[#C29B62]/30 font-bold';
+                }
 
                 return (
-                    <span className={`badge-glass ${badgeColor}`}>
-                        {row.v_type}
+                    <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-black border ${badgeClass}`}>
+                        {row.v_type || 'قيد'}
                     </span>
                 );
             }
         },
         { 
-            header: 'البيان / الوصف', 
+            header: 'البيان والتفاصيل', 
             accessor: 'description', 
             render: (row: any) => {
                 if (!row) return null; 
-                return <span style={{fontSize: '13px', fontWeight: 800, color: '#122946'}}>{row.description}</span>;
+                return (
+                    <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 800, color: '#1E130B' }}>{row.description}</span>
+                        {row.reference_id && (
+                            <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600 }}>مرجع: {row.reference_id}</div>
+                        )}
+                    </div>
+                );
             }
         },
         { 
@@ -68,7 +113,11 @@ function PartnerStatementContent() {
             accessor: 'debit', 
             render: (row: any) => {
                 if (!row) return null; 
-                return row.debit > 0 ? <strong style={{color: THEME.danger}}>{formatCurrency(row.debit)}</strong> : '-';
+                return row.debit > 0 ? (
+                    <strong style={{ color: '#A8573C', fontFamily: 'monospace', fontSize: '13px' }}>
+                        {formatCurrency(row.debit)}
+                    </strong>
+                ) : <span style={{ color: '#9ca3af' }}>-</span>;
             }
         },
         { 
@@ -76,7 +125,11 @@ function PartnerStatementContent() {
             accessor: 'credit', 
             render: (row: any) => {
                 if (!row) return null; 
-                return row.credit > 0 ? <strong style={{color: THEME.success}}>{formatCurrency(row.credit)}</strong> : '-';
+                return row.credit > 0 ? (
+                    <strong style={{ color: '#059669', fontFamily: 'monospace', fontSize: '13px' }}>
+                        {formatCurrency(row.credit)}
+                    </strong>
+                ) : <span style={{ color: '#9ca3af' }}>-</span>;
             }
         },
         { 
@@ -84,14 +137,18 @@ function PartnerStatementContent() {
             accessor: 'balance', 
             render: (row: any) => {
                 if (!row) return null; 
+                const isPositive = row.balance >= 0;
                 return (
                     <div style={{
-                        background: 'rgba(40, 145, 200, 0.1)', border: '1px solid rgba(40, 145, 200, 0.2)',
-                        padding: '5px 10px', borderRadius: '8px', fontWeight: 900, textAlign: 'center',
-                        color: row.balance >= 0 ? THEME.success : THEME.danger
+                        background: isPositive ? 'rgba(5, 150, 105, 0.08)' : 'rgba(168, 87, 60, 0.08)',
+                        border: `1px solid ${isPositive ? 'rgba(5, 150, 105, 0.25)' : 'rgba(168, 87, 60, 0.25)'}`,
+                        padding: '4px 10px', borderRadius: '10px', fontWeight: 900, textAlign: 'center',
+                        color: isPositive ? '#059669' : '#A8573C', fontFamily: 'monospace'
                     }}>
                         {formatCurrency(Math.abs(row.balance))}
-                        <small style={{marginRight: '5px', fontSize: '10px', color: '#8a7a6b'}}>{row.balance >= 0 ? '(له)' : '(عليه)'}</small>
+                        <small style={{ marginRight: '6px', fontSize: '11px', fontWeight: 800 }}>
+                            {isPositive ? '(له)' : '(عليه)'}
+                        </small>
                     </div>
                 );
             }
@@ -102,168 +159,321 @@ function PartnerStatementContent() {
         if (!logic.partnerId || logic.isLoading) return [];
         const openingRow = { 
             id: 'opening', date: logic.dateFrom || '---', 
-            description: '🔹 رصيد افتتاحي للمبالغ السابقة (ما قبل الفترة المختارة)', v_type: 'رصيد سابق', 
+            description: '🔹 رصيد سابق منقول (ما قبل الفترة المحاسبية المختارة)', 
+            v_type: 'رصيد افتتاحي', 
             debit: logic.openingBalance < 0 ? Math.abs(logic.openingBalance) : 0, 
-            credit: logic.openingBalance > 0 ? logic.openingBalance : 0, balance: logic.openingBalance 
+            credit: logic.openingBalance > 0 ? logic.openingBalance : 0, 
+            balance: logic.openingBalance 
         };
         return [openingRow, ...(logic.statementLines ?? [])];
     }, [logic.statementLines, logic.openingBalance, logic.isLoading, logic.partnerId, logic.dateFrom]);
 
+    const partnerDisplayName = logic.partnerName || selectedPartnerName;
+
     const sidebarActions = useMemo(() => (
-        <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-            <button type="button" onClick={() => setIsPrintOpen(true)} className="btn-main-glass white" disabled={!logic.partnerId}>
-                🖨️ معاينة وطباعة الكشف
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button 
+                type="button" 
+                onClick={() => setIsPrintOpen(true)} 
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl font-black text-sm text-white bg-gradient-to-r from-[#C29B62] to-[#a48141] shadow-sm hover:brightness-105 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!logic.partnerId}
+            >
+                <span>🖨️</span>
+                <span>معاينة وطباعة الكشف (QR)</span>
             </button>
+
             <SecureAction module="statement" action="export">
-                <button type="button" onClick={() => logic.exportToExcel(selectedPartnerName)} className="btn-main-glass gold" disabled={!logic.partnerId}>
-                    📥 تصدير Excel للشريك
+                <button 
+                    type="button" 
+                    onClick={() => logic.exportToExcel(partnerDisplayName)} 
+                    className="w-full min-h-[44px] px-4 py-2.5 rounded-xl font-black text-sm text-[#1E130B] bg-white border border-[#C29B62]/40 shadow-sm hover:bg-[#FDFBF7] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!logic.partnerId}
+                >
+                    <span>📊</span>
+                    <span>تصدير Excel للشريك</span>
                 </button>
             </SecureAction>
 
-            <hr style={{ borderColor: 'rgba(40, 145, 200, 0.2)', margin: '5px 0' }} />
+            <hr style={{ borderColor: 'rgba(194, 155, 98, 0.2)', margin: '4px 0' }} />
 
-            {/* 🚀 تم التحديث للدالة الجديدة downloadIndividualWorkerPDFs اللي بتضغط في ملف ZIP */}
             <SecureAction module="statement" action="export">
                 <button 
                     type="button" 
                     onClick={logic.downloadIndividualWorkerPDFs} 
-                    className="btn-main-glass" 
-                    style={{ background: '#0284C7', color: 'white', borderColor: '#0369A1' }}
+                    className="w-full min-h-[44px] px-4 py-2.5 rounded-xl font-black text-xs text-white bg-[#1E130B] hover:bg-[#2C1A12] border border-[#C29B62]/30 shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={logic.isExportingAll}
                 >
-                    {logic.isExportingAll ? '⏳ جاري المعالجة...' : '📦 تحميل جميع الكشوفات (ملف ZIP)'}
+                    <span>📦</span>
+                    <span>{logic.isExportingAll ? '⏳ جاري المعالجة...' : 'تصدير كل الكشوفات (ZIP)'}</span>
                 </button>
             </SecureAction>
         </div>
-    ), [logic.partnerId, selectedPartnerName, logic.exportToExcel, logic.downloadIndividualWorkerPDFs, logic.isExportingAll]); 
+    ), [logic.partnerId, partnerDisplayName, logic.exportToExcel, logic.downloadIndividualWorkerPDFs, logic.isExportingAll]); 
 
     if (!mounted) return null;
 
     return (
-        <div className="clean-page">
-            <MasterPage icon="📑" title="كشف حساب الشركاء" subtitle="تحليل مالي ملكي بنظام صيدلية تاج المودة">
-                
-                <RawasiSidebarManager actions={sidebarActions} watchDeps={[logic.partnerId, logic.isExportingAll]} />
+        <MasterPage 
+            title="كشف حساب الشركاء" 
+            subtitle="تحليل مالي مفصل للعملاء والموردين والمناديب - صيدلية تاج المودة البيطرية"
+        >
+            <RawasiSidebarManager actions={sidebarActions} watchDeps={[logic.partnerId, logic.isExportingAll]} />
 
-                <div className="main-content-flow">
-                    <div className="filter-dashboard-glass" style={{ position: 'relative', zIndex: 50 }}>
-                        <div className="filter-header"><span className="filter-title">🔍 أدوات البحث والتصفية المتقدمة</span></div>
-                        <div className="filters-grid">
-                            <div className="filter-col" style={{ position: 'relative', zIndex: 100 }}>
-                                <label>👤 الشريك (عامل / مورد / مورد)</label>
-                                <SmartCombo 
-                                    label="" table="partners" displayCol="name" initialDisplay={logic.partnerName || logic.partnerId} 
-                                    onSelect={(v: any) => { logic.setPartnerId(v?.id || ''); setSelectedPartnerName(v?.name || ''); }} 
-                                />
-                            </div>
-                            <div className="filter-col"><label>📅 من تاريخ</label><input type="date" className="glass-input" value={logic.dateFrom} onChange={e => logic.setDateFrom(e.target.value)} /></div>
-                            <div className="filter-col"><label>📅 إلى تاريخ</label><input type="date" className="glass-input" value={logic.dateTo} onChange={e => logic.setDateTo(e.target.value)} /></div>
-                            <div className="filter-col"><label>🔎 بحث في الكشف</label><input type="text" className="glass-input search-input" placeholder="ابحث في البيان..." value={logic.globalSearch || ''} onChange={e => logic.setGlobalSearch(e.target.value)} /></div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', width: '100%', paddingBottom: '40px' }}>
+                
+                {/* 1. لوحة التصفية والبحث الملكية */}
+                <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '20px',
+                    border: '1px solid rgba(194, 155, 98, 0.25)',
+                    padding: '22px 24px',
+                    boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+                    position: 'relative',
+                    zIndex: 40
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '18px' }}>🔍</span>
+                            <h3 style={{ fontSize: '15px', fontWeight: 900, color: '#1E130B', margin: 0 }}>
+                                تصفية كشف الحساب وتحديد الشريك
+                            </h3>
+                        </div>
+
+                        {/* فترات سريعة */}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <button type="button" onClick={() => setQuickDateRange('today')} className="quick-chip">اليوم</button>
+                            <button type="button" onClick={() => setQuickDateRange('this_month')} className="quick-chip">هذا الشهر</button>
+                            <button type="button" onClick={() => setQuickDateRange('quarter')} className="quick-chip">الربع الحالي</button>
+                            <button type="button" onClick={() => setQuickDateRange('year')} className="quick-chip">هذا العام</button>
+                            <button type="button" onClick={() => setQuickDateRange('all')} className="quick-chip">الكل</button>
                         </div>
                     </div>
 
-                    {logic.partnerId && (
-                        <div className="glass-panel summary-container">
-                            <div className="balances-grid" style={{ gridTemplateColumns: '1fr 1fr 1.5fr' }}>
-                                <div className="grid-box green"><small>كل الدائن (له) {summarySuffix}</small><span>{formatCurrency(logic.totalCredit)}</span></div>
-                                <div className="grid-box red"><small>كل المدين (عليه) {summarySuffix}</small><span>{formatCurrency(logic.totalDebit)}</span></div>
-                                <div className="grid-box blue final-balance">
-                                    <small>{netTitle}</small>
-                                    <span style={{ color: logic.periodNet >= 0 ? '#4ade80' : '#f87171' }}>
-                                        {formatCurrency(Math.abs(logic.periodNet))}<small style={{fontSize: '14px', marginLeft: '5px'}}>{logic.periodNet >= 0 ? '(له)' : '(عليه)'}</small>
-                                    </span>
-                                    {isPeriodSelected && (
-                                        <div style={{ marginTop: '8px', fontSize: '12px', color: '#d4c4a8', fontWeight: 800, borderTop: '1px dashed rgba(40, 145, 200, 0.2)', paddingTop: '8px' }}>
-                                            الرصيد التراكمي (النهائي): {formatCurrency(Math.abs(logic.currentBalance))} <span style={{fontSize: '10px'}}>{logic.currentBalance >= 0 ? '(له)' : '(عليه)'}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            <hr className="glass-divider" />
-                            <div className="dashboard-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-                                <div className="stat-box cyan-outline"><small>🗓️ عدد أيام الحضور</small><span style={{ fontSize: '24px' }}>{logic.attendanceCount} <small style={{fontSize:'14px', opacity:0.8}}>يوم</small></span></div>
-                                <div className="stat-box dark-red"><small>⚠️ إجمالي الغرامات (عليه)</small><span style={{ fontSize: '24px', color: '#fca5a5' }}>{formatCurrency(logic.totalViolations)}</span></div>
-                            </div>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                        gap: '16px',
+                        alignItems: 'end'
+                    }}>
+                        <div style={{ position: 'relative', zIndex: 50 }}>
+                            <label style={{ fontSize: '12px', fontWeight: 800, color: '#786b59', display: 'block', marginBottom: '6px' }}>
+                                👤 الشريك (عميل / مورد / مندوب)
+                            </label>
+                            <SmartCombo 
+                                label="" 
+                                table="partners" 
+                                displayCol="name" 
+                                initialDisplay={logic.partnerName || logic.partnerId} 
+                                onSelect={(v: any) => { 
+                                    logic.setPartnerId(v?.id || ''); 
+                                    setSelectedPartnerName(v?.name || ''); 
+                                }} 
+                            />
                         </div>
-                    )}
 
-                    {!logic.partnerId ? (
-                        <div className="welcome-placeholder"><div className="icon">🧾</div><h3>يرجى اختيار شريك لعرض كشف الحساب</h3></div>
-                    ) : (
-                        <div className="table-wrapper-glass"><RawasiSmartTable data={tableData} columns={columns} isLoading={logic.isLoading} enablePagination={false} /></div>
-                    )}
+                        <div>
+                            <label style={{ fontSize: '12px', fontWeight: 800, color: '#786b59', display: 'block', marginBottom: '6px' }}>
+                                📅 من تاريخ
+                            </label>
+                            <input 
+                                type="date" 
+                                value={logic.dateFrom} 
+                                onChange={e => logic.setDateFrom(e.target.value)}
+                                className="royal-input" 
+                            />
+                        </div>
+
+                        <div>
+                            <label style={{ fontSize: '12px', fontWeight: 800, color: '#786b59', display: 'block', marginBottom: '6px' }}>
+                                📅 إلى تاريخ
+                            </label>
+                            <input 
+                                type="date" 
+                                value={logic.dateTo} 
+                                onChange={e => logic.setDateTo(e.target.value)}
+                                className="royal-input" 
+                            />
+                        </div>
+
+                        <div>
+                            <label style={{ fontSize: '12px', fontWeight: 800, color: '#786b59', display: 'block', marginBottom: '6px' }}>
+                                🔎 بحث في بيان الحركات
+                            </label>
+                            <input 
+                                type="text" 
+                                placeholder="ابحث برقم الفاتورة أو البيان..." 
+                                value={logic.globalSearch || ''} 
+                                onChange={e => logic.setGlobalSearch(e.target.value)}
+                                className="royal-input" 
+                            />
+                        </div>
+                    </div>
                 </div>
-            </MasterPage>
 
+                {/* 2. بطاقات المؤشرات المالية التراكمية */}
+                {logic.partnerId && (
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                        gap: '16px'
+                    }}>
+                        {/* رصيد افتتاحي */}
+                        <div className="summary-royal-card">
+                            <span className="card-lbl">الرصيد الافتتاحي المنقول</span>
+                            <span className={`card-val ${logic.openingBalance >= 0 ? 'text-emerald-700' : 'text-[#A8573C]'}`}>
+                                {formatCurrency(Math.abs(logic.openingBalance))}
+                            </span>
+                            <span className="card-sub">
+                                {logic.openingBalance >= 0 ? 'رصيد دائن سابق (له)' : 'رصيد مدين سابق (عليه)'}
+                            </span>
+                        </div>
+
+                        {/* إجمالي المدين (عليه) */}
+                        <div className="summary-royal-card" style={{ borderBottom: '4px solid #A8573C' }}>
+                            <span className="card-lbl">إجمالي المدين (عليه) {summarySuffix}</span>
+                            <span className="card-val text-[#A8573C]">
+                                {formatCurrency(logic.totalDebit)}
+                            </span>
+                            <span className="card-sub">فواتير ومسحوبات واستقطاعات</span>
+                        </div>
+
+                        {/* إجمالي الدائن (له) */}
+                        <div className="summary-royal-card" style={{ borderBottom: '4px solid #059669' }}>
+                            <span className="card-lbl">إجمالي الدائن (له) {summarySuffix}</span>
+                            <span className="card-val text-emerald-700">
+                                {formatCurrency(logic.totalCredit)}
+                            </span>
+                            <span className="card-sub">سندات قبض ومستحقات وتوريدات</span>
+                        </div>
+
+                        {/* الرصيد الختامي الصافي */}
+                        <div className="summary-royal-card highlight-royal-card" style={{ borderBottom: '4px solid #C29B62' }}>
+                            <span className="card-lbl font-black text-[#1E130B]">الرصيد الصافي النهائي</span>
+                            <span className={`card-val big ${logic.currentBalance >= 0 ? 'text-emerald-700' : 'text-[#A8573C]'}`}>
+                                {formatCurrency(Math.abs(logic.currentBalance))}
+                            </span>
+                            <span className="card-sub font-black text-[#1E130B]">
+                                {logic.currentBalance >= 0 ? '✅ رصيد مستحق له (دائن)' : '⚠️ رصيد مستحق عليه (مدين)'}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {/* 3. جدول الحركات أو موجه اختيار الشريك */}
+                {!logic.partnerId ? (
+                    <div style={{
+                        background: '#FFFFFF',
+                        borderRadius: '20px',
+                        border: '1.5px dashed rgba(194, 155, 98, 0.35)',
+                        padding: '80px 20px',
+                        textAlign: 'center',
+                        color: '#786b59'
+                    }}>
+                        <div style={{ fontSize: '56px', marginBottom: '14px' }}>📑</div>
+                        <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#1E130B', marginBottom: '6px' }}>
+                            يرجى اختيار شريك لعرض كشف حسابه التحليلي
+                        </h3>
+                        <p style={{ fontSize: '13px', fontWeight: 600, color: '#9ca3af' }}>
+                            يمكنك البحث باسم العميل، المورد، أو المندوب لمعاينة الأرصدة وتوليد الكشف المعتمد برمز QR.
+                        </p>
+                    </div>
+                ) : (
+                    <div style={{
+                        background: '#FFFFFF',
+                        borderRadius: '20px',
+                        border: '1px solid rgba(194, 155, 98, 0.25)',
+                        padding: '12px',
+                        boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+                        overflowX: 'auto'
+                    }}>
+                        <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(194, 155, 98, 0.15)', marginBottom: '8px' }}>
+                            <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '14px' }}>
+                                سجل الحركات المحاسبية: <span style={{ color: '#C29B62' }}>{partnerDisplayName}</span>
+                            </div>
+                            <span style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 700 }}>
+                                إجمالي القيود: {tableData.length} حركة
+                            </span>
+                        </div>
+                        <RawasiSmartTable 
+                            data={tableData} 
+                            columns={columns} 
+                            isLoading={logic.isLoading} 
+                            enablePagination={false} 
+                        />
+                    </div>
+                )}
+
+            </div>
+
+            {/* مودال الطباعة الملكي المعتمد برمز QR */}
             <StatementPrintModal 
-                isOpen={isPrintOpen} onClose={() => setIsPrintOpen(false)} partnerName={logic.partnerName || selectedPartnerName}
-                dateFrom={logic.dateFrom} dateTo={logic.dateTo} openingBalance={logic.openingBalance}
-                currentBalance={logic.currentBalance} totalDebit={logic.totalDebit} totalCredit={logic.totalCredit}
-                attendanceCount={logic.attendanceCount} totalLaborAmount={logic.totalLaborAmount}
-                totalPayments={logic.totalPayments} totalViolations={logic.totalViolations} statementLines={logic.statementLines} 
+                isOpen={isPrintOpen} 
+                onClose={() => setIsPrintOpen(false)} 
+                partnerName={partnerDisplayName}
+                partnerType={logic.partnerType || 'شريك'}
+                dateFrom={logic.dateFrom} 
+                dateTo={logic.dateTo} 
+                openingBalance={logic.openingBalance}
+                currentBalance={logic.currentBalance} 
+                totalDebit={logic.totalDebit} 
+                totalCredit={logic.totalCredit}
+                attendanceCount={logic.attendanceCount} 
+                totalLaborAmount={logic.totalLaborAmount}
+                totalPayments={logic.totalPayments} 
+                totalViolations={logic.totalViolations} 
+                statementLines={logic.statementLines} 
             />
 
+            {/* مودال تنزيل الكشوفات الجماعية */}
             <ExportLoadingModal 
                 isOpen={logic.isExportingAll} 
                 progressText={logic.exportProgress} 
             />
 
             <style>{`
-                .main-content-flow { display: flex; flex-direction: column; gap: 20px; width: 100%; }
-                .glass-panel { background: linear-gradient(135deg, rgba(74, 59, 50, 0.85) 0%, rgba(44, 34, 27, 0.95) 100%); backdrop-filter: blur(15px); border: 1px solid rgba(40, 145, 200, 0.15); border-top: 1px solid rgba(40, 145, 200, 0.3); border-radius: 20px; padding: 25px; color: #f3e5d8; box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
-                .glass-divider { border: 0; height: 1px; background: rgba(40, 145, 200, 0.1); margin: 20px 0; }
-                .balances-grid { display: grid; gap: 15px; }
-                .grid-box { padding: 20px; border-radius: 16px; text-align: center; background: rgba(212, 196, 168, 0.05); border: 1px solid rgba(212, 196, 168, 0.1); display: flex; flex-direction: column; justify-content: center; }
-                .grid-box.green { border-bottom: 3px solid #22c55e; }
-                .grid-box.red { border-bottom: 3px solid #ef4444; }
-                .grid-box.blue { border-bottom: 3px solid #3b82f6; } 
-                .grid-box.gold { border-bottom: 3px solid ${THEME.goldAccent}; background: rgba(40, 145, 200, 0.05); }
-                .grid-box small { font-size: 12px; color: #d4c4a8; font-weight: 900; margin-bottom: 8px; }
-                .grid-box span { font-size: 22px; font-weight: 900; }
-                .final-balance span { font-size: 30px; }
-                .dashboard-stats-grid { display: grid; gap: 15px; }
-                .stat-box { padding: 15px; border-radius: 12px; text-align: center; background: rgba(20, 15, 12, 0.4); border: 1px dashed rgba(40, 145, 200, 0.2); display: flex; flex-direction: column; justify-content: center; }
-                .stat-box.cyan-outline { border-bottom: 3px solid #06b6d4; background: rgba(6, 182, 212, 0.05); }
-                .stat-box.dark-red { border-bottom: 3px solid #b91c1c; background: rgba(185, 28, 28, 0.1); }
-                .stat-box small { font-size: 13px; color: #bba58f; display: block; margin-bottom: 8px; font-weight: 900; }
-                .stat-box span { font-size: 18px; font-weight: 900; color: white; }
-                .filter-dashboard-glass { background: linear-gradient(135deg, rgba(62, 49, 40, 0.85) 0%, rgba(44, 34, 27, 0.95) 100%); backdrop-filter: blur(15px); border: 1px solid rgba(40, 145, 200, 0.2); border-top: 1px solid rgba(40, 145, 200, 0.4); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4); padding: 20px 25px; border-radius: 20px; }
-                .filter-title { font-size: 14px; font-weight: 900; color: ${THEME.goldAccent}; text-transform: uppercase; }
-                .filters-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 20px; align-items: end; }
-                .filter-col label { font-size: 12px; font-weight: 900; color: #d4c4a8; margin-bottom: 8px; display: block; }
-                .glass-input { width: 100%; padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(40, 145, 200, 0.2); background: rgba(20, 15, 12, 0.5); color: #f3e5d8; outline: none; transition: 0.3s; font-size: 13px; font-weight: 800; }
-                .glass-input:focus { border-color: ${THEME.goldAccent}; background: rgba(44, 34, 27, 0.8); }
-                .badge-glass { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 900; display: inline-block; }
-                .badge-glass.red { background: #fef2f2; color: #ef4444; }
-                .badge-glass.green { background: #f0fdf4; color: #16a34a; }
-                .badge-glass.blue { background: #eff6ff; color: #3b82f6; }
-                .badge-glass.sand { background: #fdfaf6; color: #8a7a6b; border: 1px solid #eaddcf; }
-                .btn-main-glass { width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(40, 145, 200, 0.3); backdrop-filter: blur(15px); font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-                .btn-main-glass.gold { background: linear-gradient(135deg, rgba(40, 145, 200, 0.9), rgba(151, 115, 50, 1)); color: white; }
-                .btn-main-glass.white { background: rgba(243, 229, 216, 0.9); color: #122946; }
-                .btn-main-glass:disabled { opacity: 0.5; cursor: not-allowed; }
-                .welcome-placeholder { text-align: center; padding: 100px; color: #bba58f; background: rgba(44, 34, 27, 0.4); border-radius: 20px; border: 1px dashed rgba(40, 145, 200, 0.3); }
-                .welcome-placeholder .icon { font-size: 64px; margin-bottom: 20px; color: ${THEME.goldAccent}; }
-                .table-wrapper-glass { background: rgba(255, 255, 255, 0.95); border-radius: 20px; overflow-x: auto; padding: 10px; border: 1px solid rgba(40, 145, 200, 0.2); box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
-
-                @media (max-width: 768px) {
-                    .filter-dashboard-glass { padding: 15px !important; border-radius: 16px !important; }
-                    .filters-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
-                    .balances-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
-                    .dashboard-stats-grid { grid-template-columns: 1fr !important; }
-                    .glass-panel { padding: 15px !important; border-radius: 16px !important; }
-                    .final-balance span { font-size: 24px !important; }
+                .quick-chip {
+                    background: #FDFBF7; border: 1px solid rgba(194, 155, 98, 0.25);
+                    padding: 4px 12px; border-radius: 8px; font-size: 11.5px; font-weight: 800;
+                    color: #786b59; cursor: pointer; transition: 0.2s;
                 }
+                .quick-chip:hover {
+                    background: #C29B62; color: #FFFFFF; border-color: #C29B62;
+                }
+                .royal-input {
+                    width: 100%; min-height: 44px; padding: 10px 14px; border-radius: 12px;
+                    border: 1px solid rgba(194, 155, 98, 0.3); background: #FDFBF7;
+                    color: #1E130B; outline: none; font-size: 13px; font-weight: 800;
+                    transition: 0.2s;
+                }
+                .royal-input:focus {
+                    border-color: #C29B62; background: #FFFFFF;
+                    box-shadow: 0 0 0 3px rgba(194, 155, 98, 0.15);
+                }
+                .summary-royal-card {
+                    background: #FFFFFF; border-radius: 16px; padding: 18px 20px;
+                    border: 1px solid rgba(194, 155, 98, 0.25);
+                    box-shadow: 0 4px 16px rgba(30, 19, 11, 0.04);
+                    display: flex; flex-direction: column; justify-content: center;
+                    transition: 0.2s;
+                }
+                .summary-royal-card:hover { transform: translateY(-2px); }
+                .highlight-royal-card {
+                    background: linear-gradient(135deg, #FFFFFF 0%, #FDFBF7 100%);
+                    border: 1.5px solid #C29B62;
+                }
+                .card-lbl { font-size: 12px; font-weight: 800; color: #786b59; margin-bottom: 6px; }
+                .card-val { font-size: 20px; font-weight: 900; font-family: monospace; }
+                .card-val.big { font-size: 24px; }
+                .card-sub { font-size: 11px; font-weight: 700; color: #9ca3af; margin-top: 4px; }
             `}</style>
-        </div>
+        </MasterPage>
     );
 }
 
 export default function PartnerStatementPage() {
     return (
-        <Suspense fallback={<div style={{ padding: '50px', textAlign: 'center' }}>جاري التحميل...</div>}>
+        <Suspense fallback={<div style={{ padding: '50px', textAlign: 'center', color: '#1E130B', fontWeight: 900 }}>جاري التحميل...</div>}>
             <PartnerStatementContent />
         </Suspense>
     );
 }
-

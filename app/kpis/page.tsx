@@ -1,6 +1,7 @@
 "use client";
 import React from 'react';
-import { THEME } from '@/lib/theme';
+import MasterPage from '@/components/MasterPage';
+import LoadingScreen from '@/components/LoadingScreen';
 import { formatCurrency } from '@/lib/helpers';
 import { useKpisLogic } from './kpis_logic';
 
@@ -10,110 +11,216 @@ export default function KpisPage() {
         setDateFrom,
         dateTo,
         setDateTo,
+        setQuickDateRange,
         totalSales,
+        invoicesCount,
         totalCollections,
+        receiptsCount,
         totalOutstandingDebts,
         collectionRate,
+        debtToSalesRatio,
         isLoading
     } = useKpisLogic();
 
     return (
-        <div className="kpis-container" style={{ padding: '20px', minHeight: '100vh', background: `linear-gradient(135deg, ${THEME.primary} 0%, #0a192f 100%)`, fontFamily: 'Tajawal, sans-serif', direction: 'rtl', maxWidth: '100vw', overflowX: 'hidden', boxSizing: 'border-box' }}>
-            <style>{`
-                @media (max-width: 768px) {
-                    .kpis-container { padding: 10px 8px !important; }
-                    .kpis-header { padding: 15px !important; border-radius: 16px !important; margin-bottom: 15px !important; }
-                    .kpis-header h1 { font-size: 20px !important; }
-                    .kpis-filters { flex-direction: column !important; gap: 10px !important; margin-top: 15px !important; }
-                    .kpis-filters > div { width: 100% !important; flex: 1 1 100% !important; }
-                    .kpis-grid { grid-template-columns: 1fr !important; gap: 15px !important; }
-                    .kpi-item-card { padding: 20px 15px !important; border-radius: 16px !important; }
-                    .kpi-item-card .kpi-val { font-size: 28px !important; }
-                }
-            `}</style>
-            {/* Header */}
-            <div className="kpis-header" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '30px', marginBottom: '25px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
-                    <div>
-                        <h1 style={{ color: 'white', margin: '0 0 10px 0', fontSize: '32px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            <span style={{ background: `linear-gradient(45deg, ${THEME.accent}, #c084fc)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>مؤشرات الأداء الرئيسية (KPIs)</span>
-                            <span style={{ fontSize: '24px' }}>✨</span>
-                        </h1>
-                        <p style={{ color: '#94a3b8', margin: 0, fontSize: '15px', fontWeight: 500 }}>
-                            أرقام سريعة تلخص أداء المبيعات، التحصيلات، ونسبة السيولة.
-                        </p>
-                    </div>
-                </div>
+        <MasterPage 
+            title="مؤشرات الأداء الرئيسية (KPIs)" 
+            subtitle="التحليلات الرقمية السريعة للمبيعات، كفاءة التحصيل، وسيولة الصيدلية - ريال سعودي"
+        >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', paddingBottom: '50px' }}>
+                
+                {/* 1. لوحة تحديد الفترة والتصفية السريعة */}
+                <div style={{
+                    background: '#FFFFFF',
+                    borderRadius: '20px',
+                    border: '1px solid rgba(194, 155, 98, 0.25)',
+                    padding: '20px 24px',
+                    boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '18px' }}>🎯</span>
+                            <span style={{ fontSize: '14.5px', fontWeight: 900, color: '#1E130B' }}>
+                                الفترة الزمنية للمؤشرات
+                            </span>
+                        </div>
 
-                {/* Filters */}
-                <div className="kpis-filters" style={{ display: 'flex', gap: '15px', marginTop: '30px', flexWrap: 'wrap' }}>
-                    <div style={{ flex: '1 1 200px' }}>
-                        <div style={{ color: THEME.accentLight, fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>من تاريخ</div>
-                        <input 
-                            type="date" 
-                            value={dateFrom}
-                            onChange={(e) => setDateFrom(e.target.value)}
-                            style={{ width: '100%', padding: '14px 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
-                        />
-                    </div>
-                    <div style={{ flex: '1 1 200px' }}>
-                        <div style={{ color: THEME.accentLight, fontSize: '13px', fontWeight: 800, marginBottom: '8px' }}>إلى تاريخ</div>
-                        <input 
-                            type="date" 
-                            value={dateTo}
-                            onChange={(e) => setDateTo(e.target.value)}
-                            style={{ width: '100%', padding: '14px 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', outline: 'none' }}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {isLoading ? (
-                <div style={{ padding: '50px', textAlign: 'center', color: 'white', fontWeight: 900, fontSize: '20px' }}>جاري الحساب...</div>
-            ) : (
-                <div className="kpis-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '30px' }}>
-                    {/* Total Sales KPI */}
-                    <div className="kpi-item-card" style={{ background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(2, 132, 199, 0.25))', border: '1px solid rgba(56, 189, 248, 0.4)', padding: '35px 25px', borderRadius: '24px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-                        <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '100px', opacity: 0.1 }}>💰</div>
-                        <div style={{ color: '#7dd3fc', fontSize: '16px', fontWeight: 900, marginBottom: '15px', position: 'relative' }}>إجمالي المبيعات (الفواتير)</div>
-                        <div className="kpi-val" style={{ color: 'white', fontSize: '42px', fontWeight: 900, position: 'relative' }}>{formatCurrency(totalSales)}</div>
-                        <div style={{ color: '#38bdf8', fontSize: '13px', fontWeight: 700, marginTop: '10px', position: 'relative' }}>حجم المبيعات خلال الفترة المحددة</div>
+                        {/* فترات سريعة */}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <button type="button" onClick={() => setQuickDateRange('today')} className="kpi-chip">اليوم</button>
+                            <button type="button" onClick={() => setQuickDateRange('this_month')} className="kpi-chip">هذا الشهر</button>
+                            <button type="button" onClick={() => setQuickDateRange('quarter')} className="kpi-chip">الربع الحالي</button>
+                            <button type="button" onClick={() => setQuickDateRange('year')} className="kpi-chip">هذا العام</button>
+                            <button type="button" onClick={() => setQuickDateRange('all')} className="kpi-chip">كل الفترات</button>
+                        </div>
                     </div>
 
-                    {/* Total Collections KPI */}
-                    <div className="kpi-item-card" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.25))', border: '1px solid rgba(16, 185, 129, 0.4)', padding: '35px 25px', borderRadius: '24px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-                        <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '100px', opacity: 0.1 }}>💵</div>
-                        <div style={{ color: '#6ee7b7', fontSize: '16px', fontWeight: 900, marginBottom: '15px', position: 'relative' }}>إجمالي التحصيلات (السيولة)</div>
-                        <div className="kpi-val" style={{ color: 'white', fontSize: '42px', fontWeight: 900, position: 'relative' }}>{formatCurrency(totalCollections)}</div>
-                        <div style={{ color: '#10b981', fontSize: '13px', fontWeight: 700, marginTop: '10px', position: 'relative' }}>المبالغ المقبوضة فعلياً</div>
-                    </div>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                        gap: '14px',
+                        alignItems: 'end'
+                    }}>
+                        <div>
+                            <label style={{ fontSize: '12px', fontWeight: 800, color: '#786b59', display: 'block', marginBottom: '6px' }}>
+                                📅 من تاريخ
+                            </label>
+                            <input 
+                                type="date" 
+                                value={dateFrom} 
+                                onChange={e => setDateFrom(e.target.value)}
+                                className="royal-kpi-input" 
+                            />
+                        </div>
 
-                    {/* Outstanding Debts KPI */}
-                    <div className="kpi-item-card" style={{ background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.15), rgba(159, 18, 57, 0.25))', border: '1px solid rgba(244, 63, 94, 0.4)', padding: '35px 25px', borderRadius: '24px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-                        <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '100px', opacity: 0.1 }}>⚠️</div>
-                        <div style={{ color: '#fda4af', fontSize: '16px', fontWeight: 900, marginBottom: '15px', position: 'relative' }}>الديون المتبقية في السوق (رصيد العملاء)</div>
-                        <div className="kpi-val" style={{ color: 'white', fontSize: '42px', fontWeight: 900, position: 'relative' }}>{formatCurrency(totalOutstandingDebts)}</div>
-                        <div style={{ color: '#fb7185', fontSize: '13px', fontWeight: 700, marginTop: '10px', position: 'relative' }}>إجمالي المستحقات غير المحصلة</div>
-                    </div>
-
-                    {/* Collection Rate KPI */}
-                    <div className="kpi-item-card" style={{ background: 'linear-gradient(135deg, rgba(217, 70, 239, 0.15), rgba(162, 28, 175, 0.25))', border: '1px solid rgba(217, 70, 239, 0.4)', padding: '35px 25px', borderRadius: '24px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-                        <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '100px', opacity: 0.1 }}>📈</div>
-                        <div style={{ color: '#f0abfc', fontSize: '16px', fontWeight: 900, marginBottom: '15px', position: 'relative' }}>نسبة التحصيل إلى المبيعات</div>
-                        <div className="kpi-val" style={{ color: 'white', fontSize: '42px', fontWeight: 900, position: 'relative' }}>{collectionRate}%</div>
-                        
-                        {/* Progress Bar for Visual Impact */}
-                        <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '10px', marginTop: '20px', overflow: 'hidden' }}>
-                            <div style={{ 
-                                height: '100%', 
-                                width: `${collectionRate}%`, 
-                                background: 'linear-gradient(90deg, #d946ef, #f0abfc)',
-                                borderRadius: '10px'
-                            }}></div>
+                        <div>
+                            <label style={{ fontSize: '12px', fontWeight: 800, color: '#786b59', display: 'block', marginBottom: '6px' }}>
+                                📅 إلى تاريخ
+                            </label>
+                            <input 
+                                type="date" 
+                                value={dateTo} 
+                                onChange={e => setDateTo(e.target.value)}
+                                className="royal-kpi-input" 
+                            />
                         </div>
                     </div>
                 </div>
-            )}
-        </div>
+
+                {/* 2. شبكة المؤشرات التنفيذية الملكية */}
+                {isLoading ? (
+                    <LoadingScreen message="جاري احتساب مؤشرات الأداء ومطابقة التحصيلات..." fullScreen={false} />
+                ) : (
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                        gap: '20px'
+                    }}>
+                        {/* 1. إجمالي المبيعات */}
+                        <div className="kpi-royal-card" style={{ borderBottom: '4px solid #059669' }}>
+                            <div className="kpi-card-header">
+                                <span className="kpi-icon bg-emerald-50 text-emerald-700">💰</span>
+                                <span className="kpi-tag tag-green">المبيعات المعتمدة</span>
+                            </div>
+                            <div className="kpi-value text-emerald-700">
+                                {formatCurrency(totalSales)}
+                            </div>
+                            <div className="kpi-subtitle">
+                                إجمالي حجم المبيعات ({invoicesCount} فاتورة)
+                            </div>
+                        </div>
+
+                        {/* 2. إجمالي التحصيلات (السيولة المقبوضة) */}
+                        <div className="kpi-royal-card" style={{ borderBottom: '4px solid #C29B62' }}>
+                            <div className="kpi-card-header">
+                                <span className="kpi-icon bg-amber-50 text-[#C29B62]">💵</span>
+                                <span className="kpi-tag tag-gold">التحصيلات النقدية</span>
+                            </div>
+                            <div className="kpi-value text-[#1E130B]">
+                                {formatCurrency(totalCollections)}
+                            </div>
+                            <div className="kpi-subtitle">
+                                السيولة المقبوضة فعلياً ({receiptsCount} سند قبض)
+                            </div>
+                        </div>
+
+                        {/* 3. ديون العملاء بالسوق (الذمم المدينة) */}
+                        <div className="kpi-royal-card" style={{ borderBottom: '4px solid #A8573C' }}>
+                            <div className="kpi-card-header">
+                                <span className="kpi-icon bg-rose-50 text-[#A8573C]">⚠️</span>
+                                <span className="kpi-tag tag-red">ديون السوق المتبقية</span>
+                            </div>
+                            <div className="kpi-value text-[#A8573C]">
+                                {formatCurrency(totalOutstandingDebts)}
+                            </div>
+                            <div className="kpi-subtitle">
+                                إجمالي المستحقات والذمم المدينة طرف العملاء
+                            </div>
+                        </div>
+
+                        {/* 4. كفاءة ونسبة التحصيل */}
+                        <div className="kpi-royal-card highlight-kpi-card" style={{ borderBottom: '4px solid #1E130B' }}>
+                            <div className="kpi-card-header">
+                                <span className="kpi-icon bg-[#1E130B] text-white">📈</span>
+                                <span className="kpi-tag tag-royal">كفاءة التحصيل</span>
+                            </div>
+                            <div className="kpi-value text-[#1E130B]">
+                                {collectionRate}%
+                            </div>
+                            <div className="kpi-subtitle">
+                                نسبة السيولة المحصلة مقارنة بإجمالي المبيعات
+                            </div>
+
+                            {/* شريط التقدم الفاخر */}
+                            <div style={{ width: '100%', height: '8px', background: '#e5e7eb', borderRadius: '10px', marginTop: '14px', overflow: 'hidden' }}>
+                                <div style={{ 
+                                    height: '100%', 
+                                    width: `${Math.min(Number(collectionRate), 100)}%`, 
+                                    background: 'linear-gradient(90deg, #C29B62 0%, #059669 100%)',
+                                    borderRadius: '10px'
+                                }}></div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+            </div>
+
+            <style>{`
+                .kpi-chip {
+                    background: #FDFBF7; border: 1px solid rgba(194, 155, 98, 0.25);
+                    padding: 4px 12px; border-radius: 8px; font-size: 11.5px; font-weight: 800;
+                    color: #786b59; cursor: pointer; transition: 0.2s;
+                }
+                .kpi-chip:hover {
+                    background: #C29B62; color: #FFFFFF; border-color: #C29B62;
+                }
+                .royal-kpi-input {
+                    width: 100%; min-height: 44px; padding: 10px 14px; border-radius: 12px;
+                    border: 1px solid rgba(194, 155, 98, 0.3); background: #FDFBF7;
+                    color: #1E130B; outline: none; font-size: 13px; font-weight: 800;
+                    transition: 0.2s;
+                }
+                .royal-kpi-input:focus {
+                    border-color: #C29B62; background: #FFFFFF;
+                    box-shadow: 0 0 0 3px rgba(194, 155, 98, 0.15);
+                }
+                .kpi-royal-card {
+                    background: #FFFFFF; border-radius: 18px; padding: 24px;
+                    border: 1px solid rgba(194, 155, 98, 0.25);
+                    box-shadow: 0 4px 16px rgba(30, 19, 11, 0.04);
+                    display: flex; flex-direction: column; justify-content: space-between;
+                    transition: 0.2s;
+                }
+                .kpi-royal-card:hover { transform: translateY(-2px); }
+                .highlight-kpi-card {
+                    background: linear-gradient(135deg, #FFFFFF 0%, #FDFBF7 100%);
+                    border: 1.5px solid #C29B62;
+                }
+                .kpi-card-header {
+                    display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;
+                }
+                .kpi-icon {
+                    width: 40px; height: 40px; border-radius: 12px; display: flex;
+                    align-items: center; justify-content: center; font-size: 20px;
+                }
+                .kpi-tag {
+                    font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px;
+                }
+                .tag-green { background: #ecfdf5; color: #059669; }
+                .tag-gold { background: #fef3c7; color: #92400e; }
+                .tag-red { background: #fef2f2; color: #A8573C; }
+                .tag-royal { background: #1E130B; color: #FFFFFF; }
+                .kpi-value {
+                    font-size: 28px; font-weight: 900; font-family: monospace; margin-bottom: 6px;
+                }
+                .kpi-subtitle {
+                    font-size: 12px; font-weight: 700; color: #9ca3af;
+                }
+            `}</style>
+        </MasterPage>
     );
 }

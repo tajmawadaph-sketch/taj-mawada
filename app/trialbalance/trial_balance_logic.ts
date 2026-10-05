@@ -4,34 +4,92 @@ import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 import { showGlobalToast } from '@/lib/toast-context';
 
+export interface TrialBalanceRecord {
+    account_id: string;
+    account_code: string;
+    account_name: string;
+    opening_debit: number;
+    opening_credit: number;
+    period_debit: number;
+    period_credit: number;
+    ending_debit: number;
+    ending_credit: number;
+    has_activity: boolean;
+    level?: number;
+}
+
 export function useTrialBalanceLogic() {
-    const [records, setRecords] = useState<any[]>([]);
+    const [rawRecords, setRawRecords] = useState<TrialBalanceRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [hideZeroBalances, setHideZeroBalances] = useState(true);
+    const [accountLevel, setAccountLevel] = useState<'all' | '1' | '2' | '3'>('all');
     
-    // افتراضياً: من أول الشهر لآخره
-    const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-    const [endDate, setEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]);
+    // افتراضياً: بداية الشهر الحالي حتى نهايته
+    const [startDate, setStartDate] = useState(
+        new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+    );
+    const [endDate, setEndDate] = useState(
+        new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]
+    );
+
+    const setQuickDateRange = (range: 'today' | 'this_month' | 'quarter' | 'year' | 'all') => {
+        const now = new Date();
+        if (range === 'all') {
+            setStartDate('');
+            setEndDate('');
+            return;
+        }
+        if (range === 'today') {
+            const todayStr = now.toISOString().split('T')[0];
+            setStartDate(todayStr);
+            setEndDate(todayStr);
+            return;
+        }
+        if (range === 'this_month') {
+            const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+            setStartDate(start);
+            setEndDate(end);
+            return;
+        }
+        if (range === 'quarter') {
+            const qMonth = Math.floor(now.getMonth() / 3) * 3;
+            const start = new Date(now.getFullYear(), qMonth, 1).toISOString().split('T')[0];
+            const end = new Date(now.getFullYear(), qMonth + 3, 0).toISOString().split('T')[0];
+            setStartDate(start);
+            setEndDate(end);
+            return;
+        }
+        if (range === 'year') {
+            const start = `${now.getFullYear()}-01-01`;
+            const end = `${now.getFullYear()}-12-31`;
+            setStartDate(start);
+            setEndDate(end);
+            return;
+        }
+    };
 
     const fetchTrialBalance = async () => {
         setIsLoading(true);
         try {
-            let trialData: any[] | null = null;
+            let trialData: TrialBalanceRecord[] | null = null;
             try {
                 const { data, error } = await supabase.rpc('get_trial_balance', {
                     p_start_date: startDate,
                     p_end_date: endDate
                 });
-                if (!error && data) {
+                if (!error && Array.isArray(data) && data.length > 0) {
                     trialData = data;
                 }
             } catch (rpcErr) {
-                console.warn("Trial balance RPC not available, using direct calculation:", rpcErr);
+                console.warn("Trial balance RPC not available, using robust ledger aggregation:", rpcErr);
             }
 
             // 🛡️ Fallback المباشر: حساب ميزان المراجعة من الدفاتر مباشرة
             if (!trialData) {
                 const [accountsRes, linesRes, headersRes] = await Promise.all([
-                    supabase.from('accounts').select('id, code, name, is_transactional').order('code'),
+                    supabase.from('accounts').select('id, code, name, is_transactional, parent_id').order('code'),
                     supabase.from('journal_lines').select('header_id, account_id, debit, credit'),
                     supabase.from('journal_headers').select('id, entry_date, status')
                 ]);
@@ -41,19 +99,26 @@ export function useTrialBalanceLogic() {
                 const headers = headersRes.data || [];
                 const headerMap = new Map(headers.map((h: any) => [h.id, h]));
 
-                const accMap = new Map<string, any>();
+                const accMap = new Map<string, TrialBalanceRecord>();
                 accounts.forEach(a => {
+                    const codeStr = String(a.code || '');
+                    let level = 4;
+                    if (codeStr.length === 1) level = 1;
+                    else if (codeStr.length === 2) level = 2;
+                    else if (codeStr.length <= 4) level = 3;
+
                     accMap.set(a.id, {
                         account_id: a.id,
-                        account_code: a.code,
-                        account_name: a.name,
+                        account_code: a.code || '---',
+                        account_name: a.name || '---',
                         opening_debit: 0,
                         opening_credit: 0,
                         period_debit: 0,
                         period_credit: 0,
                         ending_debit: 0,
                         ending_credit: 0,
-                        has_activity: false
+                        has_activity: false,
+                        level
                     });
                 });
 
@@ -78,15 +143,18 @@ export function useTrialBalanceLogic() {
                 });
 
                 trialData = Array.from(accMap.values())
-                    .map(r => ({
-                        ...r,
-                        ending_debit: r.opening_debit + r.period_debit,
-                        ending_credit: r.opening_credit + r.period_credit
-                    }))
-                    .filter(r => r.has_activity || accounts.find(a => a.id === r.account_id)?.is_transactional);
+                    .map(r => {
+                        const totalDebit = r.opening_debit + r.period_debit;
+                        const totalCredit = r.opening_credit + r.period_credit;
+                        return {
+                            ...r,
+                            ending_debit: totalDebit,
+                            ending_credit: totalCredit
+                        };
+                    });
             }
 
-            setRecords(trialData || []);
+            setRawRecords(trialData || []);
             
         } catch (err: any) {
             console.error("Error fetching Trial Balance:", err.message);
@@ -100,7 +168,42 @@ export function useTrialBalanceLogic() {
         fetchTrialBalance();
     }, [startDate, endDate]);
 
-    // حساب إجماليات الميزان (يجب أن يتطابق المدين مع الدائن دائماً)
+    // تصفية السجلات حسب المستوى والبحث وتجاهل الأرصدة الصفرية
+    const records = useMemo(() => {
+        let list = [...rawRecords];
+
+        // 1. تصفية المستوى المحاسبي
+        if (accountLevel === '1') {
+            list = list.filter(r => String(r.account_code).length === 1);
+        } else if (accountLevel === '2') {
+            list = list.filter(r => String(r.account_code).length <= 2);
+        } else if (accountLevel === '3') {
+            list = list.filter(r => String(r.account_code).length <= 4);
+        }
+
+        // 2. إخفاء الأرصدة الصفرية إن طُلب
+        if (hideZeroBalances) {
+            list = list.filter(r => 
+                r.opening_debit !== 0 || r.opening_credit !== 0 ||
+                r.period_debit !== 0 || r.period_credit !== 0 ||
+                r.ending_debit !== 0 || r.ending_credit !== 0 ||
+                r.has_activity
+            );
+        }
+
+        // 3. البحث بالاسم أو الرقم
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase().trim();
+            list = list.filter(r => 
+                r.account_code.toLowerCase().includes(q) ||
+                r.account_name.toLowerCase().includes(q)
+            );
+        }
+
+        return list;
+    }, [rawRecords, accountLevel, hideZeroBalances, searchQuery]);
+
+    // حساب إجماليات الميزان بدقة
     const totals = useMemo(() => {
         return records.reduce((acc, r) => {
             acc.op_debit += Number(r.opening_debit) || 0;
@@ -113,7 +216,21 @@ export function useTrialBalanceLogic() {
         }, { op_debit: 0, op_credit: 0, per_debit: 0, per_credit: 0, end_debit: 0, end_credit: 0 });
     }, [records]);
 
-    // تصدير احترافي للإكسيل
+    // مطابقة اتزان الميزان آلياً (تسامح حتى 0.05 هللة للكسور العشرية)
+    const balanceDiff = useMemo(() => {
+        const opDiff = Math.abs(totals.op_debit - totals.op_credit);
+        const perDiff = Math.abs(totals.per_debit - totals.per_credit);
+        const endDiff = Math.abs(totals.end_debit - totals.end_credit);
+        return {
+            opDiff,
+            perDiff,
+            endDiff,
+            maxDiff: Math.max(opDiff, perDiff, endDiff),
+            isBalanced: Math.max(opDiff, perDiff, endDiff) < 0.05
+        };
+    }, [totals]);
+
+    // تصدير رسمي للإكسيل
     const exportToExcel = () => {
         const dataToExport = records.map(r => ({
             "رقم الحساب": r.account_code,
@@ -127,20 +244,27 @@ export function useTrialBalanceLogic() {
         }));
 
         const ws = XLSX.utils.json_to_sheet(dataToExport);
-        ws['!cols'] = [{wch: 15}, {wch: 35}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}];
+        ws['!cols'] = [{ wch: 15 }, { wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
         
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "ميزان المراجعة");
-        XLSX.writeFile(wb, `ميزان_المراجعة_${startDate}_إلى_${endDate}.xlsx`);
+        XLSX.writeFile(wb, `ميزان_المراجعة_${startDate || 'بداية'}_إلى_${endDate || 'نهاية'}.xlsx`);
     };
 
     return {
         records,
+        rawRecordsCount: rawRecords.length,
         isLoading,
         startDate, setStartDate,
         endDate, setEndDate,
-        fetchTrialBalance,
         totals,
+        balanceDiff,
+        isBalanced: balanceDiff.isBalanced,
+        searchQuery, setSearchQuery,
+        hideZeroBalances, setHideZeroBalances,
+        accountLevel, setAccountLevel,
+        setQuickDateRange,
+        fetchTrialBalance,
         exportToExcel
     };
 }
