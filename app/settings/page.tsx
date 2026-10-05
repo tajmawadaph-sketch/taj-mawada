@@ -127,12 +127,12 @@ function SettingsPageContent() {
   const isEn = language === 'en';
 
   const tabs: { id: SettingsTab; labelAr: string; labelEn: string; icon: string }[] = [
-    { id: 'devices', labelAr: 'الأجهزة والطرفيات ونقاط البيع', labelEn: 'Connected Devices & POS', icon: '🖨️' },
+    { id: 'devices', labelAr: 'الأجهزة والطرفيات ونقاط البيع', labelEn: 'Connected Devices and POS', icon: '🖨️' },
     { id: 'backup', labelAr: 'تصدير النسخ الاحتياطية', labelEn: 'Export Backup', icon: '📦' },
     { id: 'restore', labelAr: 'استعادة البيانات الذكية', labelEn: 'Smart Restore', icon: '📥' },
-    { id: 'reset', labelAr: 'التهيئة وتصفير الحركات', labelEn: 'Reset & Wipe', icon: '🚨' },
+    { id: 'reset', labelAr: 'التهيئة وتصفير الحركات', labelEn: 'Reset and Wipe', icon: '🚨' },
     { id: 'permissions', labelAr: 'مصفوفة الصلاحيات', labelEn: 'Permissions Matrix', icon: '🔐' },
-    { id: 'health', labelAr: 'سلامة النظام (الرادار)', labelEn: 'System Health', icon: '⚡' },
+    { id: 'health', labelAr: 'سلامة النظام (الرادار)', labelEn: 'System Health Radar', icon: '⚡' },
     { id: 'audit', labelAr: 'سجل المراقبة والعمليات', labelEn: 'Audit Logs', icon: '🕵️‍♂️' },
   ];
 
@@ -465,7 +465,10 @@ function SettingsPageContent() {
               onClick={() => setActiveTab(tab.id)}
             >
               <span>{tab.icon}</span>
-              <span>{isEn ? tab.labelEn : tab.labelAr}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+                <span>{tab.labelAr}</span>
+                <span style={{ fontSize: '10px', color: '#C29B62', fontWeight: 700, letterSpacing: '0.2px' }}>{tab.labelEn}</span>
+              </div>
             </button>
           ))}
         </div>

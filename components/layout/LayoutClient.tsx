@@ -393,14 +393,14 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
   // تابات سطح المكتب السريعة (Desktop Quick Navigation Tabs)
   const primaryNavTabs = useMemo(() => [
-    { id: 'dashboard', title: 'الرئيسية', icon: '🏠', path: '/Dashboard' },
-    { id: 'pos', title: 'الكاشير (POS)', icon: '🛍️', path: '/pos' },
-    { id: 'invoices', title: 'الفواتير', icon: '🧾', path: '/invoices' },
-    { id: 'inventory', title: 'المخزون', icon: '📦', path: '/inventory' },
-    { id: 'receipts', title: 'القبض والصرف', icon: '💵', path: '/ReceiptVouchers' },
-    { id: 'partners', title: 'العملاء', icon: '👥', path: '/partners' },
-    { id: 'reports', title: 'التقارير', icon: '📊', path: '/reports' },
-    { id: 'fleet', title: 'الأسطول', icon: '🚚', path: '/fleet_operations' },
+    { id: 'dashboard', title: 'الرئيسية', titleEn: 'Dashboard', icon: '🏠', path: '/Dashboard' },
+    { id: 'pos', title: 'الكاشير', titleEn: 'POS Cashier', icon: '🛍️', path: '/pos' },
+    { id: 'invoices', title: 'الفواتير', titleEn: 'Invoices', icon: '🧾', path: '/invoices' },
+    { id: 'inventory', title: 'المخزون', titleEn: 'Inventory', icon: '📦', path: '/inventory' },
+    { id: 'receipts', title: 'القبض والصرف', titleEn: 'Vouchers', icon: '💵', path: '/ReceiptVouchers' },
+    { id: 'partners', title: 'العملاء', titleEn: 'Partners', icon: '👥', path: '/partners' },
+    { id: 'reports', title: 'التقارير', titleEn: 'Reports', icon: '📊', path: '/reports' },
+    { id: 'fleet', title: 'الأسطول', titleEn: 'Fleet', icon: '🚚', path: '/fleet_operations' },
   ].filter(tab => canView(tab.id)), [role, can]);
 
   // فلترة الشاشات داخل مركز القيادة حسب البحث والتبويب المحدد
@@ -521,12 +521,10 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         .desktop-nav-tab {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
+          gap: 7px;
+          padding: 5px 12px;
           border-radius: 10px;
           text-decoration: none;
-          font-size: 12.5px;
-          font-weight: 800;
           color: #6e5d4f;
           border: 1px solid transparent;
           transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -543,6 +541,26 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           background: linear-gradient(135deg, rgba(194, 155, 98, 0.18) 0%, rgba(168, 87, 60, 0.08) 100%);
           border-color: rgba(194, 155, 98, 0.45);
           box-shadow: 0 2px 8px rgba(194, 155, 98, 0.15);
+        }
+        .tab-title-wrap {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          line-height: 1.15;
+        }
+        .tab-title-ar {
+          font-size: 12px;
+          font-weight: 800;
+          line-height: 1.1;
+        }
+        .tab-title-en {
+          font-size: 9px;
+          font-weight: 800;
+          color: #C29B62;
+          letter-spacing: 0.3px;
+        }
+        .desktop-nav-tab.active .tab-title-en {
+          color: #A8573C;
         }
         .tab-glow-dot {
           width: 6px;
@@ -842,6 +860,17 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           font-weight: 800; font-size: 13px; color: #1E130B;
           line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
+        .nav-subtitle-en {
+          font-size: 10.5px;
+          color: #C29B62;
+          font-weight: 700;
+          letter-spacing: 0.2px;
+          line-height: 1.2;
+          margin-top: 2px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
         .nav-card-active-dot {
           width: 7px; height: 7px; background: #059669; border-radius: 50%;
           box-shadow: 0 0 8px #059669;
@@ -941,6 +970,14 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             height: 19px;
             flex-shrink: 0;
           }
+          .dock-sub-en {
+            font-size: 8px;
+            font-weight: 700;
+            color: #C29B62;
+            line-height: 1;
+            margin-top: -2px;
+            letter-spacing: 0.2px;
+          }
         }
       `}} />
 
@@ -966,7 +1003,10 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                   className={`desktop-nav-tab ${isActive ? 'active' : ''}`}
                 >
                   <span className="tab-icon">{tab.icon}</span>
-                  <span className="tab-text">{tab.title}</span>
+                  <div className="tab-title-wrap">
+                    <span className="tab-title-ar">{tab.title}</span>
+                    <span className="tab-title-en">{tab.titleEn}</span>
+                  </div>
                   {isActive && <span className="tab-glow-dot" />}
                 </Link>
               );
@@ -1111,7 +1151,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                 <span className="hub-cat-count">{totalScreensCount}</span>
               </button>
               {authorizedMenuGroups.map((group) => {
-                const groupTitle = groupKeyMap[group.group] ? t(groupKeyMap[group.group]) : group.group;
+                const groupTitle = language === 'en' ? (group.groupEn || group.group) : (groupKeyMap[group.group] ? t(groupKeyMap[group.group]) : group.group);
                 return (
                   <button
                     key={group.group}
@@ -1130,7 +1170,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           {/* شبكة البطاقات المفروزة والمنقحة */}
           {filteredMenuGroups.length > 0 ? (
             filteredMenuGroups.map((group, gIdx) => {
-              const groupTitle = groupKeyMap[group.group] ? t(groupKeyMap[group.group]) : group.group;
+              const groupTitle = language === 'en' ? (group.groupEn || group.group) : (groupKeyMap[group.group] ? t(groupKeyMap[group.group]) : group.group);
 
               return (
                 <div key={gIdx} className="group-section">
@@ -1145,6 +1185,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                       const delay = (animationDelayCounter++) * 0.02;
                       const isActive = pathname === item.path;
                       const itemTitle = t('menu_' + item.id) || item.title;
+                      const itemTitleEn = item.titleEn || t('menu_' + item.id) || item.title;
                       return (
                         <Link key={iIdx} href={item.path} prefetch={false} onClick={() => setIsOpen(false)}>
                           <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
@@ -1152,7 +1193,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                               <div className="icon-wrapper">{item.icon}</div>
                               <div className="nav-title-block">
                                 <span className="nav-title">{itemTitle}</span>
-                                <span style={{ fontSize: '11px', color: 'rgba(44, 26, 18, 0.5)', fontWeight: 600 }}>{item.path}</span>
+                                <span className="nav-subtitle-en">{itemTitleEn}</span>
                               </div>
                             </div>
                             {isActive ? (
@@ -1215,18 +1256,22 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         <Link href="/Dashboard" prefetch={false} className={`dock-item ${pathname === '/Dashboard' ? 'active' : ''}`}>
           <Home />
           <span>الرئيسية</span>
+          <span className="dock-sub-en">Dashboard</span>
         </Link>
         <Link href="/pos" prefetch={false} className={`dock-item ${pathname === '/pos' ? 'active' : ''}`}>
           <ShoppingBag />
           <span>الكاشير</span>
+          <span className="dock-sub-en">Cashier</span>
         </Link>
         <Link href="/invoices" prefetch={false} className={`dock-item ${pathname === '/invoices' ? 'active' : ''}`}>
           <FileText />
           <span>الفواتير</span>
+          <span className="dock-sub-en">Invoices</span>
         </Link>
         <Link href="/inventory" prefetch={false} className={`dock-item ${pathname === '/inventory' ? 'active' : ''}`}>
           <Package />
           <span>الأصناف</span>
+          <span className="dock-sub-en">Inventory</span>
         </Link>
         <button 
           onClick={() => setIsOpen(prev => !prev)} 
@@ -1235,6 +1280,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         >
           <Menu />
           <span>المزيد</span>
+          <span className="dock-sub-en">Menu</span>
         </button>
       </div>
 

@@ -2,12 +2,12 @@ import { LocaleKeys } from './ar';
 
 export const en: Record<LocaleKeys, string> = {
     // Menu Groups
-    menu_group_home: "Home & Summaries",
-    menu_group_sales: "Operations & Sales",
-    menu_group_inventory: "Inventory & Warehouses",
-    menu_group_finance: "Accounts & Finance",
-    menu_group_partners: "Partners & Delegates",
-    menu_group_system: "System & Reports",
+    menu_group_home: "Home and Summaries",
+    menu_group_sales: "Operations and Sales",
+    menu_group_inventory: "Inventory and Warehouses",
+    menu_group_finance: "Accounts and Finance",
+    menu_group_partners: "Partners and Delegates",
+    menu_group_system: "System and Reports",
 
     // Menu Items
     menu_dashboard: "Dashboard",
@@ -16,14 +16,14 @@ export const en: Record<LocaleKeys, string> = {
     menu_pos_dashboard: "Outlets Profitability",
     menu_pos_settlements: "POS Custody Settlements",
     menu_fleet_operations: "Fleet Operations",
-    menu_invoices: "Invoices & Sales",
+    menu_invoices: "Sales Invoices",
     menu_inventory: "Inventory Items",
     menu_purchase_orders: "Purchase Orders",
     menu_warehouses: "Warehouses",
     menu_inventory_transactions: "Stock Movements",
     menu_receipts: "Receipt Vouchers",
     menu_payments: "Payment Vouchers",
-    menu_expenses: "Expenses",
+    menu_expenses: "Operating Expenses",
     menu_journal: "General Journal",
     menu_manual_journals: "Manual Journals",
     menu_accounts: "Chart of Accounts",
@@ -39,10 +39,10 @@ export const en: Record<LocaleKeys, string> = {
     menu_statement: "Account Statement",
     menu_reports: "Comprehensive Reports",
     menu_import: "Data Import",
-    menu_promotions: "Promotions & Offers",
-    menu_audit: "Audit & Logs",
+    menu_promotions: "Promotions and Offers",
+    menu_audit: "Audit and Logs",
     menu_fleet: "Fleet Management",
-    menu_payroll: "Payroll & Salaries",
+    menu_payroll: "Payroll and Salaries",
     menu_settings: "System Settings",
 
     // Common Actions & UI
