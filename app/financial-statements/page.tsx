@@ -3,7 +3,8 @@ import React from 'react';
 import MasterPage from '@/components/MasterPage';
 import LoadingScreen from '@/components/LoadingScreen';
 import PrintHeader from '@/components/PrintHeader';
-import { formatCurrency } from '@/lib/helpers';
+import { formatCurrency, tafqeet } from '@/lib/helpers';
+import { QRCodeSVG } from 'qrcode.react';
 import { useFinancialStatementsLogic, FinancialAccountRow } from './financial_statements_logic';
 
 export default function FinancialStatementsPage() {
@@ -632,19 +633,38 @@ export default function FinancialStatementsPage() {
                             )}
                         </div>
 
-                        {/* Official Signatures for A4 Print */}
-                        <div className="print-footer" style={{ display: 'none', justifyContent: 'space-between', marginTop: '50px', padding: '0 40px', direction: 'rtl' }}>
+                        {/* Official Signatures & Digital Verification for A4 Print */}
+                        <div className="print-footer" style={{ display: 'none', justifyContent: 'space-between', alignItems: 'center', marginTop: '50px', padding: '0 30px', direction: 'rtl' }}>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B', marginBottom: '40px' }}>المحاسب المسؤول</div>
-                                <div style={{ borderTop: '1px solid #C29B62', width: '160px', margin: '0 auto', paddingTop: '6px', fontSize: '12px', color: '#6e5d4f' }}>التوقيع والتاريخ</div>
+                                <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B', marginBottom: '35px' }}>المحاسب المسؤول</div>
+                                <div style={{ borderTop: '1px solid #C29B62', width: '150px', margin: '0 auto', paddingTop: '6px', fontSize: '11px', color: '#6e5d4f' }}>التوقيع والتاريخ</div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B', marginBottom: '40px' }}>المدير المالي (CFO)</div>
-                                <div style={{ borderTop: '1px solid #C29B62', width: '160px', margin: '0 auto', paddingTop: '6px', fontSize: '12px', color: '#6e5d4f' }}>الاعتماد الرسمي</div>
+                                <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B', marginBottom: '35px' }}>المدير المالي (CFO)</div>
+                                <div style={{ borderTop: '1px solid #C29B62', width: '150px', margin: '0 auto', paddingTop: '6px', fontSize: '11px', color: '#6e5d4f' }}>الاعتماد الرسمي</div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B', marginBottom: '40px' }}>ختم صيدلية تاج المودة</div>
-                                <div style={{ border: '2px dashed #C29B62', width: '100px', height: '60px', margin: '0 auto', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#8c6b32' }}>مكان الختم</div>
+                                <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B', marginBottom: '35px' }}>ختم المنشأة الرسمي</div>
+                                <div style={{ border: '2px dashed #C29B62', width: '90px', height: '55px', margin: '0 auto', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#8c6b32' }}>مكان الختم</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                <QRCodeSVG 
+                                    value={JSON.stringify({
+                                        org: "صيدلية تاج المودة البيطرية",
+                                        doc: "القوائم المالية والمركز المالي",
+                                        period: `${startDate} إلى ${endDate}`,
+                                        revenues: totalRevenues.toFixed(2),
+                                        expenses: totalExpenses.toFixed(2),
+                                        net_profit: netProfit.toFixed(2),
+                                        assets: totalAssets.toFixed(2),
+                                        balanced: isBalanced,
+                                        issued_at: new Date().toISOString()
+                                    })} 
+                                    size={75} 
+                                    level="M" 
+                                    fgColor="#1E130B" 
+                                />
+                                <span style={{ fontSize: '9px', fontWeight: 800, color: '#6e5d4f' }}>توثيق رقمي معتمد</span>
                             </div>
                         </div>
                     </>
