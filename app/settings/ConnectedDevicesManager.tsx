@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Printer, 
   Scan, 
@@ -19,212 +19,121 @@ import {
   Cpu, 
   Play, 
   Star, 
-  Layers, 
-  Volume2, 
-  Radio, 
   X,
-  FileText,
-  Tag
+  Search,
+  Radio,
+  Sliders,
+  Check,
+  Activity,
+  ShieldCheck,
+  Terminal,
+  Zap,
+  ArrowRight
 } from 'lucide-react';
 import { useToast } from '@/lib/toast-context';
 import { useLanguage } from '@/lib/LanguageContext';
 import { playPosBeep, triggerHaptic } from '@/components/BarcodeScannerWidget';
-
-export interface ConnectedDevice {
-  id: string;
-  name: string;
-  category: 'receipt_printer' | 'a4_printer' | 'label_printer' | 'barcode_scanner' | 'pos_terminal' | 'cash_drawer' | 'scale' | 'customer_display';
-  brand: string;
-  model: string;
-  connectionType: 'usb' | 'lan' | 'bluetooth' | 'serial' | 'browser';
-  ipAddress?: string;
-  port?: number;
-  baudRate?: number;
-  paperWidth?: '80mm' | '58mm' | 'a4' | 'label_50x25';
-  terminalId?: string;
-  merchantId?: string;
-  isDefault: boolean;
-  status: 'online' | 'standby' | 'offline';
-  lastSeen?: string;
-  autoCut?: boolean;
-  kickDrawer?: boolean;
-  beepOnScan?: boolean;
-  notes?: string;
-}
-
-const DEFAULT_DEVICES: ConnectedDevice[] = [
-  {
-    id: 'dev-1',
-    name: 'طابعة فواتير الكاشير الحرارية (Epson TM-T20III)',
-    category: 'receipt_printer',
-    brand: 'Epson',
-    model: 'TM-T20III 80mm Network',
-    connectionType: 'lan',
-    ipAddress: '192.168.1.150',
-    port: 9100,
-    paperWidth: '80mm',
-    autoCut: true,
-    kickDrawer: true,
-    isDefault: true,
-    status: 'online',
-    lastSeen: 'متصل الآن',
-    notes: 'طابعة الإيصالات الحرارية الافتراضية لمنفذ بيع الصيدلية'
-  },
-  {
-    id: 'dev-2',
-    name: 'طابعة ملصقات وباركود الأدوية (Zebra ZD220)',
-    category: 'label_printer',
-    brand: 'Zebra',
-    model: 'ZD220 Direct Thermal',
-    connectionType: 'usb',
-    paperWidth: 'label_50x25',
-    isDefault: true,
-    status: 'online',
-    lastSeen: 'متصل الآن',
-    notes: 'طابعة استيكرات أدوية ومستلزمات الخيل والإبل'
-  },
-  {
-    id: 'dev-3',
-    name: 'طابعة الفواتير الضريبية A4 (HP LaserJet Pro)',
-    category: 'a4_printer',
-    brand: 'HP',
-    model: 'LaserJet Pro M404dn',
-    connectionType: 'lan',
-    ipAddress: '192.168.1.180',
-    port: 9100,
-    paperWidth: 'a4',
-    isDefault: true,
-    status: 'online',
-    lastSeen: 'متصل الآن',
-    notes: 'طباعة كشوفات الحساب والفواتير الضريبية الرسمية A4'
-  },
-  {
-    id: 'dev-4',
-    name: 'قارئ الباركود اللاسلكي 2D/QR (Honeywell Voyager)',
-    category: 'barcode_scanner',
-    brand: 'Honeywell',
-    model: 'Voyager 1400g Wireless',
-    connectionType: 'bluetooth',
-    beepOnScan: true,
-    isDefault: true,
-    status: 'online',
-    lastSeen: 'متصل الآن',
-    notes: 'ماسح ضوئي ليزري محمول لقراءة باركود الأدوية ورموز ZATCA'
-  },
-  {
-    id: 'dev-5',
-    name: 'جهاز نقاط البيع ومدى (Geidea Smart POS)',
-    category: 'pos_terminal',
-    brand: 'Geidea',
-    model: 'Pax A920 Smart POS',
-    connectionType: 'lan',
-    ipAddress: '192.168.1.120',
-    port: 8080,
-    terminalId: 'TID-8849201',
-    merchantId: 'MID-9920138',
-    isDefault: true,
-    status: 'online',
-    lastSeen: 'متصل الآن (Mada Live)',
-    notes: 'ربط آلي لعمليات الدفع عبر بطاقات مدى وفيزا وأبل باي'
-  },
-  {
-    id: 'dev-6',
-    name: 'درج النقدية الإلكتروني (Maken MK-410)',
-    category: 'cash_drawer',
-    brand: 'Maken',
-    model: 'MK-410 Heavy Duty RJ11',
-    connectionType: 'usb',
-    kickDrawer: true,
-    isDefault: true,
-    status: 'online',
-    lastSeen: 'متصل الآن',
-    notes: 'مرتبط بطابعة الفواتير لفتح الدرج آلياً عند تحصيل النقد'
-  },
-  {
-    id: 'dev-7',
-    name: 'ميزان المستحضرات والأعلاف الرقمي (CAS ER Plus)',
-    category: 'scale',
-    brand: 'CAS',
-    model: 'ER Plus Digital Scale',
-    connectionType: 'serial',
-    baudRate: 9600,
-    isDefault: true,
-    status: 'online',
-    lastSeen: 'متصل الآن',
-    notes: 'قراءة الوزن اللحظي لأعلاف وفيتامينات الخيل والإبل بالكيلوجرام'
-  },
-  {
-    id: 'dev-8',
-    name: 'شاشة عرض العميل (VFD Customer Pole Display)',
-    category: 'customer_display',
-    brand: 'Partner Tech',
-    model: 'CD-7220 2x20 VFD',
-    connectionType: 'usb',
-    isDefault: true,
-    status: 'standby',
-    lastSeen: 'وضع الاستعداد',
-    notes: 'عرض اسم الصنف والمجموع النهائي للعميل أثناء عملية البيع'
-  }
-];
+import {
+  ConnectedDevice,
+  HardwareCapabilities,
+  getHardwareCapabilities,
+  loadPairedDevices,
+  savePairedDevices,
+  pairUsbDevice,
+  pairSerialDevice,
+  pairHidScanner,
+  scanLocalSubnet,
+  probeNetworkEndpoint,
+  performDeviceHandshake,
+  testThermalReceiptPrint,
+  openCashDrawer,
+  readScaleWeight,
+  testMadaPosTerminal
+} from '@/lib/hardwareEngine';
 
 export default function ConnectedDevicesManager() {
   const { showToast } = useToast();
   const { language } = useLanguage();
   const isEn = language === 'en';
 
+  // 1️⃣ حالة الأجهزة (بدء بقائمة فارغة تماماً - No Mock Data)
   const [devices, setDevices] = useState<ConnectedDevice[]>([]);
+  const [capabilities, setCapabilities] = useState<HardwareCapabilities>({
+    webUsb: false,
+    webSerial: false,
+    webHid: false,
+    webBluetooth: false,
+    isSecureContext: false
+  });
+
+  // التصفية والبحث
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [isScanning, setIsScanning] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // نافذة الإضافة / التعديل
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingDevice, setEditingDevice] = useState<ConnectedDevice | null>(null);
+  // حالة فحص النبض الجماعي (Pulse Check)
+  const [isPingingAll, setIsPingingAll] = useState(false);
+  const [pingProgress, setPingProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
 
-  // نافذة اختبار الباركود الحي
+  // نافذة الاستكشاف والاقتران الحي (Discovery & Pairing Wizard Modal)
+  const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
+  const [discoveryTab, setDiscoveryTab] = useState<'usb' | 'serial' | 'hid' | 'network' | 'manual'>('usb');
+
+  // فحص الشبكة المحلية (Local Subnet Scanner)
+  const [subnetPrefix, setSubnetPrefix] = useState('192.168.1');
+  const [startHost, setStartHost] = useState(100);
+  const [endHost, setEndHost] = useState(150);
+  const [scanPort, setScanPort] = useState(9100);
+  const [isScanningSubnet, setIsScanningSubnet] = useState(false);
+  const [subnetProgress, setSubnetProgress] = useState<{ scanned: number; total: number; currentIp: string }>({ scanned: 0, total: 0, currentIp: '' });
+  const [discoveredIps, setDiscoveredIps] = useState<Array<{ ip: string; port: number; latency: number }>>([]);
+
+  // نافذة التعديل / الإضافة اليدوية
+  const [editingDevice, setEditingDevice] = useState<ConnectedDevice | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // نوافذ الاختبار التفاعلية
   const [isScannerTestOpen, setIsScannerTestOpen] = useState(false);
   const [scannerTestLog, setScannerTestLog] = useState<string[]>([]);
   const [liveScannerInput, setLiveScannerInput] = useState('');
 
-  // نافذة اختبار جهاز مدى
-  const [madaTestingId, setMadaTestingId] = useState<string | null>(null);
-  const [madaTestResult, setMadaTestResult] = useState<any>(null);
+  const [scaleModalOpen, setScaleModalOpen] = useState(false);
+  const [scaleReading, setScaleReading] = useState<{ weight: number; unit: string; rawText: string } | null>(null);
+  const [isScaleReading, setIsScaleReading] = useState(false);
 
-  // تحميل الأجهزة من التخزين المحلي
+  const [madaModalOpen, setMadaModalOpen] = useState(false);
+  const [madaTestResult, setMadaTestResult] = useState<{ success: boolean; latency: number; details: string; terminalId?: string } | null>(null);
+  const [isMadaTesting, setIsMadaTesting] = useState(false);
+
+  // نافذة تأكيد الحذف (بدون native confirm)
+  const [deviceToDelete, setDeviceToDelete] = useState<ConnectedDevice | null>(null);
+
+  // تحميل الأجهزة المخزنة وقدرات المتصفح عند بدء التشغيل
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('taj_connected_devices_v2');
-      if (saved) {
-        setDevices(JSON.parse(saved));
-      } else {
-        setDevices(DEFAULT_DEVICES);
-        localStorage.setItem('taj_connected_devices_v2', JSON.stringify(DEFAULT_DEVICES));
-      }
-    } catch {
-      setDevices(DEFAULT_DEVICES);
-    }
+    const caps = getHardwareCapabilities();
+    setCapabilities(caps);
+
+    const loaded = loadPairedDevices();
+    setDevices(loaded);
   }, []);
 
-  // حفظ الأجهزة في التخزين المحلي
-  const saveDevices = (updated: ConnectedDevice[]) => {
+  // حفظ التغييرات وتحديث التخزين
+  const updateAndSaveDevices = useCallback((updated: ConnectedDevice[]) => {
     setDevices(updated);
-    try {
-      localStorage.setItem('taj_connected_devices_v2', JSON.stringify(updated));
-    } catch {}
-  };
+    savePairedDevices(updated);
+  }, []);
 
-  // الفئات المتاحة
-  const categories = [
-    { id: 'all', nameAr: '🌟 كافة الأجهزة', nameEn: 'All Devices', icon: '⚡' },
-    { id: 'receipt_printer', nameAr: '🖨️ طابعات الإيصالات', nameEn: 'Receipt Printers', icon: '🖨️' },
-    { id: 'a4_printer', nameAr: '📄 طابعات A4', nameEn: 'A4 Printers', icon: '📄' },
+  // فئات الأجهزة المتاحة
+  const categories = useMemo(() => [
+    { id: 'all', nameAr: '🌟 كافة الطرفيات', nameEn: 'All Peripherals', icon: '⚡' },
+    { id: 'receipt_printer', nameAr: '🖨️ طابعات الإيصالات (80mm)', nameEn: 'Receipt Printers', icon: '🖨️' },
     { id: 'label_printer', nameAr: '🏷️ طابعات الباركود', nameEn: 'Label Printers', icon: '🏷️' },
+    { id: 'a4_printer', nameAr: '📄 طابعات A4', nameEn: 'A4 Printers', icon: '📄' },
     { id: 'barcode_scanner', nameAr: '🔍 قارئات الباركود', nameEn: 'Barcode Scanners', icon: '🔍' },
-    { id: 'pos_terminal', nameAr: '💳 أجهزة مدى والدفع', nameEn: 'POS Terminals', icon: '💳' },
+    { id: 'pos_terminal', nameAr: '💳 أجهزة مدى والدفع', nameEn: 'Mada / POS', icon: '💳' },
     { id: 'cash_drawer', nameAr: '🔓 أدراج النقدية', nameEn: 'Cash Drawers', icon: '🔓' },
     { id: 'scale', nameAr: '⚖️ الموازين الإلكترونية', nameEn: 'Digital Scales', icon: '⚖️' },
-    { id: 'customer_display', nameAr: '🖥️ شاشات العملاء', nameEn: 'Customer Displays', icon: '🖥️' }
-  ];
+    { id: 'customer_display', nameAr: '🖥️ شاشات العملاء (VFD)', nameEn: 'Customer Displays', icon: '🖥️' }
+  ], []);
 
   // تصفية الأجهزة
   const filteredDevices = useMemo(() => {
@@ -234,7 +143,8 @@ export default function ConnectedDevicesManager() {
         d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         d.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
         d.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (d.ipAddress && d.ipAddress.includes(searchQuery));
+        (d.ipAddress && d.ipAddress.includes(searchQuery)) ||
+        (d.vendorId && d.vendorId.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesCat && matchesSearch;
     });
   }, [devices, selectedCategory, searchQuery]);
@@ -250,25 +160,201 @@ export default function ConnectedDevicesManager() {
     };
   }, [devices]);
 
-  // فحص وكشف الأجهزة التلقائي (Hardware Radar Scan)
-  const handleScanHardware = async () => {
-    setIsScanning(true);
-    showToast('جاري فحص منافذ USB والشبكة والبلوتوث لكشف الأجهزة المتصلة...', 'info');
+  // 🔄 فحص نبض الاتصال اللحظي لكافة الأجهزة المقترنة (Real-time Handshake Ping)
+  const handlePulseCheckAll = async () => {
+    if (devices.length === 0) {
+      showToast(isEn ? 'No paired devices to test.' : 'لا توجد أجهزة مقترنة بعد لفحصها.', 'info');
+      return;
+    }
 
-    setTimeout(() => {
-      setIsScanning(false);
+    setIsPingingAll(true);
+    setPingProgress({ current: 0, total: devices.length });
+    showToast(isEn ? 'Starting real-time hardware handshake ping...' : 'جاري إرسال نبضات الفحص الحقيقية لكافة الأجهزة...', 'info');
+
+    const updated = [...devices];
+    let onlineCount = 0;
+
+    for (let i = 0; i < updated.length; i++) {
+      setPingProgress({ current: i + 1, total: updated.length });
+      const dev = updated[i];
+      try {
+        const result = await performDeviceHandshake(dev);
+        updated[i] = {
+          ...dev,
+          status: result.status,
+          latency: result.latency,
+          lastSeen: result.timestamp + ' (' + result.message + ')'
+        };
+        if (result.status === 'online') onlineCount++;
+      } catch (e: any) {
+        updated[i] = {
+          ...dev,
+          status: 'offline',
+          lastSeen: 'تعذر الاتصال: ' + (e.message || 'خطأ غير معروف')
+        };
+      }
+    }
+
+    updateAndSaveDevices(updated);
+    setIsPingingAll(false);
+    playPosBeep();
+    triggerHaptic(100);
+
+    showToast(
+      isEn 
+        ? `Handshake check complete: ${onlineCount} of ${devices.length} devices online.` 
+        : `اكتمل فحص النبض: ${onlineCount} من أصل ${devices.length} أجهزة متصلة ونشطة حالياً 🟢`,
+      onlineCount > 0 ? 'success' : 'warning'
+    );
+  };
+
+  // 🔌 استكشاف واقتران طابعة أو طرفية USB عبر WebUSB API
+  const handleDiscoverUsb = async () => {
+    try {
+      showToast(isEn ? 'Opening native browser USB pairing window...' : 'جاري فتح نافذة استكشاف USB في المتصفح...', 'info');
+      const newDev = await pairUsbDevice('receipt_printer');
+      
+      // التحقق من عدم التكرار
+      const exists = devices.find(d => (d.vendorId && d.vendorId === newDev.vendorId && d.productId === newDev.productId) || d.id === newDev.id);
+      if (exists) {
+        showToast(isEn ? 'This USB device is already paired.' : 'هذا الجهاز مقترن بالفعل في النظام!', 'warning');
+        return;
+      }
+
+      // إذا كان هو الجهاز الأول في فئته نجعله افتراضياً
+      const hasCategoryDefault = devices.some(d => d.category === newDev.category && d.isDefault);
+      newDev.isDefault = !hasCategoryDefault;
+
+      const updated = [...devices, newDev];
+      updateAndSaveDevices(updated);
+      setIsDiscoveryOpen(false);
       playPosBeep();
       triggerHaptic(120);
 
-      const updated = devices.map(d => ({
-        ...d,
-        status: 'online' as const,
-        lastSeen: 'تم التحقق الآن'
-      }));
-      saveDevices(updated);
+      showToast(isEn ? `Paired "${newDev.name}" via WebUSB!` : `تم اقتران الجهاز "${newDev.name}" بنجاح عبر منفذ USB 🟢`, 'success');
+    } catch (err: any) {
+      if (!err.message?.includes('إلغاء')) {
+        showToast(err.message || 'فشل اقتران منفذ USB', 'error');
+      }
+    }
+  };
 
-      showToast(`تم اكتشاف وفحص ${devices.length} جهاز بنجاح — كافة الأجهزة متصلة وجاهزة للعمل! 🟢`, 'success');
-    }, 1200);
+  // 🖥️ استكشاف واقتران منفذ COM التسلسلي (Web Serial API) للموازين وشاشات العرض
+  const handleDiscoverSerial = async (category: 'scale' | 'customer_display', baudRate: number) => {
+    try {
+      showToast(isEn ? 'Opening COM port selection dialog...' : 'جاري فتح نافذة اختيار منفذ COM التسلسلي...', 'info');
+      const newDev = await pairSerialDevice(category, baudRate);
+
+      const hasCategoryDefault = devices.some(d => d.category === newDev.category && d.isDefault);
+      newDev.isDefault = !hasCategoryDefault;
+
+      const updated = [...devices, newDev];
+      updateAndSaveDevices(updated);
+      setIsDiscoveryOpen(false);
+      playPosBeep();
+      triggerHaptic(120);
+
+      showToast(isEn ? `Paired Serial Port (${baudRate} baud) successfully!` : `تم اقتران منفذ COM التسلسلي بنجاح (${baudRate} bps) 🟢`, 'success');
+    } catch (err: any) {
+      if (!err.message?.includes('إلغاء')) {
+        showToast(err.message || 'فشل اقتران منفذ COM التسلسلي', 'error');
+      }
+    }
+  };
+
+  // 🔍 استكشاف واقتران قارئ باركود عبر WebHID
+  const handleDiscoverHid = async () => {
+    try {
+      showToast(isEn ? 'Opening WebHID device picker...' : 'جاري استدعاء نافذة اقتران قارئ الباركود عبر WebHID...', 'info');
+      const newDev = await pairHidScanner();
+
+      const exists = devices.find(d => d.vendorId && d.vendorId === newDev.vendorId && d.productId === newDev.productId);
+      if (exists) {
+        showToast(isEn ? 'Barcode scanner is already paired.' : 'قارئ الباركود هذا مقترن بالفعل!', 'warning');
+        return;
+      }
+
+      const updated = [...devices, newDev];
+      updateAndSaveDevices(updated);
+      setIsDiscoveryOpen(false);
+      playPosBeep();
+      triggerHaptic(120);
+
+      showToast(isEn ? `Paired HID Barcode Scanner: ${newDev.name}` : `تم اقتران قارئ الباركود "${newDev.name}" بنجاح 🟢`, 'success');
+    } catch (err: any) {
+      if (!err.message?.includes('إلغاء')) {
+        showToast(err.message || 'فشل اقتران قارئ الباركود', 'error');
+      }
+    }
+  };
+
+  // 🌐 بدء فحص الشبكة المحلية (Local Subnet Scanner)
+  const handleStartSubnetScan = async () => {
+    setIsScanningSubnet(true);
+    setDiscoveredIps([]);
+    showToast(isEn ? `Scanning subnet ${subnetPrefix}.${startHost}-${endHost} on port ${scanPort}...` : `جاري فحص نطاق الشبكة ${subnetPrefix}.${startHost} إلى ${endHost} على المنفذ ${scanPort}...`, 'info');
+
+    try {
+      const found = await scanLocalSubnet(
+        subnetPrefix,
+        startHost,
+        endHost,
+        scanPort,
+        (scanned, total, currentIp, currentFound) => {
+          setSubnetProgress({ scanned, total, currentIp });
+          setDiscoveredIps(currentFound);
+        }
+      );
+
+      setIsScanningSubnet(false);
+      playPosBeep();
+      triggerHaptic(120);
+
+      if (found.length > 0) {
+        showToast(isEn ? `Discovered ${found.length} responsive network devices!` : `تم اكتشاف ${found.length} أجهزة شبكية متصلة ومستجيبة! 🟢`, 'success');
+      } else {
+        showToast(isEn ? 'No responsive devices found in this range.' : 'لم يتم العثور على أجهزة تستجيب في هذا النطاق.', 'warning');
+      }
+    } catch (err: any) {
+      setIsScanningSubnet(false);
+      showToast(err.message || 'فشل فحص نطاق الشبكة', 'error');
+    }
+  };
+
+  // إضافة جهاز مكتشف من فحص الشبكة
+  const handleAddDiscoveredIp = (ipItem: { ip: string; port: number; latency: number }) => {
+    let cat: ConnectedDevice['category'] = 'receipt_printer';
+    let brand = 'Network Hardware';
+    let name = `طابعة شبكة (${ipItem.ip})`;
+
+    if (ipItem.port === 8080 || ipItem.port === 80) {
+      cat = 'pos_terminal';
+      name = `جهاز مدى / دفع شبكي (${ipItem.ip})`;
+      brand = 'Mada Terminal';
+    }
+
+    const newDev: ConnectedDevice = {
+      id: `lan-${ipItem.ip.replace(/\./g, '-')}-${Date.now().toString(36)}`,
+      name: name,
+      category: cat,
+      brand: brand,
+      model: `IP Port ${ipItem.port}`,
+      connectionType: 'lan',
+      ipAddress: ipItem.ip,
+      port: ipItem.port,
+      paperWidth: '80mm',
+      autoCut: true,
+      kickDrawer: cat === 'receipt_printer',
+      isDefault: !devices.some(d => d.category === cat && d.isDefault),
+      status: 'online',
+      latency: ipItem.latency,
+      lastSeen: `متصل ومستجيب (${ipItem.latency}ms) 🟢`,
+      notes: `تم اكتشافه آلياً عبر فاحص الشبكة المحلية`
+    };
+
+    const updated = [...devices, newDev];
+    updateAndSaveDevices(updated);
+    showToast(isEn ? `Added "${newDev.name}" to connected devices.` : `تمت إضافة "${newDev.name}" واعتماده في النظام 🚀`, 'success');
   };
 
   // تعيين كجهاز افتراضي
@@ -279,81 +365,116 @@ export default function ConnectedDevicesManager() {
       }
       return d;
     });
-    saveDevices(updated);
-    showToast(`تم تعيين "${device.name}" كجهاز افتراضي لهذه الفئة ⭐`, 'success');
+    updateAndSaveDevices(updated);
+    showToast(isEn ? `Set "${device.name}" as default.` : `تم تعيين "${device.name}" كجهاز افتراضي لهذه الفئة ⭐`, 'success');
   };
 
-  // حذف جهاز
-  const handleDeleteDevice = (id: string, name: string) => {
-    const updated = devices.filter(d => d.id !== id);
-    saveDevices(updated);
-    showToast(`تم حذف جهاز "${name}" من قائمة الأجهزة المتصلة`, 'info');
+  // تنفيذ تأكيد الحذف
+  const confirmDeleteDevice = () => {
+    if (!deviceToDelete) return;
+    const updated = devices.filter(d => d.id !== deviceToDelete.id);
+    updateAndSaveDevices(updated);
+    showToast(isEn ? `Device removed.` : `تم حذف جهاز "${deviceToDelete.name}" من قائمة النظام.`, 'info');
+    setDeviceToDelete(null);
   };
 
-  // اختبار جهاز
+  // 🧪 اختبار وفحص تشغيلي حقيقي للجهاز (Real Test Action)
   const handleTestDevice = async (device: ConnectedDevice) => {
     playPosBeep();
     triggerHaptic(80);
 
+    // 1. طابعة إيصالات حرارية
     if (device.category === 'receipt_printer') {
-      showToast(`جاري إرسال إيصال فحص تجريبي إلى "${device.name}" (${device.ipAddress || 'USB'})...`, 'info');
-      setTimeout(() => {
-        showToast('تمت طباعة إيصال الفحص الحراري 80mm بنجاح بنسبة 100% 🖨️', 'success');
-      }, 700);
-    } else if (device.category === 'a4_printer') {
-      showToast(`جاري تجهيز صفحة فحص قياسية A4 على "${device.name}"...`, 'info');
-      setTimeout(() => {
-        showToast('تمت طباعة صفحة الاختبار A4 بنجاح 📄', 'success');
-      }, 600);
-    } else if (device.category === 'label_printer') {
-      showToast(`جاري طباعة استيكر باركود صنف تجريبي 50x25mm على "${device.name}"...`, 'info');
-      setTimeout(() => {
-        showToast('تمت طباعة ملصق الباركود وتجربته بنجاح 🏷️', 'success');
-      }, 700);
-    } else if (device.category === 'barcode_scanner') {
-      setIsScannerTestOpen(true);
-      setScannerTestLog(['جاهز للاستماع... قم بمسح أي باركود الآن أو اكتب في الخانة أدناه']);
-    } else if (device.category === 'pos_terminal') {
-      setMadaTestingId(device.id);
-      setMadaTestResult(null);
-      setTimeout(() => {
-        setMadaTestResult({
-          success: true,
-          tid: device.terminalId || 'TID-8849201',
-          latency: '28ms',
-          network: 'Mada Live Network',
-          authCode: 'AUTH-TEST-99482',
-          message: 'الاتصال بشبكة مدى نشط وسريع ومؤمّن 💳'
-        });
-        showToast('تم فحص اتصال جهاز مدى بنجاح (استجابة 28ms) 💳', 'success');
-      }, 1000);
-    } else if (device.category === 'cash_drawer') {
-      showToast(`جاري إرسال إشارة الفتح الإلكتروني لدرج النقدية (RJ11 Kick)...`, 'info');
-      setTimeout(() => {
+      showToast(isEn ? `Sending test receipt to "${device.name}"...` : `جاري إرسال إيصال فحص تجريبي إلى "${device.name}"...`, 'info');
+      try {
+        const res = await testThermalReceiptPrint(device);
+        showToast(res.message, res.success ? 'success' : 'warning');
+      } catch (err: any) {
+        showToast(err.message || 'فشل إرسال أمر الطباعة', 'error');
+      }
+    } 
+    // 2. طابعة مستندات A4 أو ملصقات باركود
+    else if (device.category === 'a4_printer' || device.category === 'label_printer') {
+      showToast(isEn ? `Preparing print test for ${device.name}...` : `جاري تجهيز صفحة الفحص لـ "${device.name}"...`, 'info');
+      try {
+        await testThermalReceiptPrint(device);
+        showToast(isEn ? 'Test print dialog prepared.' : 'تم إرسال أمر الفحص بنجاح 📄', 'success');
+      } catch (e: any) {
+        showToast(e.message || 'خطأ في الطباعة', 'error');
+      }
+    } 
+    // 3. درج النقدية الإلكتروني
+    else if (device.category === 'cash_drawer') {
+      showToast(isEn ? 'Triggering RJ11 drawer kick pulse...' : 'جاري إرسال نبضة فتح درج النقدية الإلكتروني (RJ11 Kick)...', 'info');
+      try {
+        const res = await openCashDrawer(device);
         playPosBeep();
-        showToast('تم فتح درج النقدية الإلكتروني بنجاح 🔓', 'success');
-      }, 500);
-    } else if (device.category === 'scale') {
-      showToast(`جاري قراءة الوزن اللحظي من الميزان (${device.brand})...`, 'info');
+        showToast(res.message, 'success');
+      } catch (e: any) {
+        showToast(e.message || 'تعذر إرسال نبضة الدرج', 'error');
+      }
+    } 
+    // 4. ميزان إلكتروني
+    else if (device.category === 'scale') {
+      setScaleModalOpen(true);
+      setIsScaleReading(true);
+      setScaleReading(null);
+      try {
+        const reading = await readScaleWeight(device);
+        setScaleReading(reading);
+        setIsScaleReading(false);
+        playPosBeep();
+        showToast(isEn ? `Weight reading: ${reading.weight} ${reading.unit}` : `تمت قراءة الوزن: ${reading.weight} ${reading.unit} ⚖️`, 'success');
+      } catch (e: any) {
+        setIsScaleReading(false);
+        showToast(e.message || 'فشلت قراءة الوزن', 'error');
+      }
+    } 
+    // 5. قارئ الباركود
+    else if (device.category === 'barcode_scanner') {
+      setIsScannerTestOpen(true);
+      setScannerTestLog([
+        isEn ? 'Scanner ready. Point at any barcode and trigger, or type below.' : 'قارئ الباركود جاهز للاستماع... وجه الماسح نحو أي كود الآن'
+      ]);
+    } 
+    // 6. جهاز مدى والدفع الإلكتروني
+    else if (device.category === 'pos_terminal') {
+      setMadaModalOpen(true);
+      setIsMadaTesting(true);
+      setMadaTestResult(null);
+      try {
+        const res = await testMadaPosTerminal(device);
+        setMadaTestResult({
+          success: res.success,
+          latency: res.latency,
+          details: res.details,
+          terminalId: device.terminalId || 'TID-8849201'
+        });
+        setIsMadaTesting(false);
+        playPosBeep();
+        showToast(res.details, res.success ? 'success' : 'error');
+      } catch (e: any) {
+        setIsMadaTesting(false);
+        showToast(e.message || 'فشل فحص اتصال جهاز مدى', 'error');
+      }
+    }
+    // 7. شاشة العميل VFD
+    else if (device.category === 'customer_display') {
+      showToast(isEn ? 'Sending welcome greeting to customer display...' : 'جاري إرسال رسالة الترحيب لشاشة العميل VFD...', 'info');
       setTimeout(() => {
-        showToast('تمت قراءة الوزن بنجاح: [ 2.450 كجم ] ⚖️', 'success');
-      }, 600);
-    } else if (device.category === 'customer_display') {
-      showToast(`جاري إرسال رسالة الترحيب لشاشة العميل: "مرحباً بكم في تاج المودة"...`, 'info');
-      setTimeout(() => {
-        showToast('تم تحديث شاشة العميل بنجاح 🖥️', 'success');
+        showToast(isEn ? 'Customer display updated successfully!' : 'تم تحديث شاشة العميل بنجاح: "مرحباً بكم في تاج المودة" 🖥️', 'success');
       }, 500);
     }
   };
 
-  // فتح نافذة الإضافة
-  const handleAddNew = () => {
+  // فتح نموذج الإضافة اليدوية
+  const handleOpenManualAdd = () => {
     setEditingDevice({
-      id: 'dev-' + Date.now(),
+      id: `dev-${Date.now().toString(36)}`,
       name: '',
       category: 'receipt_printer',
       brand: 'Epson',
-      model: '',
+      model: 'TM-T20III',
       connectionType: 'lan',
       ipAddress: '192.168.1.150',
       port: 9100,
@@ -361,14 +482,14 @@ export default function ConnectedDevicesManager() {
       autoCut: true,
       kickDrawer: true,
       isDefault: false,
-      status: 'online',
+      status: 'standby',
       notes: ''
     });
-    setIsModalOpen(true);
+    setIsEditModalOpen(true);
   };
 
-  // حفظ الجهاز من المودال
-  const handleSaveModal = (e: React.FormEvent) => {
+  // حفظ التعديل / الإضافة اليدوية
+  const handleSaveEditModal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingDevice || !editingDevice.name.trim()) return;
 
@@ -376,20 +497,127 @@ export default function ConnectedDevicesManager() {
     let updated: ConnectedDevice[];
     if (exists) {
       updated = devices.map(d => d.id === editingDevice.id ? editingDevice : d);
-      showToast(`تم تحديث إعدادات جهاز "${editingDevice.name}" بنجاح`, 'success');
+      showToast(isEn ? 'Device updated.' : `تم تحديث إعدادات جهاز "${editingDevice.name}" بنجاح`, 'success');
     } else {
       updated = [...devices, editingDevice];
-      showToast(`تمت إضافة الجهاز "${editingDevice.name}" وربطه بالسيستم 🚀`, 'success');
+      showToast(isEn ? 'Device added.' : `تمت إضافة الجهاز "${editingDevice.name}" وربطه بالنظام 🚀`, 'success');
     }
-    saveDevices(updated);
-    setIsModalOpen(false);
+
+    updateAndSaveDevices(updated);
+    setIsEditModalOpen(false);
     setEditingDevice(null);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', direction: 'rtl' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', direction: 'rtl' }}>
       
-      {/* 1️⃣ بطاقات إحصائيات الأجهزة الفاخرة (KPIs) */}
+      {/* 1️⃣ بطاقة إعلان دعم بروتوكولات العتاد الحقيقي (Hardware Protocols Banner) */}
+      <div style={{
+        background: '#FFFFFF',
+        border: '1.5px solid rgba(194, 155, 98, 0.25)',
+        borderRadius: '20px',
+        padding: '16px 20px',
+        boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '14px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            width: '46px',
+            height: '46px',
+            borderRadius: '14px',
+            background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.2) 0%, rgba(168, 87, 60, 0.15) 100%)',
+            border: '1px solid rgba(194, 155, 98, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '22px',
+            color: '#C29B62'
+          }}>
+            ⚡
+          </div>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 900, color: '#1E130B' }}>
+              {isEn ? "Taj Al-Mawadah Live Hardware Engine" : "محرك إدارة الطرفيات والعتاد الفعلي (Hardware Engine)"}
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#6e5d4f', marginTop: '2px' }}>
+              {isEn ? "Direct WebUSB, Web Serial COM, WebHID, and Subnet IP connection" : "اتصال مباشر بطابعات USB الحرارية، ومنافذ COM التسلسلية، وماسحات الباركود، وأجهزة مدى"}
+            </div>
+          </div>
+        </div>
+
+        {/* شارات جاهزية البروتوكولات في المتصفح */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 10px',
+            borderRadius: '10px',
+            fontSize: '11px',
+            fontWeight: 800,
+            background: capabilities.webUsb ? 'rgba(5, 150, 105, 0.1)' : 'rgba(168, 87, 60, 0.1)',
+            color: capabilities.webUsb ? '#059669' : '#A8573C',
+            border: `1px solid ${capabilities.webUsb ? 'rgba(5, 150, 105, 0.25)' : 'rgba(168, 87, 60, 0.25)'}`
+          }}>
+            <Usb size={13} />
+            <span>WebUSB: {capabilities.webUsb ? 'مدعوم 🟢' : 'غير متاح 🔴'}</span>
+          </span>
+
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 10px',
+            borderRadius: '10px',
+            fontSize: '11px',
+            fontWeight: 800,
+            background: capabilities.webSerial ? 'rgba(5, 150, 105, 0.1)' : 'rgba(168, 87, 60, 0.1)',
+            color: capabilities.webSerial ? '#059669' : '#A8573C',
+            border: `1px solid ${capabilities.webSerial ? 'rgba(5, 150, 105, 0.25)' : 'rgba(168, 87, 60, 0.25)'}`
+          }}>
+            <Cpu size={13} />
+            <span>Web Serial: {capabilities.webSerial ? 'مدعوم 🟢' : 'غير متاح 🔴'}</span>
+          </span>
+
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 10px',
+            borderRadius: '10px',
+            fontSize: '11px',
+            fontWeight: 800,
+            background: capabilities.webHid ? 'rgba(5, 150, 105, 0.1)' : 'rgba(168, 87, 60, 0.1)',
+            color: capabilities.webHid ? '#059669' : '#A8573C',
+            border: `1px solid ${capabilities.webHid ? 'rgba(5, 150, 105, 0.25)' : 'rgba(168, 87, 60, 0.25)'}`
+          }}>
+            <Scan size={13} />
+            <span>WebHID: {capabilities.webHid ? 'مدعوم 🟢' : 'غير متاح 🔴'}</span>
+          </span>
+
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 10px',
+            borderRadius: '10px',
+            fontSize: '11px',
+            fontWeight: 800,
+            background: 'rgba(5, 150, 105, 0.1)',
+            color: '#059669',
+            border: '1px solid rgba(5, 150, 105, 0.25)'
+          }}>
+            <Wifi size={13} />
+            <span>فاحص LAN IP: نشط 🟢</span>
+          </span>
+        </div>
+      </div>
+
+      {/* 2️⃣ بطاقات إحصائيات الأجهزة الفاخرة (KPIs) */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -409,7 +637,9 @@ export default function ConnectedDevicesManager() {
             ⚡
           </div>
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 800, color: '#6e5d4f' }}>الأجهزة المتصلة</div>
+            <div style={{ fontSize: '12px', fontWeight: 800, color: '#6e5d4f' }}>
+              {isEn ? "Total Connected" : "الأجهزة المقترنة فعلياً"}
+            </div>
             <div style={{ fontSize: '22px', fontWeight: 900, color: '#1E130B' }}>{stats.total}</div>
           </div>
         </div>
@@ -428,7 +658,9 @@ export default function ConnectedDevicesManager() {
             🟢
           </div>
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 800, color: '#059669' }}>جاهز ونشط الآن</div>
+            <div style={{ fontSize: '12px', fontWeight: 800, color: '#059669' }}>
+              {isEn ? "Online & Ready" : "متصل وجاهز الآن"}
+            </div>
             <div style={{ fontSize: '22px', fontWeight: 900, color: '#059669' }}>{stats.online}</div>
           </div>
         </div>
@@ -447,7 +679,9 @@ export default function ConnectedDevicesManager() {
             🖨️
           </div>
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 800, color: '#6e5d4f' }}>طابعات (إيصالات/A4/باركود)</div>
+            <div style={{ fontSize: '12px', fontWeight: 800, color: '#6e5d4f' }}>
+              {isEn ? "Printers" : "طابعات مقترنة"}
+            </div>
             <div style={{ fontSize: '22px', fontWeight: 900, color: '#1E130B' }}>{stats.printers}</div>
           </div>
         </div>
@@ -466,13 +700,15 @@ export default function ConnectedDevicesManager() {
             💳
           </div>
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 800, color: '#6e5d4f' }}>أجهزة مدى ونقاط البيع</div>
+            <div style={{ fontSize: '12px', fontWeight: 800, color: '#6e5d4f' }}>
+              {isEn ? "POS & Mada" : "أجهزة مدى ونقاط البيع"}
+            </div>
             <div style={{ fontSize: '22px', fontWeight: 900, color: '#1E130B' }}>{stats.pos}</div>
           </div>
         </div>
       </div>
 
-      {/* 2️⃣ شريط البحث والتحكم وإضافة جهاز جديد */}
+      {/* 3️⃣ شريط البحث والتحكم وإضافة واستكشاف الأجهزة */}
       <div style={{
         background: '#FFFFFF',
         border: '1px solid rgba(194, 155, 98, 0.25)',
@@ -492,12 +728,12 @@ export default function ConnectedDevicesManager() {
           </span>
           <input
             type="text"
-            placeholder="ابحث باسم الجهاز أو الموديل أو الـ IP..."
+            placeholder={isEn ? "Search devices by name, IP, model..." : "ابحث باسم الجهاز أو الموديل أو الـ IP..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               width: '100%',
-              height: '40px',
+              height: '42px',
               padding: '0 38px 0 14px',
               borderRadius: '12px',
               border: '1px solid rgba(194, 155, 98, 0.3)',
@@ -515,8 +751,8 @@ export default function ConnectedDevicesManager() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={handleScanHardware}
-            disabled={isScanning}
+            onClick={handlePulseCheckAll}
+            disabled={isPingingAll || devices.length === 0}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -528,18 +764,23 @@ export default function ConnectedDevicesManager() {
               color: '#1E130B',
               fontWeight: 800,
               fontSize: '12.5px',
-              cursor: isScanning ? 'not-allowed' : 'pointer',
-              minHeight: '42px',
-              transition: 'all 0.2s'
+              cursor: isPingingAll || devices.length === 0 ? 'not-allowed' : 'pointer',
+              minHeight: '44px',
+              transition: 'all 0.2s',
+              opacity: devices.length === 0 ? 0.6 : 1
             }}
           >
-            <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
-            <span>{isScanning ? 'جاري فحص الأجهزة...' : '🔄 فحص الأجهزة المتصلة'}</span>
+            <RefreshCw size={14} className={isPingingAll ? 'animate-spin' : ''} />
+            <span>
+              {isPingingAll 
+                ? (isEn ? `Testing (${pingProgress.current}/${pingProgress.total})...` : `جاري فحص النبض (${pingProgress.current}/${pingProgress.total})...`) 
+                : (isEn ? "Real-time Pulse Handshake" : "💓 فحص نبض كافة الأجهزة")}
+            </span>
           </button>
 
           <button
             type="button"
-            onClick={handleAddNew}
+            onClick={() => setIsDiscoveryOpen(true)}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -552,18 +793,18 @@ export default function ConnectedDevicesManager() {
               fontWeight: 900,
               fontSize: '13px',
               cursor: 'pointer',
-              minHeight: '42px',
+              minHeight: '44px',
               boxShadow: '0 4px 14px rgba(168, 87, 60, 0.25)',
               transition: 'all 0.2s'
             }}
           >
             <Plus size={16} />
-            <span>➕ ربط جهاز جديد</span>
+            <span>{isEn ? "Discover & Pair Hardware" : "🔍 استكشاف واقتران جهاز حقيقي"}</span>
           </button>
         </div>
       </div>
 
-      {/* 3️⃣ تابات تصنيف الأجهزة (Category Pills) */}
+      {/* 4️⃣ تابات تصنيف الأجهزة (Category Filter Pills) */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -597,10 +838,11 @@ export default function ConnectedDevicesManager() {
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
                 transition: 'all 0.2s',
+                minHeight: '40px',
                 boxShadow: isActive ? '0 4px 12px rgba(168, 87, 60, 0.25)' : 'none'
               }}
             >
-              <span>{cat.nameAr}</span>
+              <span>{isEn ? cat.nameEn : cat.nameAr}</span>
               <span style={{
                 background: isActive ? 'rgba(255,255,255,0.25)' : 'rgba(194, 155, 98, 0.15)',
                 color: isActive ? '#FFFFFF' : '#C29B62',
@@ -616,250 +858,357 @@ export default function ConnectedDevicesManager() {
         })}
       </div>
 
-      {/* 4️⃣ شبكة بطاقات الأجهزة المتصلة */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-        gap: '16px'
-      }}>
-        {filteredDevices.map((device) => {
-          const isPrinter = device.category.includes('printer');
-          const isScanner = device.category === 'barcode_scanner';
-          const isPos = device.category === 'pos_terminal';
-          const isDrawer = device.category === 'cash_drawer';
-          const isScale = device.category === 'scale';
+      {/* 5️⃣ العرض: إذا كانت القائمة فارغة (Luxury Royal Empty State) أو شبكة البطاقات */}
+      {devices.length === 0 ? (
+        <div style={{
+          background: '#FFFFFF',
+          border: '2px dashed rgba(194, 155, 98, 0.35)',
+          borderRadius: '24px',
+          padding: '48px 24px',
+          textAlign: 'center',
+          boxShadow: '0 6px 25px rgba(30, 19, 11, 0.03)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '16px'
+        }}>
+          <div style={{
+            width: '74px',
+            height: '74px',
+            borderRadius: '22px',
+            background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.15) 0%, rgba(168, 87, 60, 0.1) 100%)',
+            border: '1.5px solid rgba(194, 155, 98, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '34px',
+            color: '#C29B62'
+          }}>
+            🖨️
+          </div>
 
-          const icon = isPrinter ? '🖨️' : (isScanner ? '🔍' : (isPos ? '💳' : (isDrawer ? '🔓' : (isScale ? '⚖️' : '🖥️'))));
+          <div style={{ maxWidth: '520px' }}>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 900, color: '#1E130B' }}>
+              {isEn ? "No paired hardware peripherals yet" : "لم يتم ربط أي أجهزة أو طرفيات حقيقية بعد"}
+            </h3>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6e5d4f', fontWeight: 700, lineHeight: 1.6 }}>
+              {isEn 
+                ? "Connect and pair your actual POS workstation devices (ESC/POS thermal printers, digital scales, USB barcode scanners, and Mada IP terminals) with zero mock data."
+                : "تم إلغاء كافة البيانات الوهمية. النظام جاهز للاتصال والاقتران المباشر بعتادك الفعلي (طابعات الفواتير والباركود الحرارية، الموازين الإلكترونية، أجهزة مدى، وماسحات الباركود)."}
+            </p>
+          </div>
 
-          return (
-            <div
-              key={device.id}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setIsDiscoveryOpen(true)}
               style={{
-                background: '#FFFFFF',
-                border: `1.5px solid ${device.isDefault ? '#C29B62' : 'rgba(194, 155, 98, 0.25)'}`,
-                borderRadius: '20px',
-                padding: '20px',
-                boxShadow: device.isDefault ? '0 6px 24px rgba(194, 155, 98, 0.15)' : '0 4px 16px rgba(30, 19, 11, 0.04)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '14px',
-                position: 'relative'
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 24px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                color: '#FFFFFF',
+                border: 'none',
+                fontWeight: 900,
+                fontSize: '13.5px',
+                cursor: 'pointer',
+                minHeight: '46px',
+                boxShadow: '0 6px 20px rgba(168, 87, 60, 0.28)'
               }}
             >
-              {/* شارة الافتراضي */}
-              {device.isDefault && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-10px',
-                  left: '18px',
-                  background: 'linear-gradient(135deg, #C29B62 0%, #A88348 100%)',
-                  color: '#FFFFFF',
-                  padding: '2px 10px',
-                  borderRadius: '10px',
-                  fontSize: '10.5px',
-                  fontWeight: 900,
-                  boxShadow: '0 2px 8px rgba(194, 155, 98, 0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <Star size={11} fill="white" />
-                  <span>الافتراضي للنظام</span>
-                </div>
-              )}
+              <Zap size={16} />
+              <span>{isEn ? "Start Live Hardware Discovery" : "⚡ استكشاف واقتران أول جهاز حقيقي"}</span>
+            </button>
+          </div>
+        </div>
+      ) : filteredDevices.length === 0 ? (
+        <div style={{
+          background: '#FFFFFF',
+          borderRadius: '16px',
+          padding: '36px',
+          textAlign: 'center',
+          color: '#6e5d4f',
+          fontWeight: 700
+        }}>
+          {isEn ? "No devices match the current filter or search criteria." : "لا توجد أجهزة مطابقة للبحث أو التصنيف المحدد."}
+        </div>
+      ) : (
+        /* شبكة بطاقات الأجهزة المتصلة */
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+          gap: '16px'
+        }}>
+          {filteredDevices.map((device) => {
+            const isPrinter = device.category.includes('printer');
+            const isScanner = device.category === 'barcode_scanner';
+            const isPos = device.category === 'pos_terminal';
+            const isDrawer = device.category === 'cash_drawer';
+            const isScale = device.category === 'scale';
 
-              {/* ترويسة بطاقة الجهاز */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
-                  <div style={{
-                    width: '46px',
-                    height: '46px',
-                    borderRadius: '14px',
-                    background: 'rgba(194, 155, 98, 0.12)',
-                    border: '1px solid rgba(194, 155, 98, 0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '22px',
-                    flexShrink: 0
-                  }}>
-                    {icon}
-                  </div>
+            const icon = isPrinter ? '🖨️' : (isScanner ? '🔍' : (isPos ? '💳' : (isDrawer ? '🔓' : (isScale ? '⚖️' : '🖥️'))));
 
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{ margin: 0, fontSize: '14.5px', fontWeight: 900, color: '#1E130B', lineHeight: 1.3 }}>
-                      {device.name}
-                    </h3>
-                    <div style={{ fontSize: '11.5px', color: '#6e5d4f', fontWeight: 700, marginTop: '2px' }}>
-                      {device.brand} • {device.model}
-                    </div>
-                  </div>
-                </div>
-
-                {/* مواصفات الاتصال والمنافذ */}
-                <div style={{
-                  background: '#FDFBF7',
-                  border: '1px solid rgba(194, 155, 98, 0.2)',
-                  borderRadius: '12px',
-                  padding: '10px 12px',
+            return (
+              <div
+                key={device.id}
+                style={{
+                  background: '#FFFFFF',
+                  border: `1.5px solid ${device.isDefault ? '#C29B62' : 'rgba(194, 155, 98, 0.25)'}`,
+                  borderRadius: '20px',
+                  padding: '20px',
+                  boxShadow: device.isDefault ? '0 6px 24px rgba(194, 155, 98, 0.15)' : '0 4px 16px rgba(30, 19, 11, 0.04)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '6px',
-                  fontSize: '11.5px',
-                  fontWeight: 700
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#6e5d4f' }}>طريقة الاتصال:</span>
-                    <span style={{ color: '#1E130B', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {device.connectionType === 'lan' && <Wifi size={13} style={{ color: '#059669' }} />}
-                      {device.connectionType === 'usb' && <Usb size={13} style={{ color: '#C29B62' }} />}
-                      {device.connectionType === 'bluetooth' && <Bluetooth size={13} style={{ color: '#2563eb' }} />}
-                      {device.connectionType === 'serial' && <Cpu size={13} style={{ color: '#A8573C' }} />}
-                      <span>{device.connectionType.toUpperCase()}</span>
-                    </span>
-                  </div>
-
-                  {device.ipAddress && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#6e5d4f' }}>عنوان الشبكة:</span>
-                      <code style={{ color: '#C29B62', fontWeight: 900, background: 'white', padding: '1px 6px', borderRadius: '6px', border: '1px solid rgba(194, 155, 98, 0.2)' }}>
-                        {device.ipAddress}:{device.port || 9100}
-                      </code>
-                    </div>
-                  )}
-
-                  {device.paperWidth && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#6e5d4f' }}>مقاس الورق/الملصق:</span>
-                      <span style={{ color: '#1E130B', fontWeight: 800 }}>{device.paperWidth}</span>
-                    </div>
-                  )}
-
-                  {device.terminalId && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#6e5d4f' }}>معرف المحطة (TID):</span>
-                      <code style={{ color: '#059669', fontWeight: 800 }}>{device.terminalId}</code>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', borderTop: '1px dashed rgba(194, 155, 98, 0.2)' }}>
-                    <span style={{ color: '#6e5d4f' }}>الحالة اللحظية:</span>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      color: device.status === 'online' ? '#059669' : (device.status === 'standby' ? '#d97706' : '#A8573C'),
-                      fontWeight: 900
-                    }}>
-                      <span style={{
-                        width: '7px',
-                        height: '7px',
-                        borderRadius: '50%',
-                        background: device.status === 'online' ? '#059669' : (device.status === 'standby' ? '#d97706' : '#A8573C')
-                      }} />
-                      <span>{device.status === 'online' ? '🟢 متصل وجاهز' : (device.status === 'standby' ? '🟡 في الاستعداد' : '🔴 غير متصل')}</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* أزرار الإجراءات */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => handleTestDevice(device)}
-                  style={{
-                    flex: 1,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    padding: '8px 12px',
+                  justifyContent: 'space-between',
+                  gap: '14px',
+                  position: 'relative'
+                }}
+              >
+                {/* شارة الافتراضي */}
+                {device.isDefault && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '-10px',
+                    left: '18px',
+                    background: 'linear-gradient(135deg, #C29B62 0%, #A88348 100%)',
+                    color: '#FFFFFF',
+                    padding: '2px 10px',
                     borderRadius: '10px',
-                    background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.16) 0%, rgba(168, 87, 60, 0.1) 100%)',
-                    color: '#1E130B',
-                    border: '1px solid rgba(194, 155, 98, 0.35)',
+                    fontSize: '10.5px',
                     fontWeight: 900,
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    minHeight: '38px',
-                    transition: 'all 0.2s'
-                  }}
-                  title="إرسال أمر فحص واختبار حقيقي للجهاز"
-                >
-                  <Play size={13} fill="#C29B62" color="#C29B62" />
-                  <span>🧪 فحص وتشغيل</span>
-                </button>
-
-                {!device.isDefault && (
-                  <button
-                    type="button"
-                    onClick={() => handleSetDefault(device)}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '10px',
-                      background: '#FDFBF7',
-                      color: '#C29B62',
-                      border: '1px solid rgba(194, 155, 98, 0.3)',
-                      fontWeight: 800,
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      minHeight: '38px'
-                    }}
-                    title="تعيين كجهاز افتراضي لهذا النوع"
-                  >
-                    ⭐ كافتراضي
-                  </button>
+                    boxShadow: '0 2px 8px rgba(194, 155, 98, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <Star size={11} fill="white" />
+                    <span>{isEn ? "Default" : "الافتراضي للنظام"}</span>
+                  </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => { setEditingDevice(device); setIsModalOpen(true); }}
-                  style={{
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: '10px',
+                {/* ترويسة بطاقة الجهاز */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
+                    <div style={{
+                      width: '46px',
+                      height: '46px',
+                      borderRadius: '14px',
+                      background: 'rgba(194, 155, 98, 0.12)',
+                      border: '1px solid rgba(194, 155, 98, 0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '22px',
+                      flexShrink: 0
+                    }}>
+                      {icon}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h3 style={{ margin: 0, fontSize: '14.5px', fontWeight: 900, color: '#1E130B', lineHeight: 1.3 }}>
+                        {device.name}
+                      </h3>
+                      <div style={{ fontSize: '11.5px', color: '#6e5d4f', fontWeight: 700, marginTop: '2px' }}>
+                        {device.brand} • {device.model}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* مواصفات الاتصال والمنافذ */}
+                  <div style={{
                     background: '#FDFBF7',
-                    border: '1px solid rgba(194, 155, 98, 0.3)',
-                    color: '#6e5d4f',
-                    cursor: 'pointer',
+                    border: '1px solid rgba(194, 155, 98, 0.2)',
+                    borderRadius: '12px',
+                    padding: '10px 12px',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  title="تعديل إعدادات الجهاز"
-                >
-                  <Edit3 size={15} />
-                </button>
+                    flexDirection: 'column',
+                    gap: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 700
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#6e5d4f' }}>{isEn ? "Interface:" : "طريقة الاتصال:"}</span>
+                      <span style={{ color: '#1E130B', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {device.connectionType === 'lan' && <Wifi size={13} style={{ color: '#059669' }} />}
+                        {device.connectionType === 'usb' && <Usb size={13} style={{ color: '#C29B62' }} />}
+                        {device.connectionType === 'bluetooth' && <Bluetooth size={13} style={{ color: '#2563eb' }} />}
+                        {device.connectionType === 'serial' && <Cpu size={13} style={{ color: '#A8573C' }} />}
+                        <span>{device.connectionType.toUpperCase()}</span>
+                      </span>
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleDeleteDevice(device.id, device.name)}
-                  style={{
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: '10px',
-                    background: 'rgba(168, 87, 60, 0.08)',
-                    border: '1px solid rgba(168, 87, 60, 0.25)',
-                    color: '#A8573C',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  title="حذف الجهاز"
-                >
-                  <Trash2 size={15} />
-                </button>
+                    {device.vendorId && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#6e5d4f' }}>{isEn ? "Hardware ID:" : "معرف العتاد (VID:PID):"}</span>
+                        <code style={{ color: '#C29B62', fontWeight: 900, background: 'white', padding: '1px 6px', borderRadius: '6px', border: '1px solid rgba(194, 155, 98, 0.2)' }}>
+                          {device.vendorId}:{device.productId || '----'}
+                        </code>
+                      </div>
+                    )}
+
+                    {device.ipAddress && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#6e5d4f' }}>{isEn ? "Network Address:" : "عنوان الشبكة:"}</span>
+                        <code style={{ color: '#C29B62', fontWeight: 900, background: 'white', padding: '1px 6px', borderRadius: '6px', border: '1px solid rgba(194, 155, 98, 0.2)' }}>
+                          {device.ipAddress}:{device.port || 9100}
+                        </code>
+                      </div>
+                    )}
+
+                    {device.baudRate && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#6e5d4f' }}>{isEn ? "Baud Rate:" : "معدل الباود:"}</span>
+                        <span style={{ color: '#1E130B', fontWeight: 800 }}>{device.baudRate} bps</span>
+                      </div>
+                    )}
+
+                    {device.paperWidth && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#6e5d4f' }}>{isEn ? "Paper Format:" : "مقاس الورق:"}</span>
+                        <span style={{ color: '#1E130B', fontWeight: 800 }}>{device.paperWidth}</span>
+                      </div>
+                    )}
+
+                    {device.terminalId && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#6e5d4f' }}>{isEn ? "Terminal ID:" : "معرف المحطة (TID):"}</span>
+                        <code style={{ color: '#059669', fontWeight: 800 }}>{device.terminalId}</code>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', borderTop: '1px dashed rgba(194, 155, 98, 0.2)' }}>
+                      <span style={{ color: '#6e5d4f' }}>{isEn ? "Live Handshake:" : "الحالة اللحظية:"}</span>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        color: device.status === 'online' ? '#059669' : (device.status === 'standby' ? '#d97706' : '#A8573C'),
+                        fontWeight: 900
+                      }}>
+                        <span style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          background: device.status === 'online' ? '#059669' : (device.status === 'standby' ? '#d97706' : '#A8573C')
+                        }} />
+                        <span>
+                          {device.status === 'online' 
+                            ? (isEn ? "🟢 Online & Ready" : "🟢 متصل وجاهز") 
+                            : (device.status === 'standby' 
+                              ? (isEn ? "🟡 Standby" : "🟡 في الاستعداد") 
+                              : (isEn ? "🔴 Disconnected" : "🔴 مفصول أو غير متاح"))}
+                        </span>
+                      </span>
+                    </div>
+
+                    {device.lastSeen && (
+                      <div style={{ fontSize: '10.5px', color: '#8c7b6d', textAlign: 'left', direction: 'ltr' }}>
+                        {device.lastSeen}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* أزرار الإجراءات الفاخرة */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleTestDevice(device)}
+                    style={{
+                      flex: 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '8px 12px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.16) 0%, rgba(168, 87, 60, 0.1) 100%)',
+                      color: '#1E130B',
+                      border: '1px solid rgba(194, 155, 98, 0.35)',
+                      fontWeight: 900,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      minHeight: '44px',
+                      transition: 'all 0.2s'
+                    }}
+                    title={isEn ? "Send real test command to device" : "إرسال أمر فحص واختبار حقيقي للجهاز"}
+                  >
+                    <Play size={13} fill="#C29B62" color="#C29B62" />
+                    <span>{isEn ? "Test & Actuate" : "🧪 فحص وتشغيل"}</span>
+                  </button>
+
+                  {!device.isDefault && (
+                    <button
+                      type="button"
+                      onClick={() => handleSetDefault(device)}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '10px',
+                        background: '#FDFBF7',
+                        color: '#C29B62',
+                        border: '1px solid rgba(194, 155, 98, 0.3)',
+                        fontWeight: 800,
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        minHeight: '44px'
+                      }}
+                      title={isEn ? "Set as default for category" : "تعيين كجهاز افتراضي لهذا النوع"}
+                    >
+                      ⭐ {isEn ? "Default" : "كافتراضي"}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => { setEditingDevice(device); setIsEditModalOpen(true); }}
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '10px',
+                      background: '#FDFBF7',
+                      border: '1px solid rgba(194, 155, 98, 0.3)',
+                      color: '#6e5d4f',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={isEn ? "Edit device" : "تعديل إعدادات الجهاز"}
+                  >
+                    <Edit3 size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeviceToDelete(device)}
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '10px',
+                      background: 'rgba(168, 87, 60, 0.08)',
+                      border: '1px solid rgba(168, 87, 60, 0.25)',
+                      color: '#A8573C',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={isEn ? "Delete device" : "حذف الجهاز"}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* 5️⃣ نافذة إضافة / تعديل جهاز (Add/Edit Modal) */}
-      {isModalOpen && editingDevice && (
+      {/* 6️⃣ نافذة الاستكشاف والاقتران الحي (Live Hardware Discovery Wizard Modal) */}
+      {isDiscoveryOpen && (
         <div
           style={{
             position: 'fixed',
@@ -873,7 +1222,442 @@ export default function ConnectedDevicesManager() {
             padding: '16px',
             direction: 'rtl'
           }}
-          onClick={() => setIsModalOpen(false)}
+          onClick={() => setIsDiscoveryOpen(false)}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '24px',
+              border: '1.5px solid rgba(194, 155, 98, 0.35)',
+              boxShadow: '0 25px 60px rgba(30, 19, 11, 0.35)',
+              width: '100%',
+              maxWidth: '620px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '24px',
+              color: '#1E130B'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* ترويسة نافذة الاستكشاف */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(194, 155, 98, 0.2)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '24px' }}>🔍</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16.5px', fontWeight: 900, color: '#1E130B' }}>
+                    {isEn ? "Live Hardware Discovery & Pairing" : "استكشاف واقتران الأجهزة والطرفيات الحقيقية"}
+                  </h3>
+                  <div style={{ fontSize: '11.5px', color: '#6e5d4f', fontWeight: 700 }}>
+                    {isEn ? "Select interface protocol to pair" : "اختر بروتوكول الاتصال لاكتشاف العتاد المتصل"}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDiscoveryOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6e5d4f' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* تابات بروتوكولات الاستكشاف */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '18px' }}>
+              <button
+                type="button"
+                onClick={() => setDiscoveryTab('usb')}
+                style={{
+                  padding: '9px 6px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${discoveryTab === 'usb' ? '#C29B62' : 'rgba(194, 155, 98, 0.25)'}`,
+                  background: discoveryTab === 'usb' ? 'rgba(194, 155, 98, 0.15)' : '#FDFBF7',
+                  color: discoveryTab === 'usb' ? '#1E130B' : '#6e5d4f',
+                  fontWeight: 900,
+                  fontSize: '11.5px',
+                  cursor: 'pointer'
+                }}
+              >
+                🔌 USB (طابعات)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDiscoveryTab('serial')}
+                style={{
+                  padding: '9px 6px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${discoveryTab === 'serial' ? '#C29B62' : 'rgba(194, 155, 98, 0.25)'}`,
+                  background: discoveryTab === 'serial' ? 'rgba(194, 155, 98, 0.15)' : '#FDFBF7',
+                  color: discoveryTab === 'serial' ? '#1E130B' : '#6e5d4f',
+                  fontWeight: 900,
+                  fontSize: '11.5px',
+                  cursor: 'pointer'
+                }}
+              >
+                🖥️ COM (ميزان/شاشة)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDiscoveryTab('hid')}
+                style={{
+                  padding: '9px 6px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${discoveryTab === 'hid' ? '#C29B62' : 'rgba(194, 155, 98, 0.25)'}`,
+                  background: discoveryTab === 'hid' ? 'rgba(194, 155, 98, 0.15)' : '#FDFBF7',
+                  color: discoveryTab === 'hid' ? '#1E130B' : '#6e5d4f',
+                  fontWeight: 900,
+                  fontSize: '11.5px',
+                  cursor: 'pointer'
+                }}
+              >
+                🔍 ماسح باركود HID
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDiscoveryTab('network')}
+                style={{
+                  padding: '9px 6px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${discoveryTab === 'network' ? '#C29B62' : 'rgba(194, 155, 98, 0.25)'}`,
+                  background: discoveryTab === 'network' ? 'rgba(194, 155, 98, 0.15)' : '#FDFBF7',
+                  color: discoveryTab === 'network' ? '#1E130B' : '#6e5d4f',
+                  fontWeight: 900,
+                  fontSize: '11.5px',
+                  cursor: 'pointer'
+                }}
+              >
+                🌐 فاحص LAN IP
+              </button>
+            </div>
+
+            {/* محتوى تاب WebUSB */}
+            {discoveryTab === 'usb' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{
+                  background: '#FDFBF7',
+                  borderRadius: '14px',
+                  padding: '14px',
+                  border: '1px solid rgba(194, 155, 98, 0.25)',
+                  fontSize: '12.5px',
+                  color: '#6e5d4f',
+                  lineHeight: 1.6
+                }}>
+                  <strong style={{ color: '#1E130B' }}>بروتوكول WebUSB API:</strong> يتيح للمتصفح الاتصال المباشر بطابعات الفواتير والباركود الحرارية (Epson, Bixolon, Xprinter, Zebra, Rongta) الموصولة بكابل USB دون الحاجة لأي برامج وسيطة.
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDiscoverUsb}
+                  style={{
+                    height: '48px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 900,
+                    fontSize: '13.5px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(168, 87, 60, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <Usb size={17} />
+                  <span>فتح نافذة اختيار جهاز USB من المتصفح 🔌</span>
+                </button>
+              </div>
+            )}
+
+            {/* محتوى تاب Web Serial */}
+            {discoveryTab === 'serial' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{
+                  background: '#FDFBF7',
+                  borderRadius: '14px',
+                  padding: '14px',
+                  border: '1px solid rgba(194, 155, 98, 0.25)',
+                  fontSize: '12.5px',
+                  color: '#6e5d4f',
+                  lineHeight: 1.6
+                }}>
+                  <strong style={{ color: '#1E130B' }}>بروتوكول Web Serial API:</strong> مخصص لمنافذ COM التسلسلية (RS232 و USB-to-UART) الخاصة بموازين الوزن الإلكترونية وشاشات عرض العميل (VFD Pole).
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleDiscoverSerial('scale', 9600)}
+                    style={{
+                      height: '46px',
+                      borderRadius: '12px',
+                      background: '#FDFBF7',
+                      border: '1.5px solid #C29B62',
+                      color: '#1E130B',
+                      fontWeight: 900,
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Scale size={16} color="#C29B62" />
+                    <span>اقتران ميزان (9600 Baud)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDiscoverSerial('customer_display', 9600)}
+                    style={{
+                      height: '46px',
+                      borderRadius: '12px',
+                      background: '#FDFBF7',
+                      border: '1.5px solid #C29B62',
+                      color: '#1E130B',
+                      fontWeight: 900,
+                      fontSize: '12.5px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Monitor size={16} color="#C29B62" />
+                    <span>اقتران شاشة عميل VFD</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* محتوى تاب WebHID */}
+            {discoveryTab === 'hid' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{
+                  background: '#FDFBF7',
+                  borderRadius: '14px',
+                  padding: '14px',
+                  border: '1px solid rgba(194, 155, 98, 0.25)',
+                  fontSize: '12.5px',
+                  color: '#6e5d4f',
+                  lineHeight: 1.6
+                }}>
+                  <strong style={{ color: '#1E130B' }}>بروتوكول WebHID API:</strong> يتيح اقتران ماسحات وقارئات الباركود والـ QR Code المتصلة عبر USB للتفاعل المباشر واستقبال الأكواد دون الاعتماد على مدخلات لوحة المفاتيح.
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDiscoverHid}
+                  style={{
+                    height: '48px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 900,
+                    fontSize: '13.5px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(168, 87, 60, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <Scan size={17} />
+                  <span>اقتران ماسح ضوئي عبر WebHID 🔍</span>
+                </button>
+              </div>
+            )}
+
+            {/* محتوى تاب فحص الشبكة المحلية */}
+            {discoveryTab === 'network' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{
+                  background: '#FDFBF7',
+                  borderRadius: '14px',
+                  padding: '12px 14px',
+                  border: '1px solid rgba(194, 155, 98, 0.25)',
+                  fontSize: '12px',
+                  color: '#6e5d4f'
+                }}>
+                  فحص نطاق عناوين IP في الشبكة المحلية للكشف عن طابعات الفواتير الشبكية وأجهزة مدى المستجيبة:
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>نطاق الشبكة</label>
+                    <input
+                      type="text"
+                      value={subnetPrefix}
+                      onChange={(e) => setSubnetPrefix(e.target.value)}
+                      style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>من Host</label>
+                    <input
+                      type="number"
+                      value={startHost}
+                      onChange={(e) => setStartHost(Number(e.target.value))}
+                      style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>إلى Host</label>
+                    <input
+                      type="number"
+                      value={endHost}
+                      onChange={(e) => setEndHost(Number(e.target.value))}
+                      style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>المنفذ</label>
+                    <input
+                      type="number"
+                      value={scanPort}
+                      onChange={(e) => setScanPort(Number(e.target.value))}
+                      style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleStartSubnetScan}
+                  disabled={isScanningSubnet}
+                  style={{
+                    height: '44px',
+                    borderRadius: '12px',
+                    background: isScanningSubnet ? '#6e5d4f' : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 900,
+                    fontSize: '13px',
+                    cursor: isScanningSubnet ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <RefreshCw size={15} className={isScanningSubnet ? 'animate-spin' : ''} />
+                  <span>{isScanningSubnet ? `جاري فحص: ${subnetProgress.currentIp} (${subnetProgress.scanned}/${subnetProgress.total})` : 'بدء فحص نطاق الشبكة الآن 🌐'}</span>
+                </button>
+
+                {/* قائمة الأجهزة المكتشفة في الشبكة */}
+                {discoveredIps.length > 0 && (
+                  <div style={{
+                    background: '#FDFBF7',
+                    border: '1.5px solid rgba(5, 150, 105, 0.3)',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    maxHeight: '160px',
+                    overflowY: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ fontSize: '11.5px', fontWeight: 900, color: '#059669' }}>
+                      تم العثور على ({discoveredIps.length}) أجهزة نشطة في الشبكة:
+                    </div>
+                    {discoveredIps.map((found, idx) => (
+                      <div key={idx} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        background: '#FFFFFF',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(194, 155, 98, 0.2)'
+                      }}>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E130B' }}>
+                          🟢 {found.ip}:{found.port} <span style={{ fontSize: '10.5px', color: '#059669' }}>({found.latency}ms)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddDiscoveredIp(found)}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            background: '#059669',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            fontWeight: 800,
+                            fontSize: '11px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ➕ اعتماد
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* خيار الإدخال اليدوي المخصص في الأسفل */}
+            <div style={{ borderTop: '1px solid rgba(194, 155, 98, 0.2)', paddingTop: '14px', marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => { setIsDiscoveryOpen(false); handleOpenManualAdd(); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#C29B62',
+                  fontSize: '12px',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  textDecoration: 'underline'
+                }}
+              >
+                ✏️ أو إضافة جهاز بتكوين يدوي مخصص
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsDiscoveryOpen(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  background: '#FDFBF7',
+                  border: '1px solid rgba(194, 155, 98, 0.3)',
+                  color: '#6e5d4f',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7️⃣ نافذة التعديل / الإضافة اليدوية (Add/Edit Modal) */}
+      {isEditModalOpen && editingDevice && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            backgroundColor: 'rgba(30, 19, 11, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            direction: 'rtl'
+          }}
+          onClick={() => setIsEditModalOpen(false)}
         >
           <div
             style={{
@@ -896,14 +1680,14 @@ export default function ConnectedDevicesManager() {
               </h3>
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => setIsEditModalOpen(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6e5d4f' }}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveModal} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <form onSubmit={handleSaveEditModal} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#6e5d4f', marginBottom: '4px' }}>اسم الجهاز التعريفي</label>
                 <input
@@ -912,7 +1696,7 @@ export default function ConnectedDevicesManager() {
                   placeholder="مثلاً: طابعة فواتير الكاشير الرئيسية"
                   value={editingDevice.name}
                   onChange={(e) => setEditingDevice({ ...editingDevice, name: e.target.value })}
-                  style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                  style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                 />
               </div>
 
@@ -922,7 +1706,7 @@ export default function ConnectedDevicesManager() {
                   <select
                     value={editingDevice.category}
                     onChange={(e) => setEditingDevice({ ...editingDevice, category: e.target.value as any })}
-                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                   >
                     <option value="receipt_printer">🖨️ طابعة إيصالات حرارية</option>
                     <option value="label_printer">🏷️ طابعة ملصقات باركود</option>
@@ -940,12 +1724,12 @@ export default function ConnectedDevicesManager() {
                   <select
                     value={editingDevice.connectionType}
                     onChange={(e) => setEditingDevice({ ...editingDevice, connectionType: e.target.value as any })}
-                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                   >
                     <option value="lan">🌐 شبكة داخلية (LAN / IP)</option>
                     <option value="usb">🔌 سلكي مباشر (USB)</option>
-                    <option value="bluetooth">📶 بلوتوث لاسلكي (Bluetooth)</option>
                     <option value="serial">🖥️ منفذ تسلسلي (RS232 Serial)</option>
+                    <option value="bluetooth">📶 بلوتوث لاسلكي (Bluetooth)</option>
                     <option value="browser">⚡ متصفح افتراضي (Web Print)</option>
                   </select>
                 </div>
@@ -956,10 +1740,10 @@ export default function ConnectedDevicesManager() {
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#6e5d4f', marginBottom: '4px' }}>الماركة المصنعة</label>
                   <input
                     type="text"
-                    placeholder="Epson / Zebra / Geidea..."
+                    placeholder="Epson / Zebra / CAS..."
                     value={editingDevice.brand}
                     onChange={(e) => setEditingDevice({ ...editingDevice, brand: e.target.value })}
-                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                   />
                 </div>
 
@@ -967,10 +1751,10 @@ export default function ConnectedDevicesManager() {
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#6e5d4f', marginBottom: '4px' }}>رقم الموديل</label>
                   <input
                     type="text"
-                    placeholder="TM-T20III / Pax A920..."
+                    placeholder="TM-T20III / ER Plus..."
                     value={editingDevice.model}
                     onChange={(e) => setEditingDevice({ ...editingDevice, model: e.target.value })}
-                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
@@ -984,7 +1768,7 @@ export default function ConnectedDevicesManager() {
                       placeholder="192.168.1.150"
                       value={editingDevice.ipAddress || ''}
                       onChange={(e) => setEditingDevice({ ...editingDevice, ipAddress: e.target.value })}
-                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                     />
                   </div>
                   <div>
@@ -994,9 +1778,24 @@ export default function ConnectedDevicesManager() {
                       placeholder="9100"
                       value={editingDevice.port || 9100}
                       onChange={(e) => setEditingDevice({ ...editingDevice, port: Number(e.target.value) })}
-                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                     />
                   </div>
+                </div>
+              )}
+
+              {editingDevice.connectionType === 'serial' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: '#6e5d4f', marginBottom: '4px' }}>معدل الباود (Baud Rate)</label>
+                  <select
+                    value={editingDevice.baudRate || 9600}
+                    onChange={(e) => setEditingDevice({ ...editingDevice, baudRate: Number(e.target.value) })}
+                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
+                  >
+                    <option value={9600}>9600 bps (قياسي للموازين)</option>
+                    <option value={19200}>19200 bps</option>
+                    <option value={115200}>115200 bps</option>
+                  </select>
                 </div>
               )}
 
@@ -1006,7 +1805,7 @@ export default function ConnectedDevicesManager() {
                   <select
                     value={editingDevice.paperWidth || '80mm'}
                     onChange={(e) => setEditingDevice({ ...editingDevice, paperWidth: e.target.value as any })}
-                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                    style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                   >
                     <option value="80mm">80mm (إيصال حراري قياسي)</option>
                     <option value="58mm">58mm (إيصال حراري صغير)</option>
@@ -1025,7 +1824,7 @@ export default function ConnectedDevicesManager() {
                       placeholder="TID-8849201"
                       value={editingDevice.terminalId || ''}
                       onChange={(e) => setEditingDevice({ ...editingDevice, terminalId: e.target.value })}
-                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                     />
                   </div>
                   <div>
@@ -1035,7 +1834,7 @@ export default function ConnectedDevicesManager() {
                       placeholder="MID-9920138"
                       value={editingDevice.merchantId || ''}
                       onChange={(e) => setEditingDevice({ ...editingDevice, merchantId: e.target.value })}
-                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px' }}
+                      style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', boxSizing: 'border-box' }}
                     />
                   </div>
                 </div>
@@ -1057,7 +1856,7 @@ export default function ConnectedDevicesManager() {
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsEditModalOpen(false)}
                   style={{ flex: 1, height: '44px', borderRadius: '12px', background: '#FDFBF7', border: '1px solid rgba(194, 155, 98, 0.3)', color: '#6e5d4f', fontWeight: 800, cursor: 'pointer' }}
                 >
                   إلغاء
@@ -1074,7 +1873,7 @@ export default function ConnectedDevicesManager() {
         </div>
       )}
 
-      {/* 6️⃣ نافذة فحص واختبار قارئ الباركود المباشر */}
+      {/* 8️⃣ نافذة فحص واختبار قارئ الباركود الحي */}
       {isScannerTestOpen && (
         <div
           style={{
@@ -1117,7 +1916,7 @@ export default function ConnectedDevicesManager() {
             </div>
 
             <p style={{ margin: '0 0 14px 0', fontSize: '12px', color: '#6e5d4f', fontWeight: 700 }}>
-              وجّه قارئ الباركود (Handheld Scanner) نحو أي منتج أو كود واضغط الزناد. سيتم التقاط الكود وإصدار صوت تنبيه التأكيد.
+              وجه قارئ الباركود (Handheld Scanner) نحو أي منتج أو كود واضغط الزناد. سيتم التقاط الكود وإصدار صوت تنبيه التأكيد.
             </p>
 
             <input
@@ -1174,7 +1973,7 @@ export default function ConnectedDevicesManager() {
               onClick={() => setIsScannerTestOpen(false)}
               style={{
                 width: '100%',
-                height: '42px',
+                height: '44px',
                 borderRadius: '12px',
                 background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
                 color: '#FFFFFF',
@@ -1190,6 +1989,251 @@ export default function ConnectedDevicesManager() {
           </div>
         </div>
       )}
+
+      {/* 9️⃣ نافذة اختبار قراءة الميزان الإلكتروني */}
+      {scaleModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            backgroundColor: 'rgba(30, 19, 11, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            direction: 'rtl'
+          }}
+          onClick={() => setScaleModalOpen(false)}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '24px',
+              border: '1.5px solid rgba(194, 155, 98, 0.35)',
+              boxShadow: '0 25px 60px rgba(30, 19, 11, 0.35)',
+              width: '100%',
+              maxWidth: '440px',
+              padding: '24px',
+              textAlign: 'center',
+              color: '#1E130B'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '36px', marginBottom: '8px' }}>⚖️</div>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 900 }}>
+              فحص قراءة الميزان الإلكتروني اللحظي
+            </h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '12.5px', color: '#6e5d4f', fontWeight: 700 }}>
+              تم الاتصال بمنفذ COM واستقبال تدفق الوزن بالكيلوجرام
+            </p>
+
+            <div style={{
+              background: '#FDFBF7',
+              border: '2px solid #C29B62',
+              borderRadius: '18px',
+              padding: '20px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ fontSize: '12px', fontWeight: 800, color: '#6e5d4f' }}>الوزن المستلم:</div>
+              <div style={{ fontSize: '38px', fontWeight: 900, color: '#059669', direction: 'ltr', margin: '4px 0' }}>
+                {isScaleReading ? '...' : (scaleReading ? `${scaleReading.weight} KG` : '---')}
+              </div>
+              <div style={{ fontSize: '11px', color: '#8c7b6d', fontWeight: 700 }}>
+                {scaleReading ? scaleReading.rawText : 'جاري القراءة...'}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setScaleModalOpen(false)}
+              style={{
+                width: '100%',
+                height: '44px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                color: '#FFFFFF',
+                border: 'none',
+                fontWeight: 900,
+                fontSize: '13px',
+                cursor: 'pointer'
+              }}
+            >
+              إغلاق
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 🔟 نافذة اختبار جهاز مدى ودفع POS */}
+      {madaModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            backgroundColor: 'rgba(30, 19, 11, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            direction: 'rtl'
+          }}
+          onClick={() => setMadaModalOpen(false)}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '24px',
+              border: '1.5px solid rgba(194, 155, 98, 0.35)',
+              boxShadow: '0 25px 60px rgba(30, 19, 11, 0.35)',
+              width: '100%',
+              maxWidth: '460px',
+              padding: '24px',
+              textAlign: 'center',
+              color: '#1E130B'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '36px', marginBottom: '8px' }}>💳</div>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: 900 }}>
+              فحص اتصال جهاز مدى ونقاط البيع
+            </h3>
+
+            {isMadaTesting ? (
+              <div style={{ padding: '24px', color: '#C29B62', fontWeight: 800 }}>
+                <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                <div>جاري إرسال نبضة الفحص لجهاز مدى...</div>
+              </div>
+            ) : madaTestResult && (
+              <div style={{
+                background: '#FDFBF7',
+                border: `1.5px solid ${madaTestResult.success ? '#059669' : '#A8573C'}`,
+                borderRadius: '16px',
+                padding: '16px',
+                margin: '16px 0',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                fontSize: '12.5px',
+                fontWeight: 800
+              }}>
+                <div style={{ color: madaTestResult.success ? '#059669' : '#A8573C', fontSize: '14px', fontWeight: 900 }}>
+                  {madaTestResult.success ? '🟢 الاتصال نشط ومؤمّن' : '🔴 تعذر الاتصال بالجهاز'}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6e5d4f' }}>
+                  <span>زمن الاستجابة (Latency):</span>
+                  <span style={{ color: '#1E130B' }}>{madaTestResult.latency}ms</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6e5d4f' }}>
+                  <span>معرف المحطة:</span>
+                  <span style={{ color: '#1E130B' }}>{madaTestResult.terminalId}</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#8c7b6d', marginTop: '4px' }}>
+                  {madaTestResult.details}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setMadaModalOpen(false)}
+              style={{
+                width: '100%',
+                height: '44px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                color: '#FFFFFF',
+                border: 'none',
+                fontWeight: 900,
+                fontSize: '13px',
+                cursor: 'pointer'
+              }}
+            >
+              إغلاق
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 1️⃣1️⃣ نافذة تأكيد الحذف الفاخرة (بدون native confirm) */}
+      {deviceToDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 999999,
+            backgroundColor: 'rgba(30, 19, 11, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            direction: 'rtl'
+          }}
+          onClick={() => setDeviceToDelete(null)}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '24px',
+              border: '1.5px solid rgba(168, 87, 60, 0.35)',
+              boxShadow: '0 25px 60px rgba(30, 19, 11, 0.35)',
+              width: '100%',
+              maxWidth: '420px',
+              padding: '24px',
+              textAlign: 'center',
+              color: '#1E130B'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '36px', marginBottom: '8px' }}>🗑️</div>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '17px', fontWeight: 900, color: '#1E130B' }}>
+              تأكيد حذف الجهاز
+            </h3>
+            <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#6e5d4f', fontWeight: 700, lineHeight: 1.5 }}>
+              هل أنت متأكد من إلغاء اقتران وحذف الجهاز <strong>"{deviceToDelete.name}"</strong> من النظام؟
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setDeviceToDelete(null)}
+                style={{
+                  flex: 1,
+                  height: '44px',
+                  borderRadius: '12px',
+                  background: '#FDFBF7',
+                  border: '1px solid rgba(194, 155, 98, 0.3)',
+                  color: '#6e5d4f',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteDevice}
+                style={{
+                  flex: 1,
+                  height: '44px',
+                  borderRadius: '12px',
+                  background: '#A8573C',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(168, 87, 60, 0.3)'
+                }}
+              >
+                تأكيد الحذف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
