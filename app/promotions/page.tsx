@@ -14,7 +14,7 @@ export default function PromotionsPage() {
         { 
             header: 'العرض الترويجي', 
             accessor: 'name', 
-            render: (row: any) => <div style={{ fontWeight: 900, color: THEME.primary }}>{row.name}</div> 
+            render: (row: any) => <div style={{ fontWeight: 900, color: '#1E130B' }}>{row.name}</div> 
         },
         { 
             header: 'النوع', 
@@ -29,7 +29,7 @@ export default function PromotionsPage() {
                     'CROSS_SELLING': '🔗 شراء صنف مع صنف',
                     'BUNDLE': '📦 باقة منتجات'
                 };
-                return types[row.type] || row.type;
+                return <span style={{ fontWeight: 700, color: '#6e5d4f' }}>{types[row.type] || row.type}</span>;
             }
         },
         { 
@@ -37,11 +37,12 @@ export default function PromotionsPage() {
             accessor: 'status', 
             render: (row: any) => (
                 <span style={{ 
-                    background: row.status === 'active' ? '#dcfce7' : '#f1f5f9', 
-                    color: row.status === 'active' ? '#16a34a' : '#64748b', 
-                    padding: '4px 8px', 
+                    background: row.status === 'active' ? 'rgba(5, 150, 105, 0.12)' : 'rgba(100, 116, 139, 0.12)', 
+                    color: row.status === 'active' ? '#059669' : '#64748b', 
+                    border: `1px solid ${row.status === 'active' ? 'rgba(5, 150, 105, 0.3)' : 'rgba(100, 116, 139, 0.25)'}`,
+                    padding: '4px 10px', 
                     borderRadius: '8px', 
-                    fontWeight: 'bold', 
+                    fontWeight: 900, 
                     fontSize: '12px' 
                 }}>
                     {row.status === 'active' ? 'نشط' : (row.status === 'inactive' ? 'غير نشط' : row.status)}
@@ -63,8 +64,8 @@ export default function PromotionsPage() {
             key: 'actions', 
             render: (row: any) => (
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                    <button onClick={() => logic.handleEdit(row)} className="btn-icon" style={{ color: THEME.primary, background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '15px' }}><FaEdit /></button>
-                    <button onClick={() => logic.handleDelete(row.id)} className="btn-icon" style={{ color: '#ef4444', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '15px' }}><FaTrash /></button>
+                    <button onClick={() => logic.handleEdit(row)} title="تعديل" style={{ minWidth: '36px', minHeight: '36px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.35)', background: 'rgba(194, 155, 98, 0.1)', color: '#8c6b32', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', transition: 'all 0.2s' }}><FaEdit /></button>
+                    <button onClick={() => logic.handleDelete(row.id)} title="حذف" style={{ minWidth: '36px', minHeight: '36px', borderRadius: '8px', border: '1px solid rgba(168, 87, 60, 0.35)', background: 'rgba(168, 87, 60, 0.1)', color: '#A8573C', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', transition: 'all 0.2s' }}><FaTrash /></button>
                 </div>
             )
         }
@@ -78,7 +79,21 @@ export default function PromotionsPage() {
             onSearch={logic.setSearchQuery}
             actions={
                 <button 
-                    className="btn-main-glass" 
+                    style={{
+                        background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '10px 22px',
+                        borderRadius: '12px',
+                        fontWeight: 900,
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 14px rgba(168, 87, 60, 0.25)',
+                        minHeight: '44px'
+                    }}
                     onClick={() => { logic.setEditingItem(null); logic.setIsFormOpen(true); }}
                 >
                     <FaPlus />
@@ -86,7 +101,7 @@ export default function PromotionsPage() {
                 </button>
             }
         >
-            <div className="glass-container" style={{ padding: '20px' }}>
+            <div style={{ background: '#FFFFFF', border: '1px solid rgba(194, 155, 98, 0.25)', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)' }}>
                 <RawasiSmartTable
                     data={logic.promotions}
                     columns={columns}

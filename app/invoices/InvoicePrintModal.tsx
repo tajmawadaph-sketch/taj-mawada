@@ -210,13 +210,19 @@ export default function InvoicePrintModal({
         return generateZatcaQR('صيدلية تاج المودة البيطرية', '312487477800003', dateStr, totalAmount.toFixed(2), taxAmount.toFixed(2));
     }, [record, totalAmount, taxAmount]);
 
+    // نوع المستند: عرض سعر، أمر بيع، إشعار دائن (مرتجع)، أو فاتورة ضريبية
+    const isQuotation = record?.status === 'عرض سعر' || String(record?.invoice_number || '').startsWith('QUO-');
+    const isSalesOrder = record?.status === 'أمر بيع' || String(record?.invoice_number || '').startsWith('SO-');
+    const isReturnNote = String(record?.invoice_number || '').startsWith('RET-') || record?.status === 'مرتجع';
+
     // دالة الطباعة
     const handlePrintOrPDF = useCallback(() => {
         const originalTitle = document.title;
-        document.title = record?.invoice_number ? `فاتورة_${record.invoice_number}` : 'فاتورة_ضريبية';
+        const docPrefix = isQuotation ? 'عرض_سعر_' : isSalesOrder ? 'أمر_بيع_' : isReturnNote ? 'مرتجع_' : 'فاتورة_';
+        document.title = record?.invoice_number ? `${docPrefix}${record.invoice_number}` : 'مستند_مبيعات';
         window.print();
         setTimeout(() => { document.title = originalTitle; }, 1000);
-    }, [record?.invoice_number]);
+    }, [record?.invoice_number, isQuotation, isSalesOrder, isReturnNote]);
 
     // دالة فتح نافذة الواتساب
     const handleTriggerWhatsApp = () => {
@@ -674,7 +680,16 @@ export default function InvoicePrintModal({
 
                     <div className="inv-title-box">
                         <div className="inv-title">
-                            {record.skip_zatca ? 'فاتورة مبيعات داخلية | SALES INVOICE' : 'فاتورة ضريبية | TAX INVOICE'}
+                            {isQuotation
+                                ? 'عرض أسعار رسمي | OFFICIAL PRICE QUOTATION'
+                                : isSalesOrder
+                                    ? 'أمر بيع وتجهيز بضاعة | SALES ORDER'
+                                    : isReturnNote
+                                        ? 'إشعار دائن (مرتجع مبيعات) | CREDIT NOTE (RETURN)'
+                                        : record.skip_zatca
+                                            ? 'فاتورة مبيعات داخلية | SALES INVOICE'
+                                            : 'فاتورة ضريبية معتمدة | TAX INVOICE'
+                            }
                         </div>
                     </div>
 
@@ -883,7 +898,14 @@ export default function InvoicePrintModal({
                     
                     <div style={{ margin: '5px 0' }}>
                         <div className="badge-invoice-type">
-                            فاتورة ضريبية مبسطة | SIMPLIFIED INVOICE
+                            {isQuotation
+                                ? 'عرض أسعار رسمي | QUOTATION'
+                                : isSalesOrder
+                                    ? 'أمر بيع وتجهيز | SALES ORDER'
+                                    : isReturnNote
+                                        ? 'إشعار دائن (مرتجع) | CREDIT NOTE'
+                                        : 'فاتورة ضريبية مبسطة | SIMPLIFIED INVOICE'
+                            }
                         </div>
                     </div>
 

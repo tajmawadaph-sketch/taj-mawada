@@ -95,15 +95,27 @@ export default function InvoicesPage() {
       render: (row: any) => {
         if (!row) return null;
         const isReturnNote = String(row.invoice_number || '').startsWith('RET-');
+        const isQuotation = String(row.invoice_number || '').startsWith('QUO-') || row.status === 'عرض سعر';
+        const isSalesOrder = String(row.invoice_number || '').startsWith('SO-') || row.status === 'أمر بيع';
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <b style={{ color: isReturnNote ? '#dc2626' : THEME.accent, textShadow: '0 0 10px rgba(40, 145, 200, 0.3)', fontSize: '14px' }}>
+            <b style={{ color: isReturnNote ? '#dc2626' : (isQuotation ? '#C29B62' : (isSalesOrder ? '#2563eb' : THEME.accent)), textShadow: '0 0 10px rgba(40, 145, 200, 0.3)', fontSize: '14px' }}>
               #{row.invoice_number}
             </b>
             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: '10px', color: '#64748b' }}>
-                 {row.skip_zatca ? '📄 فاتورة داخلية' : '✅ ضريبية (ZATCA)'}
-              </span>
+              {isQuotation ? (
+                <span style={{ fontSize: '10px', color: '#926a28', background: 'rgba(194, 155, 98, 0.15)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(194, 155, 98, 0.35)', fontWeight: 900 }}>
+                  📋 عرض أسعار رسمي
+                </span>
+              ) : isSalesOrder ? (
+                <span style={{ fontSize: '10px', color: '#1d4ed8', background: 'rgba(37, 99, 235, 0.12)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(37, 99, 235, 0.3)', fontWeight: 900 }}>
+                  📦 أمر بيع وتجهيز
+                </span>
+              ) : (
+                <span style={{ fontSize: '10px', color: '#64748b' }}>
+                   {row.skip_zatca ? '📄 فاتورة داخلية' : '✅ ضريبية (ZATCA)'}
+                </span>
+              )}
               {row.status === 'مرتجع' && (
                 <span style={{ fontSize: '10px', color: '#dc2626', background: 'rgba(239, 68, 68, 0.12)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(239, 68, 68, 0.25)', fontWeight: 900 }}>
                   🔄 مرتجع بالكامل
@@ -247,6 +259,26 @@ export default function InvoicesPage() {
             </div>
           );
         }
+        if (row.status === 'عرض سعر' || String(row.invoice_number || '').startsWith('QUO-')) {
+          return (
+            <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <span className="invoice-status-pill" style={{ background: 'rgba(194, 155, 98, 0.15)', color: '#926a28', border: '1px solid rgba(194, 155, 98, 0.35)' }}>
+                <span className="status-dot" style={{ background: '#C29B62' }} />
+                <span>عرض سعر</span>
+              </span>
+            </div>
+          );
+        }
+        if (row.status === 'أمر بيع' || String(row.invoice_number || '').startsWith('SO-')) {
+          return (
+            <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <span className="invoice-status-pill" style={{ background: 'rgba(37, 99, 235, 0.12)', color: '#1d4ed8', border: '1px solid rgba(37, 99, 235, 0.35)' }}>
+                <span className="status-dot" style={{ background: '#2563eb' }} />
+                <span>أمر بيع</span>
+              </span>
+            </div>
+          );
+        }
 
         const isApproved = ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(row.status || '').trim().toLowerCase()) || row.is_posted === true;
         const isToggling = String(logic.togglingId) === String(row.id);
@@ -311,19 +343,56 @@ export default function InvoicesPage() {
         const needsPayment = balance > 0; 
         const isApproved = ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(row.status || '').trim().toLowerCase()) || row.is_posted === true;
         const isReturnNote = String(row.invoice_number || '').startsWith('RET-');
-        const canReturn = row.status !== 'مرتجع' && !isReturnNote;
+        const isQuotation = String(row.invoice_number || '').startsWith('QUO-') || row.status === 'عرض سعر';
+        const isSalesOrder = String(row.invoice_number || '').startsWith('SO-') || row.status === 'أمر بيع';
+        const canReturn = row.status !== 'مرتجع' && !isReturnNote && !isQuotation && !isSalesOrder;
         
         return (
           <div onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
             <button 
               onClick={() => { setPrintData(row); setIsPrintModalOpen(true); }} 
               className="inv-row-btn print" 
-              title="طباعة الفاتورة"
+              title={isQuotation ? "طباعة عرض الأسعار" : isSalesOrder ? "طباعة أمر البيع" : "طباعة الفاتورة"}
             >
               🖨️
             </button>
+
+            {isQuotation && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => logic.handleConvertToSalesOrder && logic.handleConvertToSalesOrder(row)}
+                  className="inv-row-btn"
+                  style={{ color: '#2563eb', borderColor: 'rgba(37, 99, 235, 0.3)', width: 'auto', padding: '0 8px', fontSize: '11px', fontWeight: 800, background: 'rgba(37, 99, 235, 0.08)' }}
+                  title="تحويل عرض السعر إلى أمر بيع وتجهيز"
+                >
+                  📦 أمر بيع
+                </button>
+                <button
+                  type="button"
+                  onClick={() => logic.handleConvertToInvoice && logic.handleConvertToInvoice(row)}
+                  className="inv-row-btn"
+                  style={{ color: '#059669', borderColor: 'rgba(5, 150, 105, 0.3)', width: 'auto', padding: '0 8px', fontSize: '11px', fontWeight: 800, background: 'rgba(5, 150, 105, 0.08)' }}
+                  title="تحويل عرض السعر إلى فاتورة ضريبية معتمدة"
+                >
+                  ⚡ فاتورة
+                </button>
+              </>
+            )}
+
+            {isSalesOrder && (
+              <button
+                type="button"
+                onClick={() => logic.handleConvertToInvoice && logic.handleConvertToInvoice(row)}
+                className="inv-row-btn"
+                style={{ color: '#059669', borderColor: 'rgba(5, 150, 105, 0.3)', width: 'auto', padding: '0 8px', fontSize: '11px', fontWeight: 800, background: 'rgba(5, 150, 105, 0.08)' }}
+                title="إصدار فاتورة ضريبية من أمر البيع"
+              >
+                ⚡ إصدار فاتورة
+              </button>
+            )}
             
-            {needsPayment && isApproved && logic.handleOpenPaymentModal && (
+            {!isQuotation && !isSalesOrder && needsPayment && isApproved && logic.handleOpenPaymentModal && (
               <button 
                 onClick={() => logic.handleOpenPaymentModal(row)} 
                 className="inv-row-btn pay" 
@@ -934,6 +1003,28 @@ export default function InvoicesPage() {
                 <span className="dot red" />
                 <span>مرتجعات</span>
                 <span className="tab-count">{logic.filterStats?.returned || 0}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`filter-tab-pill ${logic.statusFilter === 'quotation' ? 'active' : ''}`}
+                onClick={() => logic.setStatusFilter('quotation')}
+                style={logic.statusFilter === 'quotation' ? { background: '#C29B62', borderColor: '#C29B62', color: 'white' } : {}}
+              >
+                <span className="dot" style={{ background: '#C29B62' }} />
+                <span>عروض أسعار</span>
+                <span className="tab-count">{logic.filterStats?.quotations || 0}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`filter-tab-pill ${logic.statusFilter === 'sales_order' ? 'active' : ''}`}
+                onClick={() => logic.setStatusFilter('sales_order')}
+                style={logic.statusFilter === 'sales_order' ? { background: '#2563eb', borderColor: '#2563eb', color: 'white' } : {}}
+              >
+                <span className="dot" style={{ background: '#2563eb' }} />
+                <span>أوامر بيع</span>
+                <span className="tab-count">{logic.filterStats?.salesOrders || 0}</span>
               </button>
             </div>
 

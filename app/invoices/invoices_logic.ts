@@ -43,7 +43,7 @@ export function useInvoicesLogic() {
     const deferredSearch = useDeferredValue(globalSearch); 
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'posted' | 'pending' | 'unpaid' | 'overdue' | 'returned'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'posted' | 'pending' | 'quotation' | 'sales_order' | 'unpaid' | 'overdue' | 'returned'>('all');
     const [togglingId, setTogglingId] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -233,14 +233,19 @@ export function useInvoicesLogic() {
             const paid = Number(inv.paid_amount || 0);
             const isApproved = ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(inv.status || '').trim().toLowerCase()) || inv.is_posted === true;
 
+            const isQuotation = inv.status === 'عرض سعر' || String(inv.invoice_number || '').startsWith('QUO-');
+            const isSalesOrder = inv.status === 'أمر بيع' || String(inv.invoice_number || '').startsWith('SO-');
+
             let matchesStatus = true;
-            if (statusFilter === 'posted') matchesStatus = isApproved;
-            else if (statusFilter === 'pending') matchesStatus = !isApproved;
-            else if (statusFilter === 'unpaid') matchesStatus = (total - paid) > 0;
+            if (statusFilter === 'quotation') matchesStatus = isQuotation;
+            else if (statusFilter === 'sales_order') matchesStatus = isSalesOrder;
+            else if (statusFilter === 'posted') matchesStatus = isApproved && !isQuotation && !isSalesOrder;
+            else if (statusFilter === 'pending') matchesStatus = !isApproved && !isQuotation && !isSalesOrder;
+            else if (statusFilter === 'unpaid') matchesStatus = (total - paid) > 0 && !isQuotation && !isSalesOrder;
             else if (statusFilter === 'overdue') {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                matchesStatus = (total - paid) > 0 && !!inv.due_date && new Date(inv.due_date) < today;
+                matchesStatus = (total - paid) > 0 && !isQuotation && !isSalesOrder && !!inv.due_date && new Date(inv.due_date) < today;
             } else if (statusFilter === 'returned') {
                 matchesStatus = inv.status === 'مرتجع' || inv.status === 'مرتجع جزئي' || String(inv.invoice_number || '').startsWith('RET-');
             }
@@ -274,14 +279,16 @@ export function useInvoicesLogic() {
         today.setHours(0, 0, 0, 0);
         return {
             all: invoices.length,
-            posted: invoices.filter((i: any) => ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(i.status || '').trim().toLowerCase()) || i.is_posted === true).length,
-            pending: invoices.filter((i: any) => !['posted', 'معتمد', 'مرحل', 'approved'].includes(String(i.status || '').trim().toLowerCase()) && !i.is_posted).length,
-            unpaid: invoices.filter((i: any) => (Number(i.total_amount || 0) - Number(i.paid_amount || 0)) > 0).length,
-            overdue: invoices.filter((i: any) => (Number(i.total_amount || 0) - Number(i.paid_amount || 0)) > 0 && !!i.due_date && new Date(i.due_date) < today).length,
+            quotations: invoices.filter((i: any) => i.status === 'عرض سعر' || String(i.invoice_number || '').startsWith('QUO-')).length,
+            salesOrders: invoices.filter((i: any) => i.status === 'أمر بيع' || String(i.invoice_number || '').startsWith('SO-')).length,
+            posted: invoices.filter((i: any) => (['posted', 'معتمد', 'مرحل', 'approved'].includes(String(i.status || '').trim().toLowerCase()) || i.is_posted === true) && !String(i.invoice_number || '').startsWith('QUO-') && !String(i.invoice_number || '').startsWith('SO-')).length,
+            pending: invoices.filter((i: any) => !['posted', 'معتمد', 'مرحل', 'approved'].includes(String(i.status || '').trim().toLowerCase()) && !i.is_posted && !String(i.invoice_number || '').startsWith('QUO-') && !String(i.invoice_number || '').startsWith('SO-')).length,
+            unpaid: invoices.filter((i: any) => (Number(i.total_amount || 0) - Number(i.paid_amount || 0)) > 0 && !String(i.invoice_number || '').startsWith('QUO-') && !String(i.invoice_number || '').startsWith('SO-')).length,
+            overdue: invoices.filter((i: any) => (Number(i.total_amount || 0) - Number(i.paid_amount || 0)) > 0 && !String(i.invoice_number || '').startsWith('QUO-') && !String(i.invoice_number || '').startsWith('SO-') && !!i.due_date && new Date(i.due_date) < today).length,
             returned: invoices.filter((i: any) => i.status === 'مرتجع' || i.status === 'مرتجع جزئي' || String(i.invoice_number || '').startsWith('RET-')).length,
-            totalSales: invoices.reduce((sum: number, i: any) => sum + Number(i.total_amount || 0), 0),
+            totalSales: invoices.filter((i: any) => !String(i.invoice_number || '').startsWith('QUO-')).reduce((sum: number, i: any) => sum + Number(i.total_amount || 0), 0),
             totalCollected: invoices.reduce((sum: number, i: any) => sum + Number(i.paid_amount || 0), 0),
-            totalRemaining: invoices.reduce((sum: number, i: any) => sum + Math.max(0, Number(i.total_amount || 0) - Number(i.paid_amount || 0)), 0),
+            totalRemaining: invoices.filter((i: any) => !String(i.invoice_number || '').startsWith('QUO-')).reduce((sum: number, i: any) => sum + Math.max(0, Number(i.total_amount || 0) - Number(i.paid_amount || 0)), 0),
         };
     }, [invoices]);
 
@@ -902,7 +909,65 @@ export function useInvoicesLogic() {
                 setTogglingId(null);
             }
         },
-        statusFilter, setStatusFilter: (v: 'all' | 'posted' | 'pending' | 'unpaid' | 'overdue' | 'returned') => { setStatusFilter(v); setCurrentPage(1); },
+        handleConvertToSalesOrder: async (inv: any) => {
+            const confirmed = await showConfirm({
+                title: 'تحويل عرض السعر إلى أمر بيع',
+                message: `هل تؤكد تحويل عرض السعر #${inv.invoice_number} إلى أمر بيع رسمي؟ سيتم تحديث الرقم والحالة.`,
+                confirmText: 'تحويل إلى أمر بيع 📦',
+                cancelText: 'إلغاء',
+                type: 'warning'
+            });
+            if (!confirmed) return;
+
+            try {
+                const rawNum = inv.invoice_number?.replace(/^(QUO|INV)-/, '') || `${Date.now().toString().slice(-6)}`;
+                const newNumber = `SO-${new Date().getFullYear()}-${rawNum}`;
+                const { error } = await supabase
+                    .from('invoices')
+                    .update({
+                        invoice_number: newNumber,
+                        status: 'أمر بيع',
+                        description: `أمر بيع محول من عرض سعر #${inv.invoice_number}`
+                    })
+                    .eq('id', inv.id);
+
+                if (error) throw error;
+                showToast(`تم تحويل عرض السعر إلى أمر بيع #${newNumber} بنجاح 🎉`, 'success');
+                queryClient.invalidateQueries({ queryKey: ['invoices'] });
+            } catch (err: any) {
+                showToast(`فشل التحويل: ${err.message}`, 'error');
+            }
+        },
+        handleConvertToInvoice: async (inv: any) => {
+            const confirmed = await showConfirm({
+                title: 'إصدار فاتورة ضريبية معتمدة',
+                message: `هل تؤكد إصدار فاتورة ضريبية رسمية للمستند #${inv.invoice_number}؟ سيتم إنشاء الفاتورة الضريبية وجاهزيتها للاعتماد والترحيل المحاسبي.`,
+                confirmText: 'إصدار الفاتورة ⚡',
+                cancelText: 'إلغاء',
+                type: 'warning'
+            });
+            if (!confirmed) return;
+
+            try {
+                const rawNum = inv.invoice_number?.replace(/^(QUO|SO)-/, '') || `${Date.now().toString().slice(-6)}`;
+                const newNumber = `INV-${new Date().getFullYear()}-${rawNum}`;
+                const { error } = await supabase
+                    .from('invoices')
+                    .update({
+                        invoice_number: newNumber,
+                        status: 'معلق',
+                        description: `فاتورة ضريبية محولة من ${inv.status || 'عرض/أمر'} #${inv.invoice_number}`
+                    })
+                    .eq('id', inv.id);
+
+                if (error) throw error;
+                showToast(`تم إصدار الفاتورة الضريبية #${newNumber} بنجاح ✅`, 'success');
+                queryClient.invalidateQueries({ queryKey: ['invoices'] });
+            } catch (err: any) {
+                showToast(`فشل الإصدار: ${err.message}`, 'error');
+            }
+        },
+        statusFilter, setStatusFilter: (v: 'all' | 'posted' | 'pending' | 'quotation' | 'sales_order' | 'unpaid' | 'overdue' | 'returned') => { setStatusFilter(v); setCurrentPage(1); },
         togglingId,
         filterStats,
         handleSavePayment: (record: any) => payMutation.mutate(record), 

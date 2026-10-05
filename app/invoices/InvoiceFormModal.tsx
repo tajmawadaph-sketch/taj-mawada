@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/lib/toast-context'; 
 import SmartCombo from '@/components/SmartCombo'; 
 import BarcodeScannerWidget from '@/components/BarcodeScannerWidget';
+import { applyPromotions } from '@/lib/promotions_engine';
 import { z } from 'zod';
 
 // --- [نافذة إضافة/تعديل فاتورة] ---
@@ -206,6 +207,68 @@ export default function InvoiceFormModal({
         }
         
         onSave(record);
+    };
+
+    // 🎁 فحص وتطبيق الخصومات الترويجية الذكية
+    const handleApplyPromotions = async () => {
+        try {
+            const { data: activePromos } = await supabase.from('promotions').select('*').eq('status', 'active');
+            if (!activePromos || activePromos.length === 0) {
+                showToast("لا توجد حملات عروض ترويجية نشطة حالياً في النظام", "info");
+                return;
+            }
+
+            // Customer details if any
+            let customerObj: any = null;
+            if (record.partner_id) {
+                const { data: p } = await supabase.from('partners').select('*').eq('id', record.partner_id).maybeSingle();
+                if (p) customerObj = p;
+            }
+
+            // Map invoice lines to PosCartItem
+            const cartItems = (record.lines || []).map((l: any, idx: number) => ({
+                id: l.item_id || `line-${idx}`,
+                name: l.description,
+                price: Number(l.unit_price) || 0,
+                qty: Number(l.quantity) || 1,
+                unit: l.unit || 'حبة',
+                tax_rate: l.tax_rate ?? 15,
+                discount: 0
+            }));
+
+            if (cartItems.length === 0 && Number(record.unit_price) > 0) {
+                cartItems.push({
+                    id: record.item_id || 'curr-item',
+                    name: record.description || 'صنف',
+                    price: Number(record.unit_price) || 0,
+                    qty: Number(record.quantity) || 1,
+                    unit: record.unit || 'حبة',
+                    tax_rate: record.tax_rate ?? 15,
+                    discount: 0
+                });
+            }
+
+            if (cartItems.length === 0) {
+                showToast("يرجى إدراج أصناف في الفاتورة أولاً لفحص العروض المستحقة ⚠️", "warning");
+                return;
+            }
+
+            const updatedCart = applyPromotions(cartItems, activePromos as any, customerObj);
+            const totalPromoDiscount = updatedCart.reduce((sum, item) => sum + (Number(item.promo_discount) || 0), 0);
+            const appliedPromosNames = Array.from(new Set(updatedCart.flatMap(item => item.applied_promotions || [])));
+
+            if (totalPromoDiscount > 0) {
+                setRecord((prev: any) => ({
+                    ...prev,
+                    materials_discount: Math.round(totalPromoDiscount * 100) / 100
+                }));
+                showToast(`🎉 تم تطبيق العروض الترويجية: ${appliedPromosNames.join(' + ')} بخصم إجمالي ${formatCurrency(totalPromoDiscount)}!`, "success");
+            } else {
+                showToast("لم تنطبق شروط أي عرض ترويجي على هذه السلة أو فئة الشريك المختار", "info");
+            }
+        } catch (err: any) {
+            showToast(`خطأ في فحص العروض: ${err.message}`, "error");
+        }
     };
 
     if (!isOpen || !mounted) return null;
@@ -567,16 +630,55 @@ export default function InvoiceFormModal({
                             </select>
                         </div>
 
-                        {/* 3. حالة الفاتورة */}
+                        {/* 3. نوع المستند والمسار البيعي */}
                         <div className="form-field-unit">
-                            <label className="form-field-label">⚙️ حالة الفاتورة والاعتماد</label>
+                            <label className="form-field-label">📄 نوع المستند والمسار البيعي</label>
                             <select 
                                 className="field-input" 
-                                value={['posted', 'معتمد', 'مرحل', 'approved'].includes(String(record.status || '').trim().toLowerCase()) || record.is_posted === true ? 'معتمد' : 'معلق'} 
-                                onChange={e => setRecord({ ...record, status: e.target.value })}
+                                value={record.status === 'عرض سعر' || String(record.invoice_number || '').startsWith('QUO-')
+                                    ? 'عرض سعر'
+                                    : record.status === 'أمر بيع' || String(record.invoice_number || '').startsWith('SO-')
+                                        ? 'أمر بيع'
+                                        : ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(record.status || '').trim().toLowerCase()) || record.is_posted === true
+                                            ? 'معتمد'
+                                            : 'معلق'
+                                } 
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    const currentNum = record.invoice_number || '';
+                                    const rawNum = currentNum.replace(/^(INV|QUO|SO|RET)-\d{4}-/, '') || Math.floor(10000 + Math.random() * 90000).toString();
+                                    const year = new Date().getFullYear();
+                                    if (val === 'عرض سعر') {
+                                        setRecord({
+                                            ...record,
+                                            status: 'عرض سعر',
+                                            invoice_number: `QUO-${year}-${rawNum}`
+                                        });
+                                    } else if (val === 'أمر بيع') {
+                                        setRecord({
+                                            ...record,
+                                            status: 'أمر بيع',
+                                            invoice_number: `SO-${year}-${rawNum}`
+                                        });
+                                    } else if (val === 'معتمد') {
+                                        setRecord({
+                                            ...record,
+                                            status: 'معتمد',
+                                            invoice_number: `INV-${year}-${rawNum}`
+                                        });
+                                    } else {
+                                        setRecord({
+                                            ...record,
+                                            status: 'معلق',
+                                            invoice_number: `INV-${year}-${rawNum}`
+                                        });
+                                    }
+                                }}
                             >
-                                <option value="معلق">⏳ مسودة معلقة (قابلة للتعديل)</option>
-                                <option value="معتمد">✅ معتمد ومرحل للحسابات</option>
+                                <option value="معلق">📑 فاتورة ضريبية - مسودة معلقة (INV)</option>
+                                <option value="معتمد">✅ فاتورة ضريبية - معتمدة ومرحلة (INV)</option>
+                                <option value="عرض سعر">📋 عرض أسعار رسمي للعميل (QUO)</option>
+                                <option value="أمر بيع">📦 أمر بيع وتجهيز بضاعة (SO)</option>
                             </select>
                         </div>
                     </div>
@@ -888,11 +990,63 @@ export default function InvoiceFormModal({
                         </div>
                     </div>
 
+                    {/* 🎁 شريط فحص وتطبيق الخصومات الترويجية */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '10px',
+                        marginBottom: '14px',
+                        padding: '12px 16px',
+                        background: 'rgba(194, 155, 98, 0.12)',
+                        borderRadius: '14px',
+                        border: '1px solid rgba(194, 155, 98, 0.35)'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '20px' }}>🎁</span>
+                            <div>
+                                <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>
+                                    محرك العروض والخصومات الترويجية الذكية
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#6e5d4f' }}>
+                                    تطبيق خصومات فئات الشركاء (مربي خيل 15%، مربي إبل، عيادات)، وحد الشراء، وخصومات الكميات
+                                </div>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleApplyPromotions}
+                            style={{
+                                background: 'linear-gradient(135deg, #C29B62 0%, #A88348 100%)',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                padding: '8px 16px',
+                                borderRadius: '10px',
+                                fontWeight: 900,
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 3px 10px rgba(194, 155, 98, 0.25)'
+                            }}
+                        >
+                            <span>⚡ فحص وتطبيق العروض المؤهلة</span>
+                        </button>
+                    </div>
+
                     {/* كروت المجاميع والضريبة */}
                     <div className="financial-stats-grid">
                         <div className="stat-box">
                             <span className="stat-box-title">إجمالي البنود</span>
                             <span className="stat-box-value">{formatCurrency(record.line_total ?? 0)}</span>
+                        </div>
+                        <div className="stat-box">
+                            <span className="stat-box-title">الخصم المطبق (العروض)</span>
+                            <span className="stat-box-value" style={{ color: Number(record.materials_discount) > 0 ? '#dc2626' : '#64748b' }}>
+                                {formatCurrency(record.materials_discount ?? 0)}
+                            </span>
                         </div>
                         <div className="stat-box">
                             <span className="stat-box-title">الخاضع للضريبة</span>
