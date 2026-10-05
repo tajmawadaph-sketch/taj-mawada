@@ -288,6 +288,8 @@ export interface ActiveNetworkInfo {
   endHost?: number;
   currentHost?: number;
   adapters?: NetworkAdapterDetail[];
+  bridgeConnected?: boolean;
+  bridgeRequired?: boolean;
   allInterfaces?: Array<{
     name: string;
     ip: string;
@@ -302,65 +304,71 @@ export interface ActiveNetworkInfo {
 /**
  * 🌐 استكشاف الشبكة المحلية ومعلومات المحول النشط وبطاقات الشبكة والبوابات تلقائياً
  */
-export async function detectActiveLocalNetwork(): Promise<ActiveNetworkInfo> {
+export const LOCAL_BRIDGE_URL = 'http://127.0.0.1:7788';
+
+/**
+ * يحاول الاتصال بالجسر المحلي (Local Bridge) على جهاز الكاشير أولاً،
+ * وإلا يستخدم الـ API الخاص بالسيرفر (يصلح فقط عند تشغيل النظام محلياً).
+ */
+async function hardwareFetch(
+  init?: { method: 'POST'; body: any }
+): Promise<{ data: any; viaBridge: boolean } | null> {
   try {
-    const res = await fetch('/api/hardware/network?action=detect_network');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.primary) {
-        return {
-          ip: data.primary.ip,
-          subnetPrefix: data.primary.subnetPrefix,
-          name: data.primary.name,
-          gateway: data.primary.gateway,
-          gatewaySubnet: data.primary.gatewaySubnet,
-          startHost: data.primary.startHost,
-          endHost: data.primary.endHost,
-          currentHost: data.primary.currentHost,
-          adapters: data.adapters || [],
-          allInterfaces: data.all
-        };
-      }
-    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), init ? 60000 : 1500);
+    const res = await fetch(LOCAL_BRIDGE_URL, init
+      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(init.body), signal: ctrl.signal }
+      : { signal: ctrl.signal });
+    clearTimeout(t);
+    if (res.ok) return { data: await res.json(), viaBridge: true };
+  } catch {
+    /* الجسر غير مشغل – ننتقل للـ API */
+  }
+  try {
+    const res = init
+      ? await fetch('/api/hardware/network', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(init.body) })
+      : await fetch('/api/hardware/network?action=detect_network');
+    if (res.ok) return { data: await res.json(), viaBridge: false };
   } catch (err) {
-    console.warn('Network auto-detection notice:', err);
+    console.warn('Hardware API unavailable:', err);
+  }
+  return null;
+}
+
+export async function detectActiveLocalNetwork(): Promise<ActiveNetworkInfo> {
+  const result = await hardwareFetch();
+  const isLocalHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+  if (result && result.data.success && result.data.primary && (result.viaBridge || isLocalHost)) {
+    const data = result.data;
+    return {
+      ip: data.primary.ip,
+      subnetPrefix: data.primary.subnetPrefix,
+      name: data.primary.name,
+      gateway: data.primary.gateway,
+      gatewaySubnet: data.primary.gatewaySubnet,
+      startHost: data.primary.startHost,
+      endHost: data.primary.endHost,
+      currentHost: data.primary.currentHost,
+      adapters: data.adapters || [],
+      allInterfaces: data.all,
+      bridgeConnected: result.viaBridge
+    };
   }
 
+  // النظام مستضاف على السحابة ولا يوجد جسر محلي: لا نعرض بيانات وهمية
   return {
-    ip: '192.168.1.1',
+    ip: '',
     subnetPrefix: '192.168.1',
-    name: 'Default Subnet',
-    gateway: '192.168.1.1',
-    gatewaySubnet: '192.168.1',
+    name: '',
     startHost: 1,
     endHost: 30,
     currentHost: 1,
+    bridgeConnected: false,
+    bridgeRequired: true,
     adapters: [
-      {
-        id: 'ethernet',
-        type: 'ethernet',
-        displayName: 'كرت الشبكة السلكية (Ethernet LAN)',
-        name: 'Ethernet',
-        status: 'disconnected',
-        ip: null,
-        netmask: null,
-        gateway: null
-      },
-      {
-        id: 'wifi',
-        type: 'wifi',
-        displayName: 'كرت الواي فاي اللاسلكي (Wi-Fi)',
-        name: 'Wi-Fi',
-        status: 'connected',
-        ip: '192.168.1.1',
-        netmask: '255.255.255.0',
-        gateway: '192.168.1.1',
-        subnetPrefix: '192.168.1',
-        gatewaySubnet: '192.168.1',
-        startHost: 1,
-        endHost: 30,
-        currentHost: 1
-      }
+      { id: 'ethernet', type: 'ethernet', displayName: 'كرت الشبكة السلكية (Ethernet LAN)', name: 'Ethernet', status: 'disconnected', ip: null, netmask: null, gateway: null },
+      { id: 'wifi', type: 'wifi', displayName: 'كرت الواي فاي اللاسلكي (Wi-Fi)', name: 'Wi-Fi', status: 'disconnected', ip: null, netmask: null, gateway: null }
     ]
   };
 }
@@ -374,11 +382,8 @@ export async function probeNetworkEndpoint(
   timeoutMs: number = 1500
 ): Promise<{ reachable: boolean; latency: number; hostAlive?: boolean; portOpen?: boolean; message?: string; error?: string }> {
   try {
-    const res = await fetch('/api/hardware/network', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'ping', ip, port, timeoutMs })
-    });
+    const result = await hardwareFetch({ method: 'POST', body: { action: 'ping', ip, port, timeoutMs } });
+    const res = { ok: !!result, json: async () => result!.data };
 
     if (res.ok) {
       const data = await res.json();
@@ -416,11 +421,8 @@ export async function scanLocalSubnet(
   onProgress?: (scanned: number, total: number, currentIp: string, found: Array<{ ip: string; port: number; latency: number; portOpen?: boolean }>) => void
 ): Promise<Array<{ ip: string; port: number; latency: number; portOpen?: boolean }>> {
   try {
-    const res = await fetch('/api/hardware/network', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'scan', subnetPrefix, startHost, endHost, port })
-    });
+    const result = await hardwareFetch({ method: 'POST', body: { action: 'scan', subnetPrefix, startHost, endHost, port } });
+    const res = { ok: !!result, json: async () => result!.data };
 
     if (res.ok) {
       const data = await res.json();

@@ -1776,6 +1776,33 @@ export default function ConnectedDevicesManager() {
                     </button>
                   </div>
 
+                  {detectedNetwork?.bridgeRequired && (
+                    <div style={{
+                      background: 'rgba(168, 87, 60, 0.07)',
+                      border: '1.5px solid rgba(168, 87, 60, 0.35)',
+                      borderRadius: '12px',
+                      padding: '12px 14px',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      color: '#1E130B',
+                      lineHeight: 1.8
+                    }}>
+                      <div style={{ color: '#A8573C', fontWeight: 900, marginBottom: '4px' }}>
+                        ⚠️ النظام مفتوح من السحابة (HTTPS) ولا يمكنه رؤية كروت شبكة جهازك مباشرةً
+                      </div>
+                      لقراءة كروت الإيثرنت والواي فاي الحقيقية وفحص طابعاتك المحلية، شغّل &quot;الجسر المحلي&quot; على جهاز الكاشير:
+                      <div dir="ltr" style={{ background: '#1E130B', color: '#C29B62', borderRadius: '8px', padding: '8px 12px', margin: '6px 0', fontFamily: 'monospace', fontSize: '12px' }}>
+                        node scripts/local-bridge.js
+                      </div>
+                      ثم اضغط &quot;تحديث حالة الكروت&quot;. (الجسر يعمل على 127.0.0.1:7788 فقط ولا يُتاح لأي جهاز آخر)
+                    </div>
+                  )}
+                  {detectedNetwork?.bridgeConnected && (
+                    <div style={{ fontSize: '11.5px', fontWeight: 900, color: '#059669' }}>
+                      🟢 الجسر المحلي متصل — القراءة من كروت جهازك الفعلية
+                    </div>
+                  )}
+
                   {/* بطاقات الكروت المزدوجة */}
                   <div style={{
                     display: 'grid',
