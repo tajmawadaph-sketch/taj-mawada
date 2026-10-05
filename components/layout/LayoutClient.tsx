@@ -309,14 +309,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     window.location.href = '/login';
   };
 
-  if (pathname === '/login' || pathname === '/signup') {
-    return <>{children}</>;
-  }
-
-  if (!mounted || !isInitialized || loading) {
-    return <LoadingScreen message="جاري تهيئة نظام صيدلية تاج المودة..." />; 
-  }
-
   // فلترة القوائم حسب الصلاحيات
   const canView = (menuId: string) => {
     if (role === 'super_admin' || role === 'admin') return true;
@@ -430,6 +422,14 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   }, [authorizedMenuGroups, activeCategory, hubSearch, t]);
 
   let animationDelayCounter = 0;
+
+  if (pathname === '/login' || pathname === '/signup') {
+    return <>{children}</>;
+  }
+
+  if (!mounted || !isInitialized || loading) {
+    return <LoadingScreen message="جاري تهيئة نظام صيدلية تاج المودة..." />; 
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', overflowX: 'hidden' }}>
