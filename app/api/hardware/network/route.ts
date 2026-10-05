@@ -62,6 +62,27 @@ function probeTcpPort(ip: string, port: number, timeoutMs: number = 800): Promis
   });
 }
 
+// حساب نطاق الهوستات والبرودكاست بدقة من Netmask
+function getSubnetRange(ip: string, netmask: string) {
+  try {
+    const ipParts = ip.split('.').map(Number);
+    const maskParts = (netmask || '255.255.255.0').split('.').map(Number);
+    const netParts = ipParts.map((p, i) => p & maskParts[i]);
+    const broadParts = ipParts.map((p, i) => p | (~maskParts[i] & 255));
+    const startHost = Math.max(1, netParts[3] + 1);
+    const endHost = Math.min(254, broadParts[3] - 1);
+    return {
+      startHost: startHost <= endHost ? startHost : 1,
+      endHost: startHost <= endHost ? endHost : 30,
+      currentHost: ipParts[3],
+      network: netParts.join('.'),
+      broadcast: broadParts.join('.')
+    };
+  } catch {
+    return { startHost: 1, endHost: 30, currentHost: 1, network: '', broadcast: '' };
+  }
+}
+
 // استخراج معلومات الشبكة المحلية النشطة
 function getLocalNetworkInfo() {
   const interfaces = os.networkInterfaces();
@@ -71,6 +92,9 @@ function getLocalNetworkInfo() {
     netmask: string;
     cidr: string;
     subnetPrefix: string;
+    startHost: number;
+    endHost: number;
+    currentHost: number;
   }> = [];
 
   for (const [name, addrs] of Object.entries(interfaces)) {
@@ -79,12 +103,16 @@ function getLocalNetworkInfo() {
       if (addr.family === 'IPv4' && !addr.internal && !addr.address.startsWith('169.254.')) {
         const parts = addr.address.split('.');
         const subnetPrefix = `${parts[0]}.${parts[1]}.${parts[2]}`;
+        const range = getSubnetRange(addr.address, addr.netmask);
         activeInterfaces.push({
           name,
           ip: addr.address,
           netmask: addr.netmask,
           cidr: addr.cidr || `${addr.address}/24`,
-          subnetPrefix
+          subnetPrefix,
+          startHost: range.startHost,
+          endHost: range.endHost,
+          currentHost: range.currentHost
         });
       }
     }
@@ -100,7 +128,10 @@ function getLocalNetworkInfo() {
     ip: '192.168.1.1',
     netmask: '255.255.255.0',
     cidr: '192.168.1.1/24',
-    subnetPrefix: '192.168.1'
+    subnetPrefix: '192.168.1',
+    startHost: 1,
+    endHost: 30,
+    currentHost: 1
   };
 
   return { primary, all: activeInterfaces };

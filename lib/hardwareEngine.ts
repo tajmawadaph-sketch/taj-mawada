@@ -262,15 +262,28 @@ export async function pairHidScanner(): Promise<ConnectedDevice> {
   return newDevice;
 }
 
-/**
- * 🌐 استكشاف الشبكة المحلية ومعلومات المحول النشط تلقائياً
- */
-export async function detectActiveLocalNetwork(): Promise<{
+export interface ActiveNetworkInfo {
   ip: string;
   subnetPrefix: string;
   name: string;
-  allInterfaces?: any[];
-}> {
+  startHost?: number;
+  endHost?: number;
+  currentHost?: number;
+  allInterfaces?: Array<{
+    name: string;
+    ip: string;
+    netmask: string;
+    subnetPrefix: string;
+    startHost: number;
+    endHost: number;
+    currentHost: number;
+  }>;
+}
+
+/**
+ * 🌐 استكشاف الشبكة المحلية ومعلومات المحول النشط تلقائياً
+ */
+export async function detectActiveLocalNetwork(): Promise<ActiveNetworkInfo> {
   try {
     const res = await fetch('/api/hardware/network?action=detect_network');
     if (res.ok) {
@@ -280,6 +293,9 @@ export async function detectActiveLocalNetwork(): Promise<{
           ip: data.primary.ip,
           subnetPrefix: data.primary.subnetPrefix,
           name: data.primary.name,
+          startHost: data.primary.startHost,
+          endHost: data.primary.endHost,
+          currentHost: data.primary.currentHost,
           allInterfaces: data.all
         };
       }
@@ -291,7 +307,10 @@ export async function detectActiveLocalNetwork(): Promise<{
   return {
     ip: '192.168.1.1',
     subnetPrefix: '192.168.1',
-    name: 'Default Subnet'
+    name: 'Default Subnet',
+    startHost: 1,
+    endHost: 30,
+    currentHost: 1
   };
 }
 

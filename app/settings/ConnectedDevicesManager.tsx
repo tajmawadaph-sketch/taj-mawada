@@ -36,6 +36,7 @@ import { playPosBeep, triggerHaptic } from '@/components/BarcodeScannerWidget';
 import {
   ConnectedDevice,
   HardwareCapabilities,
+  ActiveNetworkInfo,
   getHardwareCapabilities,
   loadPairedDevices,
   savePairedDevices,
@@ -80,11 +81,16 @@ export default function ConnectedDevicesManager() {
   const [discoveryTab, setDiscoveryTab] = useState<'usb' | 'serial' | 'hid' | 'network' | 'manual'>('usb');
 
   // معلومات الشبكة المستكشفة تلقائياً
-  const [detectedNetwork, setDetectedNetwork] = useState<{ ip: string; subnetPrefix: string; name: string } | null>(null);
+  const [detectedNetwork, setDetectedNetwork] = useState<ActiveNetworkInfo | null>(null);
 
-  // فحص عنوان IP فردي مباشر
+  // نمط مجموعة الشبكة (شبكة الجهاز الحالي / راوتر 192.168.1 / راوتر 192.168.0 / مخصص)
+  const [networkGroupMode, setNetworkGroupMode] = useState<'current' | 'router1' | 'router0' | 'custom'>('current');
+
+  // فحص عنوان IP فردي مباشر في أي شبكة
   const [singleTestIp, setSingleTestIp] = useState('');
   const [singleTestPort, setSingleTestPort] = useState(9100);
+  const [singleTargetCategory, setSingleTargetCategory] = useState<ConnectedDevice['category']>('receipt_printer');
+  const [singleDeviceCustomName, setSingleDeviceCustomName] = useState('');
   const [isSingleTesting, setIsSingleTesting] = useState(false);
   const [singleTestResult, setSingleTestResult] = useState<{ reachable: boolean; latency: number; message?: string; hostAlive?: boolean; portOpen?: boolean; error?: string } | null>(null);
 
@@ -124,6 +130,10 @@ export default function ConnectedDevicesManager() {
       if (netInfo && netInfo.subnetPrefix) {
         setDetectedNetwork(netInfo);
         setSubnetPrefix(netInfo.subnetPrefix);
+        if (netInfo.startHost && netInfo.endHost) {
+          setStartHost(netInfo.startHost);
+          setEndHost(Math.min(netInfo.endHost, 30));
+        }
         if (!singleTestIp) {
           setSingleTestIp(`${netInfo.subnetPrefix}.150`);
         }
@@ -340,6 +350,77 @@ export default function ConnectedDevicesManager() {
     }
   };
 
+  // 💻 إضافة جهاز الكاشير الحالي كطرفية بيع في النظام
+  const handleAddCurrentMachineAsPos = () => {
+    if (!detectedNetwork) return;
+    const exists = devices.find(d => d.ipAddress === detectedNetwork.ip);
+    if (exists) {
+      showToast(isEn ? 'This machine is already registered.' : 'هذا الجهاز مسجل بالفعل في قائمة الطرفيات!', 'warning');
+      return;
+    }
+
+    const newDev: ConnectedDevice = {
+      id: `pos-local-${Date.now().toString(36)}`,
+      name: `محطة الكاشير الحالية (${detectedNetwork.name})`,
+      category: 'pos_terminal',
+      brand: 'Taj POS Station',
+      model: `${detectedNetwork.name} Adapter`,
+      connectionType: 'lan',
+      ipAddress: detectedNetwork.ip,
+      port: 8080,
+      terminalId: `TID-${detectedNetwork.ip.split('.').pop()?.padStart(4, '0') || '0001'}`,
+      isDefault: !devices.some(d => d.category === 'pos_terminal' && d.isDefault),
+      status: 'online',
+      latency: 1,
+      lastSeen: 'متصل ومحلي (جهاز الكاشير الحالي) 🟢',
+      notes: `تم إضافة هذا الجهاز بنجاح من محول ${detectedNetwork.name}`
+    };
+
+    const updated = [...devices, newDev];
+    updateAndSaveDevices(updated);
+    playPosBeep();
+    triggerHaptic(120);
+    showToast(isEn ? `Registered current machine (${detectedNetwork.ip}) as POS Terminal.` : `تم تسجيل هذا الجهاز (${detectedNetwork.ip}) كطرفية كاشير 🟢`, 'success');
+  };
+
+  // 🔍 فحص وبحث سريع في شبكة هذا الجهاز الحالية
+  const handleScanCurrentMachineNetwork = () => {
+    if (detectedNetwork) {
+      setNetworkGroupMode('current');
+      setSubnetPrefix(detectedNetwork.subnetPrefix);
+      setStartHost(detectedNetwork.startHost || 1);
+      setEndHost(detectedNetwork.endHost || 30);
+      setTimeout(() => {
+        handleStartSubnetScan();
+      }, 50);
+    } else {
+      handleStartSubnetScan();
+    }
+  };
+
+  // 🔄 تبديل مجموعة الشبكة
+  const handleSelectNetworkGroup = (mode: 'current' | 'router1' | 'router0' | 'custom', customPrefix?: string) => {
+    setNetworkGroupMode(mode);
+    if (mode === 'current' && detectedNetwork) {
+      setSubnetPrefix(detectedNetwork.subnetPrefix);
+      setStartHost(detectedNetwork.startHost || 1);
+      setEndHost(detectedNetwork.endHost || 30);
+      setSingleTestIp(`${detectedNetwork.subnetPrefix}.150`);
+    } else if (mode === 'router1') {
+      setSubnetPrefix('192.168.1');
+      setStartHost(1);
+      setEndHost(30);
+      setSingleTestIp('192.168.1.150');
+    } else if (mode === 'router0') {
+      setSubnetPrefix('192.168.0');
+      setStartHost(1);
+      setEndHost(30);
+      setSingleTestIp('192.168.0.150');
+    } else if (mode === 'custom') {
+      if (customPrefix) setSubnetPrefix(customPrefix);
+    }
+  };
+
   // 🌐 بدء فحص الشبكة المحلية (Local Subnet Scanner)
   const handleStartSubnetScan = async () => {
     setIsScanningSubnet(true);
@@ -374,15 +455,24 @@ export default function ConnectedDevicesManager() {
   };
 
   // إضافة جهاز مكتشف من فحص الشبكة
-  const handleAddDiscoveredIp = (ipItem: { ip: string; port: number; latency: number }) => {
-    let cat: ConnectedDevice['category'] = 'receipt_printer';
+  const handleAddDiscoveredIp = (
+    ipItem: { ip: string; port: number; latency: number },
+    customCategory?: ConnectedDevice['category'],
+    customName?: string
+  ) => {
+    let cat: ConnectedDevice['category'] = customCategory || 'receipt_printer';
     let brand = 'Network Hardware';
-    let name = `طابعة شبكة (${ipItem.ip})`;
+    let name = customName?.trim() || `طابعة شبكة (${ipItem.ip})`;
 
-    if (ipItem.port === 8080 || ipItem.port === 80) {
-      cat = 'pos_terminal';
-      name = `جهاز مدى / دفع شبكي (${ipItem.ip})`;
-      brand = 'Mada Terminal';
+    if (!customCategory) {
+      if (ipItem.port === 8080) {
+        cat = 'pos_terminal';
+        name = customName?.trim() || `جهاز مدى / دفع شبكي (${ipItem.ip})`;
+        brand = 'Mada Terminal';
+      } else if (ipItem.port === 80 || ipItem.port === 443) {
+        cat = 'pos_terminal';
+        name = customName?.trim() || `لوحة شبكة POS (${ipItem.ip})`;
+      }
     }
 
     const newDev: ConnectedDevice = {
@@ -401,11 +491,13 @@ export default function ConnectedDevicesManager() {
       status: 'online',
       latency: ipItem.latency,
       lastSeen: `متصل ومستجيب (${ipItem.latency}ms) 🟢`,
-      notes: `تم اكتشافه آلياً عبر فاحص الشبكة المحلية`
+      notes: `تم اعتماده عبر فاحص الشبكة (Port ${ipItem.port})`
     };
 
     const updated = [...devices, newDev];
     updateAndSaveDevices(updated);
+    playPosBeep();
+    triggerHaptic(100);
     showToast(isEn ? `Added "${newDev.name}" to connected devices.` : `تمت إضافة "${newDev.name}" واعتماده في النظام 🚀`, 'success');
   };
 
@@ -1530,105 +1622,314 @@ export default function ConnectedDevicesManager() {
             {/* محتوى تاب فحص الشبكة المحلية */}
             {discoveryTab === 'network' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* شريط حالة الشبكة المحلية المكتشفة تلقائياً */}
+                
+                {/* 1️⃣ بطاقة هذا الجهاز الحالي والمسح في شبكته التلقائية */}
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.12) 0%, rgba(5, 150, 105, 0.08) 100%)',
-                  borderRadius: '14px',
-                  padding: '12px 14px',
-                  border: '1px solid rgba(194, 155, 98, 0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '8px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Wifi size={16} color="#059669" />
-                    <div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#6e5d4f' }}>الشبكة المحلية الحالية: </span>
-                      <strong style={{ fontSize: '12px', color: '#1E130B' }}>
-                        {detectedNetwork ? `${detectedNetwork.name} (${detectedNetwork.ip})` : 'جاري فحص المحول...'}
-                      </strong>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={refreshNetworkInfo}
-                    style={{
-                      background: '#FFFFFF',
-                      border: '1px solid rgba(194, 155, 98, 0.3)',
-                      borderRadius: '8px',
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: 800,
-                      color: '#C29B62',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <RefreshCw size={11} />
-                    <span>تحديث الشبكة</span>
-                  </button>
-                </div>
-
-                {/* 1️⃣ أداة الفحص الفوري لعنوان IP محدد (Single IP Instant Probe) */}
-                <div style={{
-                  background: '#FDFBF7',
-                  border: '1.5px solid rgba(194, 155, 98, 0.3)',
-                  borderRadius: '16px',
-                  padding: '14px',
+                  background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.15) 0%, rgba(5, 150, 105, 0.1) 100%)',
+                  borderRadius: '18px',
+                  padding: '16px 18px',
+                  border: '1.5px solid rgba(194, 155, 98, 0.35)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '10px'
+                  gap: '12px',
+                  boxShadow: '0 4px 18px rgba(30, 19, 11, 0.04)'
                 }}>
-                  <div style={{ fontSize: '12.5px', fontWeight: 900, color: '#1E130B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>🎯</span>
-                    <span>فحص فوري لعنوان IP محدد (طابعة أو جهاز مدى)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '12px',
+                        background: 'rgba(5, 150, 105, 0.15)',
+                        border: '1.5px solid rgba(5, 150, 105, 0.35)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '22px'
+                      }}>
+                        💻
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#6e5d4f' }}>
+                          عنوان IP هذا الجهاز الحالي (Local POS Terminal):
+                        </div>
+                        <div style={{ fontSize: '16px', fontWeight: 900, color: '#1E130B', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                          <span>{detectedNetwork ? detectedNetwork.ip : 'جاري فحص المحول...'}</span>
+                          {detectedNetwork && (
+                            <span style={{ fontSize: '11px', background: '#FFFFFF', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(194, 155, 98, 0.3)', color: '#059669', fontWeight: 800 }}>
+                              {detectedNetwork.name} ({detectedNetwork.subnetPrefix}.x)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={refreshNetworkInfo}
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px solid rgba(194, 155, 98, 0.3)',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '11.5px',
+                        fontWeight: 800,
+                        color: '#C29B62',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      <RefreshCw size={12} />
+                      <span>تحديث المحول</span>
+                    </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
+                  {/* زران إجرائيان لجهاز الكاشير الحالي */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={handleScanCurrentMachineNetwork}
+                      disabled={isScanningSubnet}
+                      style={{
+                        height: '44px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontWeight: 900,
+                        fontSize: '12.5px',
+                        cursor: isScanningSubnet ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        boxShadow: '0 3px 10px rgba(5, 150, 105, 0.25)'
+                      }}
+                    >
+                      <Search size={14} />
+                      <span>🔍 مسح وبحث في شبكة هذا الجهاز تلقائياً</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAddCurrentMachineAsPos}
+                      style={{
+                        height: '44px',
+                        borderRadius: '10px',
+                        background: '#FFFFFF',
+                        color: '#1E130B',
+                        border: '1.5px solid #C29B62',
+                        fontWeight: 900,
+                        fontSize: '12.5px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <span>➕ تسجيل هذا الجهاز كطرفية بيع (POS)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2️⃣ اختيار مجموعة الشبكة (Network Subnet Groups) */}
+                <div style={{
+                  background: '#FDFBF7',
+                  borderRadius: '14px',
+                  padding: '12px 14px',
+                  border: '1px solid rgba(194, 155, 98, 0.25)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#6e5d4f' }}>
+                    اختر مجموعة الشبكة المراد البحث فيها أو حدد شبكة بجروب آخر:
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectNetworkGroup('current')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        border: `1.5px solid ${networkGroupMode === 'current' ? '#059669' : 'rgba(194, 155, 98, 0.3)'}`,
+                        background: networkGroupMode === 'current' ? '#059669' : '#FFFFFF',
+                        color: networkGroupMode === 'current' ? '#FFFFFF' : '#1E130B'
+                      }}
+                    >
+                      🟢 شبكة هذا الجهاز ({detectedNetwork ? `${detectedNetwork.subnetPrefix}.x` : 'الحالية'})
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectNetworkGroup('router1')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        border: `1.5px solid ${networkGroupMode === 'router1' ? '#C29B62' : 'rgba(194, 155, 98, 0.3)'}`,
+                        background: networkGroupMode === 'router1' ? '#C29B62' : '#FFFFFF',
+                        color: networkGroupMode === 'router1' ? '#FFFFFF' : '#1E130B'
+                      }}
+                    >
+                      🌐 راوتر أساسي (192.168.1.x)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectNetworkGroup('router0')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        border: `1.5px solid ${networkGroupMode === 'router0' ? '#C29B62' : 'rgba(194, 155, 98, 0.3)'}`,
+                        background: networkGroupMode === 'router0' ? '#C29B62' : '#FFFFFF',
+                        color: networkGroupMode === 'router0' ? '#FFFFFF' : '#1E130B'
+                      }}
+                    >
+                      🌐 راوتر فرعي (192.168.0.x)
+                    </button>
+
+                    {detectedNetwork?.allInterfaces && detectedNetwork.allInterfaces.length > 1 && detectedNetwork.allInterfaces.map((iface, idx) => {
+                      if (iface.subnetPrefix === detectedNetwork.subnetPrefix) return null;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setNetworkGroupMode('custom');
+                            setSubnetPrefix(iface.subnetPrefix);
+                            setStartHost(iface.startHost || 1);
+                            setEndHost(iface.endHost || 30);
+                            setSingleTestIp(`${iface.subnetPrefix}.150`);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: 900,
+                            cursor: 'pointer',
+                            border: `1.5px solid ${subnetPrefix === iface.subnetPrefix ? '#C29B62' : 'rgba(194, 155, 98, 0.3)'}`,
+                            background: subnetPrefix === iface.subnetPrefix ? '#C29B62' : '#FFFFFF',
+                            color: subnetPrefix === iface.subnetPrefix ? '#FFFFFF' : '#1E130B'
+                          }}
+                        >
+                          🔌 محول {iface.name} ({iface.subnetPrefix}.x)
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectNetworkGroup('custom', '10.0.0')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        border: `1.5px solid ${networkGroupMode === 'custom' ? '#A8573C' : 'rgba(194, 155, 98, 0.3)'}`,
+                        background: networkGroupMode === 'custom' ? '#A8573C' : '#FFFFFF',
+                        color: networkGroupMode === 'custom' ? '#FFFFFF' : '#1E130B'
+                      }}
+                    >
+                      ✏️ شبكة بجروب مخصص...
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3️⃣ فحص واقتران عنوان IP محدد في أي شبكة / مجموعة (Specific Target IP in Any Group) */}
+                <div style={{
+                  background: '#FFFFFF',
+                  border: '1.5px solid rgba(194, 155, 98, 0.35)',
+                  borderRadius: '16px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  boxShadow: '0 4px 16px rgba(30, 19, 11, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🎯</span>
+                      <span>فحص واقتران عنوان IP محدد (في شبكتك أو شبكة بجروب آخر)</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#6e5d4f', fontWeight: 700 }}>
+                      أدخل أي عنوان IP مباشرة وافحصه
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>عنوان الـ IP</label>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>عنوان الـ IP المستهدف</label>
                       <input
                         type="text"
-                        placeholder="172.20.10.150"
+                        placeholder="مثلاً: 192.168.1.150 أو 172.20.10.20"
                         value={singleTestIp}
                         onChange={(e) => setSingleTestIp(e.target.value)}
-                        style={{ width: '100%', height: '40px', padding: '0 10px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FFFFFF', fontWeight: 800, fontSize: '12.5px', boxSizing: 'border-box' }}
+                        style={{ width: '100%', height: '42px', padding: '0 10px', borderRadius: '10px', border: '1.5px solid #C29B62', background: '#FDFBF7', fontWeight: 900, fontSize: '13px', color: '#1E130B', boxSizing: 'border-box' }}
                       />
                     </div>
+
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>المنفذ (Port)</label>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>نوع الجهاز</label>
                       <select
-                        value={singleTestPort}
-                        onChange={(e) => setSingleTestPort(Number(e.target.value))}
-                        style={{ width: '100%', height: '40px', padding: '0 8px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FFFFFF', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                        value={singleTargetCategory}
+                        onChange={(e) => {
+                          const cat = e.target.value as any;
+                          setSingleTargetCategory(cat);
+                          if (cat === 'receipt_printer' || cat === 'label_printer' || cat === 'a4_printer') setSingleTestPort(9100);
+                          else if (cat === 'pos_terminal') setSingleTestPort(8080);
+                          else setSingleTestPort(80);
+                        }}
+                        style={{ width: '100%', height: '42px', padding: '0 8px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
                       >
-                        <option value={9100}>9100 (طابعة حرارية RAW)</option>
-                        <option value={8080}>8080 (جهاز مدى / Pax)</option>
-                        <option value={80}>80 (ويب / إدارة الطابعة)</option>
-                        <option value={443}>443 (HTTPS)</option>
+                        <option value="receipt_printer">🖨️ طابعة إيصالات (9100)</option>
+                        <option value="label_printer">🏷️ طابعة باركود (9100)</option>
+                        <option value="pos_terminal">💳 جهاز مدى / POS (8080)</option>
+                        <option value="a4_printer">📄 طابعة A4 شبكية (9100)</option>
+                        <option value="scale">⚖️ ميزان شبكي</option>
                       </select>
                     </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>المنفذ (Port)</label>
+                      <input
+                        type="number"
+                        value={singleTestPort}
+                        onChange={(e) => setSingleTestPort(Number(e.target.value))}
+                        style={{ width: '100%', height: '42px', padding: '0 8px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', fontWeight: 800, fontSize: '12.5px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
                     <button
                       type="button"
                       onClick={handleSingleIpTest}
                       disabled={isSingleTesting}
                       style={{
-                        height: '40px',
-                        padding: '0 14px',
+                        height: '42px',
+                        padding: '0 16px',
                         borderRadius: '10px',
                         background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
                         color: '#FFFFFF',
                         border: 'none',
                         fontWeight: 900,
-                        fontSize: '12px',
+                        fontSize: '12.5px',
                         cursor: isSingleTesting ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        gap: '6px',
+                        boxShadow: '0 3px 12px rgba(168, 87, 60, 0.25)'
                       }}
                     >
                       <RefreshCw size={13} className={isSingleTesting ? 'animate-spin' : ''} />
@@ -1636,45 +1937,70 @@ export default function ConnectedDevicesManager() {
                     </button>
                   </div>
 
-                  {/* نتيجة الفحص الفوري */}
+                  {/* حقل اسم الجهاز الاختياري ونتيجة الفحص */}
                   {singleTestResult && (
                     <div style={{
-                      padding: '10px 12px',
-                      borderRadius: '10px',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
                       background: singleTestResult.reachable ? 'rgba(5, 150, 105, 0.08)' : 'rgba(168, 87, 60, 0.08)',
-                      border: `1px solid ${singleTestResult.reachable ? 'rgba(5, 150, 105, 0.25)' : 'rgba(168, 87, 60, 0.25)'}`,
+                      border: `1.5px solid ${singleTestResult.reachable ? '#059669' : '#A8573C'}`,
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
+                      flexDirection: 'column',
                       gap: '8px'
                     }}>
-                      <div style={{ fontSize: '12px', fontWeight: 800, color: singleTestResult.reachable ? '#059669' : '#A8573C' }}>
-                        {singleTestResult.message || (singleTestResult.reachable ? '🟢 الجهاز متصل ومستجيب' : '🔴 تعذر الاتصال بالجهاز')}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ fontSize: '12.5px', fontWeight: 900, color: singleTestResult.reachable ? '#059669' : '#A8573C' }}>
+                          {singleTestResult.message || (singleTestResult.reachable ? '🟢 الجهاز متصل ومستجيب' : '🔴 تعذر الاتصال بالجهاز')}
+                        </div>
+
+                        {singleTestResult.reachable && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <input
+                              type="text"
+                              placeholder="اسم تعريفي للجهاز (اختياري)..."
+                              value={singleDeviceCustomName}
+                              onChange={(e) => setSingleDeviceCustomName(e.target.value)}
+                              style={{
+                                height: '36px',
+                                padding: '0 10px',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(194, 155, 98, 0.3)',
+                                background: '#FFFFFF',
+                                fontSize: '12px',
+                                fontWeight: 800,
+                                width: '180px'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAddDiscoveredIp(
+                                { ip: singleTestIp.trim(), port: singleTestPort, latency: singleTestResult.latency },
+                                singleTargetCategory,
+                                singleDeviceCustomName
+                              )}
+                              style={{
+                                height: '36px',
+                                padding: '0 14px',
+                                borderRadius: '8px',
+                                background: '#059669',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                fontWeight: 900,
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)'
+                              }}
+                            >
+                              ➕ اعتماد وإضافة هذا الجهاز فوراً
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {singleTestResult.reachable && (
-                        <button
-                          type="button"
-                          onClick={() => handleAddDiscoveredIp({ ip: singleTestIp.trim(), port: singleTestPort, latency: singleTestResult.latency })}
-                          style={{
-                            padding: '5px 12px',
-                            borderRadius: '8px',
-                            background: '#059669',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            fontWeight: 900,
-                            fontSize: '11px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          ➕ إضافة كجهاز معتمد
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>
 
-                {/* 2️⃣ أداة فاحص نطاق الشبكة الشامل (Subnet Scanner) */}
+                {/* 4️⃣ فاحص نطاق الشبكة الشامل (Subnet Range Scan) */}
                 <div style={{
                   background: '#FDFBF7',
                   border: '1px solid rgba(194, 155, 98, 0.25)',
@@ -1686,12 +2012,12 @@ export default function ConnectedDevicesManager() {
                 }}>
                   <div style={{ fontSize: '12.5px', fontWeight: 900, color: '#1E130B', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>📡</span>
-                    <span>فحص نطاق شبكة محلي كامل (Subnet Range Scan)</span>
+                    <span>مسح نطاق شبكة كامل (Subnet Range Scan)</span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '8px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>نطاق الشبكة</label>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>بادئة الشبكة</label>
                       <input
                         type="text"
                         value={subnetPrefix}
