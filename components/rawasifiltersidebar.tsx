@@ -645,17 +645,16 @@ export default function RawasiFilterSidebar({
           .filter-toggle-tab-v3 {
             position: fixed !important;
             top: auto !important;
-            bottom: 0 !important;
+            bottom: 78px !important;
             left: 50% !important;
             right: auto !important;
             transform: translateX(-50%) !important;
-            width: 220px !important;
-            height: 38px !important;
-            border-radius: 18px 18px 0 0 !important;
+            width: 210px !important;
+            height: 36px !important;
+            border-radius: 18px !important;
             background: linear-gradient(135deg, rgba(255, 253, 250, 0.98) 0%, rgba(253, 246, 237, 0.95) 100%) !important;
-            border: 1.5px solid rgba(194, 155, 98, 0.3) !important;
-            border-bottom: none !important;
-            box-shadow: 0 -4px 20px rgba(44, 26, 18, 0.12) !important;
+            border: 1.5px solid rgba(194, 155, 98, 0.35) !important;
+            box-shadow: 0 4px 20px rgba(44, 26, 18, 0.15) !important;
             backdrop-filter: blur(20px) !important;
             -webkit-backdrop-filter: blur(20px) !important;
             z-index: 998 !important;

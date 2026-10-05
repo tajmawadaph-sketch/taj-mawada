@@ -20,7 +20,14 @@ import {
   FileText, 
   Package, 
   ArrowUpRight,
-  Zap
+  Zap,
+  Search,
+  Layers,
+  Compass,
+  DollarSign,
+  Users,
+  BarChart3,
+  Truck
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -34,6 +41,10 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   const currentPosRef = useRef<{ x: number, y: number } | null>(null);
   const lastTouchTime = useRef(0);
   const dragStartPos = useRef({ x: 0, y: 0, startX: 0, startY: 0, hasMoved: false });
+
+  // بحث وتصنيف الشاشات داخل مركز القيادة
+  const [hubSearch, setHubSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
 
   // لمنع مشاكل Hydration
   const [mounted, setMounted] = useState(false);
@@ -111,9 +122,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // 1. الافتراضي الأساسي هو المظهر الزجاجي الفاخر (Glassmorphism)
     const saved = localStorage.getItem('lowGraphicsMode');
-    const isLow = saved === 'true'; // false افتراضياً
+    const isLow = saved === 'true';
     setLowGraphics(isLow);
     if (isLow) {
       document.documentElement.classList.add('low-graphics-mode');
@@ -123,11 +133,9 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
       document.body.classList.remove('low-graphics-mode');
     }
 
-    // 2. مزامنة التفضيل المحفوظ في بروفايل المستخدم (Supabase Auth / Profiles)
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user && user.user_metadata?.low_graphics_mode !== undefined) {
         const profilePref = Boolean(user.user_metadata.low_graphics_mode);
-        // إذا لم يكن مخزناً محلياً بعد، نطبق تفضيل البروفايل
         if (saved === null) {
           localStorage.setItem('lowGraphicsMode', String(profilePref));
           setLowGraphics(profilePref);
@@ -168,7 +176,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
     window.dispatchEvent(new CustomEvent('lowGraphicsModeChanged', { detail: newVal }));
 
-    // حفظ التفضيل مباشرة في بروفايل المستخدم في سوبابيز ليبقى معه أينما فتح
     try {
       await supabase.auth.updateUser({
         data: { low_graphics_mode: newVal }
@@ -379,14 +386,48 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     ? (t('menu_' + currentMenuItem.id) || currentMenuItem.title)
     : (t('menu_dashboard') || 'الرئيسية');
 
-  // إجمالي الإشعارات غير المقروءة
-  const totalUnread = (unreadCounts?.invoices || 0) + (unreadCounts?.orders || 0);
-
   // فلترة عناصر القائمة حسب الصلاحيات
-  const authorizedMenuGroups = menuGroups.map(group => ({
-    ...group,
-    items: group.items.filter(item => canView(item.id))
-  })).filter(group => group.items.length > 0);
+  const authorizedMenuGroups = useMemo(() => {
+    return menuGroups.map(group => ({
+      ...group,
+      items: group.items.filter(item => canView(item.id))
+    })).filter(group => group.items.length > 0);
+  }, [role, can]);
+
+  // إجمالي عدد الشاشات المتاحة
+  const totalScreensCount = useMemo(() => {
+    return authorizedMenuGroups.reduce((acc, g) => acc + g.items.length, 0);
+  }, [authorizedMenuGroups]);
+
+  // تابات سطح المكتب السريعة (Desktop Quick Navigation Tabs)
+  const primaryNavTabs = useMemo(() => [
+    { id: 'dashboard', title: 'الرئيسية', icon: '🏠', path: '/Dashboard' },
+    { id: 'pos', title: 'الكاشير (POS)', icon: '🛍️', path: '/pos' },
+    { id: 'invoices', title: 'الفواتير', icon: '🧾', path: '/invoices' },
+    { id: 'inventory', title: 'المخزون', icon: '📦', path: '/inventory' },
+    { id: 'receipts', title: 'القبض والصرف', icon: '💵', path: '/ReceiptVouchers' },
+    { id: 'partners', title: 'العملاء', icon: '👥', path: '/partners' },
+    { id: 'reports', title: 'التقارير', icon: '📊', path: '/reports' },
+    { id: 'fleet', title: 'الأسطول', icon: '🚚', path: '/fleet_operations' },
+  ].filter(tab => canView(tab.id)), [role, can]);
+
+  // فلترة الشاشات داخل مركز القيادة حسب البحث والتبويب المحدد
+  const filteredMenuGroups = useMemo(() => {
+    return authorizedMenuGroups.map(group => {
+      if (activeCategory !== 'all' && group.group !== activeCategory) {
+        return null;
+      }
+      const items = group.items.filter(item => {
+        if (!hubSearch.trim()) return true;
+        const q = hubSearch.toLowerCase().trim();
+        const title = (t('menu_' + item.id) || item.title).toLowerCase();
+        const path = item.path.toLowerCase();
+        return title.includes(q) || path.includes(q);
+      });
+      if (items.length === 0) return null;
+      return { ...group, items };
+    }).filter(Boolean) as typeof authorizedMenuGroups;
+  }, [authorizedMenuGroups, activeCategory, hubSearch, t]);
 
   let animationDelayCounter = 0;
 
@@ -396,11 +437,149 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
       {/* 🏜️ أنماط Desert Glassmorphism المتقدمة للـ Layout الفاخر */}
       <style dangerouslySetInnerHTML={{__html: `
         :root {
-          --desert-brown: #2C1A12;
+          --desert-brown: #1E130B;
           --desert-gold: #C29B62;
           --desert-clay: #A8573C;
           --desert-pearl: #FDFBF7;
-          --desert-oasis: #4E734F;
+          --desert-oasis: #059669;
+        }
+
+        /* =================== شريط تابات سطح المكتب الفاخر (Desktop Quick Tabs Bar) =================== */
+        .desktop-luxury-nav {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #FFFFFF;
+          border-bottom: 1.5px solid rgba(194, 155, 98, 0.25);
+          padding: 6px 16px;
+          position: sticky;
+          top: 0;
+          z-index: 990;
+          box-shadow: 0 4px 18px rgba(30, 19, 11, 0.04);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          transition: all 0.3s ease;
+        }
+        @media (max-width: 768px) {
+          .desktop-luxury-nav {
+            display: none !important;
+          }
+        }
+        .desktop-nav-inner {
+          width: 100%;
+          max-width: 1400px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .desktop-nav-brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          cursor: pointer;
+          padding: 4px 8px;
+          border-radius: 12px;
+          transition: all 0.2s;
+        }
+        .desktop-nav-brand:hover {
+          background: rgba(194, 155, 98, 0.1);
+        }
+        .desktop-brand-logo {
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          border: 1px solid rgba(194, 155, 98, 0.4);
+          object-fit: contain;
+        }
+        .desktop-brand-meta {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.1;
+        }
+        .desktop-brand-name {
+          font-size: 13px;
+          font-weight: 900;
+          color: #1E130B;
+        }
+        .desktop-brand-badge {
+          font-size: 9.5px;
+          font-weight: 800;
+          color: #C29B62;
+        }
+        .desktop-tabs-track {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          overflow-x: auto;
+          padding: 2px 0;
+          scrollbar-width: none;
+        }
+        .desktop-tabs-track::-webkit-scrollbar {
+          display: none;
+        }
+        .desktop-nav-tab {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 10px;
+          text-decoration: none;
+          font-size: 12.5px;
+          font-weight: 800;
+          color: #6e5d4f;
+          border: 1px solid transparent;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          white-space: nowrap;
+          position: relative;
+        }
+        .desktop-nav-tab:hover {
+          color: #1E130B;
+          background: rgba(194, 155, 98, 0.1);
+          transform: translateY(-1px);
+        }
+        .desktop-nav-tab.active {
+          color: #1E130B;
+          background: linear-gradient(135deg, rgba(194, 155, 98, 0.18) 0%, rgba(168, 87, 60, 0.08) 100%);
+          border-color: rgba(194, 155, 98, 0.45);
+          box-shadow: 0 2px 8px rgba(194, 155, 98, 0.15);
+        }
+        .tab-glow-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #059669;
+          box-shadow: 0 0 6px #059669;
+        }
+        .desktop-nav-hub-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 10px;
+          background: linear-gradient(135deg, #C29B62 0%, #A8573C 100%);
+          color: #FFFFFF;
+          border: none;
+          font-size: 12px;
+          font-weight: 900;
+          cursor: pointer;
+          box-shadow: 0 2px 8px rgba(168, 87, 60, 0.25);
+          transition: all 0.2s;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .desktop-nav-hub-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(168, 87, 60, 0.35);
+          filter: brightness(1.08);
+        }
+        .hub-screens-badge {
+          background: rgba(255, 255, 255, 0.25);
+          color: white;
+          font-size: 10px;
+          font-weight: 900;
+          padding: 1px 6px;
+          border-radius: 8px;
         }
 
         /* =================== الزر العائم القابل للسحب (Draggable FAB) =================== */
@@ -448,109 +627,68 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         }
 
         /* =================== مركز القيادة الزجاجي (Command Hub Overlay) =================== */
-        .overlay-screen {
-          position: fixed; inset: 0; z-index: 10005;
-          pointer-events: ${isOpen ? 'auto' : 'none'};
-          display: flex; align-items: flex-start; justify-content: center;
-          padding: 40px 20px; box-sizing: border-box;
-          overflow-y: auto; overflow-x: hidden;
-        }
-
         .overlay-backdrop {
-          position: fixed; inset: 0; z-index: 10000;
-          background: rgba(44, 26, 18, 0.55);
-          backdrop-filter: blur(28px) saturate(160%);
-          -webkit-backdrop-filter: blur(28px) saturate(160%);
+          position: fixed; inset: 0;
+          background: rgba(30, 19, 11, 0.65);
+          backdrop-filter: blur(14px) saturate(180%);
+          -webkit-backdrop-filter: blur(14px) saturate(180%);
+          z-index: 99998;
           opacity: ${isOpen ? 1 : 0};
           pointer-events: ${isOpen ? 'auto' : 'none'};
-          transition: opacity 0.4s ease;
+          transition: opacity 0.35s cubic-bezier(0.165, 0.84, 0.44, 1);
+        }
+
+        .overlay-screen {
+          position: fixed; inset: 0; z-index: 99999;
+          display: flex; justify-content: center; align-items: flex-start;
+          padding: 24px 16px;
+          overflow-y: auto; overflow-x: hidden;
+          opacity: ${isOpen ? 1 : 0};
+          pointer-events: ${isOpen ? 'auto' : 'none'};
+          transition: opacity 0.35s cubic-bezier(0.165, 0.84, 0.44, 1);
+          direction: ${dir};
         }
 
         .command-center {
-          width: 95vw; max-width: 1280px;
-          display: flex; flex-direction: column; gap: 20px;
-          margin-top: ${isOpen ? '0' : '40px'};
-          opacity: ${isOpen ? 1 : 0};
-          transform: ${isOpen ? 'scale(1) translateY(0)' : 'scale(0.96) translateY(20px)'};
-          transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+          width: 100%; max-width: 1200px;
+          display: flex; flex-direction: column; gap: 16px;
+          margin-top: 10px; margin-bottom: 40px;
+          transform: ${isOpen ? 'translateY(0) scale(1)' : 'translateY(25px) scale(0.98)'};
+          transition: transform 0.35s cubic-bezier(0.165, 0.84, 0.44, 1);
         }
 
-        /* ترويسة القائمة الفاخرة */
         .admin-header-glass {
           background: linear-gradient(135deg, rgba(255, 253, 250, 0.95) 0%, rgba(255, 253, 250, 0.8) 100%);
-          border: 1px solid rgba(194, 155, 98, 0.4);
-          border-radius: 22px;
-          padding: 16px 24px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
           backdrop-filter: blur(24px) saturate(160%);
           -webkit-backdrop-filter: blur(24px) saturate(160%);
+          border: 1.5px solid rgba(194, 155, 98, 0.4);
+          border-radius: 24px; padding: 18px 24px;
+          display: flex; align-items: center; justify-content: space-between;
           box-shadow: 0 10px 30px rgba(44, 26, 18, 0.08);
-          gap: 15px;
-          flex-wrap: wrap;
-        }
-
-        .brand-section {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          text-decoration: none;
-          user-select: none;
+          flex-wrap: wrap; gap: 12px;
         }
         .brand-logo-wrap {
-          width: 48px;
-          height: 48px;
-          border-radius: 14px;
+          width: 48px; height: 48px; border-radius: 14px;
           background: linear-gradient(135deg, rgba(255, 253, 250, 0.95), rgba(194, 155, 98, 0.25));
           border: 1.5px solid rgba(194, 155, 98, 0.45);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 4px;
-          box-shadow: 0 4px 12px rgba(44, 26, 18, 0.08);
+          display: flex; align-items: center; justify-content: center;
+          padding: 4px; box-shadow: 0 4px 12px rgba(44, 26, 18, 0.08);
         }
-        .brand-logo-img {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-        }
-        .brand-text-block {
-          display: flex;
-          flex-direction: column;
-        }
-        .brand-title {
-          font-size: 17px;
-          font-weight: 900;
-          color: #2C1A12;
-          line-height: 1.2;
-        }
-        .brand-subtitle {
-          font-size: 12px;
-          font-weight: 700;
-          color: #C29B62;
-          letter-spacing: 0.3px;
-        }
+        .brand-logo-img { width: 100%; height: 100%; object-fit: contain; }
+        .brand-text-block { display: flex; flex-direction: column; }
+        .brand-title { font-size: 17px; font-weight: 900; color: #1E130B; line-height: 1.2; }
+        .brand-subtitle { font-size: 12px; font-weight: 700; color: #C29B62; letter-spacing: 0.3px; }
 
         .online-status-chip {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: rgba(78, 115, 79, 0.12);
-          border: 1px solid rgba(78, 115, 79, 0.35);
-          color: #4E734F;
-          padding: 6px 14px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 800;
+          display: flex; align-items: center; gap: 6px;
+          background: rgba(5, 150, 105, 0.12);
+          border: 1px solid rgba(5, 150, 105, 0.35);
+          color: #059669; padding: 6px 14px; border-radius: 20px;
+          font-size: 12px; font-weight: 800;
         }
         .online-dot-pulse {
-          width: 8px;
-          height: 8px;
-          background: #4E734F;
-          border-radius: 50%;
-          box-shadow: 0 0 10px #4E734F;
-          animation: pulseGreen 2s infinite ease-in-out;
+          width: 8px; height: 8px; background: #059669; border-radius: 50%;
+          box-shadow: 0 0 10px #059669; animation: pulseGreen 2s infinite ease-in-out;
         }
         @keyframes pulseGreen {
           0%, 100% { opacity: 1; transform: scale(1); }
@@ -558,142 +696,171 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         }
 
         .btn-logout-header {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: rgba(220, 38, 38, 0.08);
-          color: #dc2626;
+          display: flex; align-items: center; gap: 6px;
+          background: rgba(220, 38, 38, 0.08); color: #dc2626;
           border: 1px solid rgba(220, 38, 38, 0.25);
-          padding: 8px 16px;
-          border-radius: 12px;
-          font-size: 12.5px;
-          font-weight: 800;
-          cursor: pointer;
-          transition: all 0.2s ease;
+          padding: 8px 16px; border-radius: 12px;
+          font-size: 12.5px; font-weight: 800; cursor: pointer; transition: all 0.2s ease;
         }
-        .btn-logout-header:hover {
-          background: #fee2e2;
-          border-color: #dc2626;
-        }
+        .btn-logout-header:hover { background: #fee2e2; border-color: #dc2626; }
 
         .btn-close-modal {
-          width: 42px;
-          height: 42px;
-          border-radius: 12px;
-          background: rgba(44, 26, 18, 0.06);
-          border: 1px solid rgba(194, 155, 98, 0.25);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          color: #2C1A12;
-          transition: all 0.2s ease;
+          width: 42px; height: 42px; border-radius: 12px;
+          background: rgba(44, 26, 18, 0.06); border: 1px solid rgba(194, 155, 98, 0.25);
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer; color: #1E130B; transition: all 0.2s ease;
         }
         .btn-close-modal:hover {
-          background: #A8573C;
-          color: #FFFFFF;
-          border-color: #A8573C;
-          transform: translateY(-2px);
+          background: #A8573C; color: #FFFFFF; border-color: #A8573C; transform: translateY(-2px);
+        }
+
+        /* شريط البحث وتصنيف التابات داخل مركز القيادة */
+        .hub-search-container {
+          background: #FFFFFF;
+          border: 1.5px solid rgba(194, 155, 98, 0.3);
+          border-radius: 20px; padding: 14px 18px;
+          box-shadow: 0 4px 18px rgba(30, 19, 11, 0.05);
+          display: flex; flex-direction: column; gap: 12px;
+        }
+        .hub-search-input-wrapper {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+        .hub-search-icon {
+          position: absolute; right: 14px; color: #C29B62; font-size: 16px; pointer-events: none;
+        }
+        .hub-search-input {
+          width: 100%; height: 44px;
+          padding: 0 42px 0 36px;
+          border-radius: 12px;
+          border: 1px solid rgba(194, 155, 98, 0.3);
+          background: #FDFBF7; color: #1E130B;
+          font-size: 13.5px; font-weight: 700; outline: none;
+          transition: all 0.2s;
+        }
+        .hub-search-input:focus {
+          border-color: #C29B62; background: #FFFFFF;
+          box-shadow: 0 0 0 3px rgba(194, 155, 98, 0.2);
+        }
+        .hub-clear-search-btn {
+          position: absolute; left: 12px; background: none; border: none;
+          color: #94a3b8; font-size: 14px; cursor: pointer; padding: 4px;
+        }
+        .hub-categories-track {
+          display: flex; align-items: center; gap: 6px;
+          overflow-x: auto; padding-bottom: 2px;
+          scrollbar-width: none;
+        }
+        .hub-categories-track::-webkit-scrollbar { display: none; }
+        .hub-category-pill {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 6px 12px; border-radius: 10px;
+          border: 1px solid rgba(194, 155, 98, 0.25);
+          background: #FDFBF7; color: #6e5d4f;
+          font-size: 12px; font-weight: 800; cursor: pointer;
+          transition: all 0.2s; white-space: nowrap;
+        }
+        .hub-category-pill:hover {
+          background: rgba(194, 155, 98, 0.12); color: #1E130B;
+        }
+        .hub-category-pill.active {
+          background: #1E130B; color: #FFFFFF;
+          border-color: #1E130B; box-shadow: 0 2px 8px rgba(30, 19, 11, 0.2);
+        }
+        .hub-cat-count {
+          padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 900;
+          background: rgba(194, 155, 98, 0.2); color: inherit;
         }
 
         .group-section {
-          background: linear-gradient(135deg, rgba(255, 253, 250, 0.88) 0%, rgba(255, 253, 250, 0.6) 100%);
-          backdrop-filter: blur(24px) saturate(160%);
-          -webkit-backdrop-filter: blur(24px) saturate(160%);
-          border: 1px solid rgba(194, 155, 98, 0.32);
-          border-radius: 24px; padding: 22px;
-          box-shadow: 0 12px 30px rgba(44, 26, 18, 0.05), inset 0 0 15px rgba(255, 253, 250, 0.6);
-          display: flex; flex-direction: column; gap: 15px;
+          background: #FFFFFF;
+          border: 1px solid rgba(194, 155, 98, 0.25);
+          border-radius: 20px; padding: 20px;
+          box-shadow: 0 4px 18px rgba(30, 19, 11, 0.04);
+          display: flex; flex-direction: column; gap: 14px;
         }
 
         .group-header {
-          font-size: 14px; font-weight: 900; color: #2C1A12;
-          border-bottom: 2px solid rgba(194, 155, 98, 0.3);
-          padding-bottom: 8px; margin-bottom: 8px;
+          font-size: 14px; font-weight: 900; color: #1E130B;
+          border-bottom: 1.5px solid rgba(194, 155, 98, 0.25);
+          padding-bottom: 8px; margin-bottom: 4px;
           display: flex; align-items: center; justify-content: space-between;
-          text-transform: uppercase; letter-spacing: 0.5px;
+          letter-spacing: 0.3px;
         }
 
         .items-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-          gap: 14px;
+          gap: 12px;
         }
 
         .nav-card {
-          background: linear-gradient(135deg, rgba(255, 253, 250, 0.85) 0%, rgba(255, 253, 250, 0.5) 100%);
-          border: 1px solid rgba(194, 155, 98, 0.3);
-          backdrop-filter: blur(24px) saturate(160%);
-          -webkit-backdrop-filter: blur(24px) saturate(160%);
-          border-radius: 18px; padding: 14px 18px;
+          background: #FDFBF7;
+          border: 1px solid rgba(194, 155, 98, 0.25);
+          border-radius: 14px; padding: 12px 16px;
           display: flex; align-items: center; justify-content: space-between;
-          text-decoration: none; color: #2C1A12;
-          transition: all 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
-          box-shadow: 0 4px 10px rgba(44, 26, 18, 0.04);
+          text-decoration: none; color: #1E130B;
+          transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+          box-shadow: 0 2px 6px rgba(30, 19, 11, 0.03);
           position: relative; overflow: hidden;
           opacity: ${isOpen ? 1 : 0};
-          transform: ${isOpen ? 'translateY(0)' : 'translateY(20px)'};
-          animation: ${isOpen ? 'slideUpFade 0.45s forwards' : 'none'};
+          transform: ${isOpen ? 'translateY(0)' : 'translateY(16px)'};
+          animation: ${isOpen ? 'slideUpFade 0.4s forwards' : 'none'};
         }
 
         .nav-card:hover {
           background: #FFFFFF;
-          transform: translateY(-4px) !important;
-          box-shadow: 0 10px 22px rgba(168, 87, 60, 0.16) !important;
+          transform: translateY(-3px) !important;
+          box-shadow: 0 8px 20px rgba(168, 87, 60, 0.12) !important;
           border-color: #C29B62;
         }
 
         .nav-card.active {
-          background: linear-gradient(135deg, #FFFFFF, rgba(253, 251, 247, 0.95));
-          border: 2px solid #C29B62;
-          box-shadow: 0 8px 24px rgba(194, 155, 98, 0.25);
+          background: #FFFFFF;
+          border: 1.5px solid #C29B62;
+          box-shadow: 0 6px 18px rgba(194, 155, 98, 0.2);
         }
 
         .nav-card-left {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          min-width: 0;
-          flex: 1;
-          overflow: hidden;
+          display: flex; align-items: center; gap: 12px;
+          min-width: 0; flex: 1; overflow: hidden;
         }
 
         .icon-wrapper {
-          width: 40px; height: 40px;
-          min-width: 40px;
-          background: linear-gradient(135deg, rgba(255, 253, 250, 0.95), rgba(194, 155, 98, 0.2));
-          border-radius: 12px; display: flex; align-items: center; justify-content: center;
-          font-size: 19px; box-shadow: 0 3px 8px rgba(44, 26, 18, 0.05);
-          border: 1px solid rgba(194, 155, 98, 0.35);
+          width: 38px; height: 38px; min-width: 38px;
+          background: rgba(194, 155, 98, 0.12);
+          border-radius: 10px; display: flex; align-items: center; justify-content: center;
+          font-size: 18px; border: 1px solid rgba(194, 155, 98, 0.3);
           flex-shrink: 0;
         }
 
         .nav-title-block {
-          display: flex;
-          flex-direction: column;
-          min-width: 0;
-          overflow: hidden;
+          display: flex; flex-direction: column; min-width: 0; overflow: hidden;
         }
         .nav-title {
-          font-weight: 800;
-          font-size: 13.5px;
-          color: #2C1A12;
-          line-height: 1.25;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 100%;
+          font-weight: 800; font-size: 13px; color: #1E130B;
+          line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .nav-card-active-dot {
-          width: 8px;
-          height: 8px;
-          background: #4E734F;
-          border-radius: 50%;
-          box-shadow: 0 0 10px #4E734F;
+          width: 7px; height: 7px; background: #059669; border-radius: 50%;
+          box-shadow: 0 0 8px #059669;
+        }
+
+        .hub-empty-state {
+          text-align: center; padding: 40px 20px;
+          background: #FFFFFF; border-radius: 20px;
+          border: 1.5px dashed rgba(194, 155, 98, 0.3);
+        }
+        .hub-reset-btn {
+          margin-top: 10px; padding: 8px 16px; border-radius: 10px;
+          background: rgba(194, 155, 98, 0.15); color: #C29B62;
+          border: 1px solid rgba(194, 155, 98, 0.3);
+          font-size: 12px; font-weight: 800; cursor: pointer;
         }
 
         @keyframes slideUpFade {
-          from { opacity: 0; transform: translateY(18px); }
+          from { opacity: 0; transform: translateY(16px); }
           to { opacity: 1; transform: translateY(0); }
         }
 
@@ -704,37 +871,35 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
         @media (max-width: 768px) {
           .fab-main {
-            display: none !important; /* استخدام الشريط السفلي الذكي على الجوال */
+            display: none !important;
           }
-          .command-center { margin-top: 10px; gap: 14px; }
-          .group-section { padding: 16px; border-radius: 20px; }
-          .items-grid { grid-template-columns: 1fr; gap: 10px; }
-          .nav-card { padding: 12px 15px; }
+          .command-center { margin-top: 6px; gap: 12px; }
+          .group-section { padding: 14px; border-radius: 16px; }
+          .items-grid { grid-template-columns: 1fr; gap: 8px; }
+          .nav-card { padding: 10px 14px; }
 
           .main-content {
             margin-right: 0 !important;
             margin-left: 0 !important;
-            padding-bottom: 85px !important;
+            padding-bottom: 80px !important;
           }
 
           /* الشريط السفلي للجوال */
           .desert-bottom-dock {
             display: flex;
             position: fixed;
-            bottom: 10px;
-            left: 12px;
-            right: 12px;
-            height: 62px;
-            background: linear-gradient(135deg, rgba(255, 253, 250, 0.95) 0%, rgba(255, 253, 250, 0.8) 100%);
-            backdrop-filter: blur(24px) saturate(160%);
-            -webkit-backdrop-filter: blur(24px) saturate(160%);
-            border: 1px solid rgba(194, 155, 98, 0.4);
-            border-radius: 22px;
-            box-shadow: 0 10px 25px rgba(44, 26, 18, 0.15);
-            z-index: 999;
+            bottom: 8px;
+            left: 10px;
+            right: 10px;
+            height: 60px;
+            background: #FFFFFF;
+            border: 1.5px solid rgba(194, 155, 98, 0.35);
+            border-radius: 18px;
+            box-shadow: 0 8px 30px rgba(30, 19, 11, 0.16);
+            z-index: 995;
             align-items: center;
             justify-content: space-around;
-            padding: 0 5px;
+            padding: 0 4px;
             box-sizing: border-box;
           }
           .dock-item {
@@ -742,38 +907,86 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 3px;
+            gap: 2px;
             text-decoration: none;
-            color: rgba(44, 26, 18, 0.65);
+            color: #6e5d4f;
             font-size: 10.5px;
             font-weight: 800;
-            padding: 6px 10px;
-            border-radius: 14px;
+            padding: 6px 8px;
+            border-radius: 12px;
             transition: all 0.2s ease;
             position: relative;
             flex: 1;
+            min-height: 44px;
+          }
+          .dock-item:active {
+            transform: scale(0.95);
           }
           .dock-item.active {
-            color: #A8573C;
-            background: rgba(194, 155, 98, 0.15);
+            color: #1E130B;
+            background: rgba(194, 155, 98, 0.16);
+            border: 1px solid rgba(194, 155, 98, 0.3);
           }
           .dock-item.active::after {
             content: '';
             position: absolute;
-            bottom: 4px;
+            bottom: 3px;
             width: 5px;
             height: 5px;
             border-radius: 50%;
-            background: #A8573C;
+            background: #C29B62;
           }
           .dock-item svg {
-            width: 20px;
-            height: 20px;
+            width: 19px;
+            height: 19px;
+            flex-shrink: 0;
           }
         }
       `}} />
 
-      {/* 1️⃣ السايد بار المتقدم للفلترة والعمليات */}
+      {/* 🌟 1️⃣ شريط تابات التنقل السريع الفاخر لسطح المكتب (Desktop Quick Tabs Bar) */}
+      <nav className="desktop-luxury-nav no-print" aria-label="التنقل السريع">
+        <div className="desktop-nav-inner">
+          <div className="desktop-nav-brand" onClick={() => setIsOpen(true)} title="فتح القائمة الشاملة">
+            <img src="/taj_logo.png" alt="تاج المودة" className="desktop-brand-logo" />
+            <div className="desktop-brand-meta">
+              <span className="desktop-brand-name">تاج المودة</span>
+              <span className="desktop-brand-badge">ERP & POS</span>
+            </div>
+          </div>
+
+          <div className="desktop-tabs-track">
+            {primaryNavTabs.map((tab) => {
+              const isActive = pathname === tab.path || (tab.path !== '/Dashboard' && pathname.startsWith(tab.path));
+              return (
+                <Link
+                  key={tab.path}
+                  href={tab.path}
+                  prefetch={false}
+                  className={`desktop-nav-tab ${isActive ? 'active' : ''}`}
+                >
+                  <span className="tab-icon">{tab.icon}</span>
+                  <span className="tab-text">{tab.title}</span>
+                  {isActive && <span className="tab-glow-dot" />}
+                </Link>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            className="desktop-nav-hub-btn"
+            title="فتح مركز القيادة الشامل لجميع الشاشات (F1)"
+          >
+            <span>🧭</span>
+            <span>جميع الشاشات</span>
+            <span className="hub-screens-badge">{totalScreensCount}</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* 2️⃣ السايد بار المتقدم للفلترة والعمليات */}
       <RawasiFilterSidebar 
         title={currentPageTitle}
         extraActions={actions}
@@ -785,7 +998,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         onDateChange={(start, end) => window.dispatchEvent(new CustomEvent('globalDateFilter', { detail: { start, end } }))}
       />
 
-      {/* 2️⃣ الزر العائم الذكي القابل للسحب (Draggable FAB) */}
+      {/* 3️⃣ الزر العائم الذكي القابل للسحب (Draggable FAB) */}
       <div 
         className={`fab-main no-print ${customPosition ? 'fab-has-custom-pos' : ''} ${isDragging ? 'fab-dragging' : ''}`} 
         style={customPosition ? { 
@@ -807,7 +1020,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         <img src="/taj_logo.png" alt="شعار صيدلية تاج المودة" className="fab-logo" draggable="false" />
       </div>
 
-      {/* 3️⃣ مركز القيادة الشامل (Command Hub Modal) */}
+      {/* 4️⃣ مركز القيادة الشامل (Command Hub Modal) */}
       <div className="overlay-backdrop no-print"></div>
       <nav 
         className="overlay-screen no-print" 
@@ -841,7 +1054,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                 onClick={toggleLowGraphics}
                 className="btn-logout-header"
                 style={{ 
-                  color: lowGraphics ? '#C29B62' : '#2C1A12', 
+                  color: lowGraphics ? '#C29B62' : '#1E130B', 
                   background: lowGraphics ? 'rgba(194, 155, 98, 0.15)' : 'rgba(44, 26, 18, 0.05)',
                   borderColor: lowGraphics ? 'rgba(194, 155, 98, 0.4)' : 'rgba(44, 26, 18, 0.1)'
                 }}
@@ -868,64 +1081,122 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             </div>
           </div>
 
-          {/* شبكة البطاقات المقسمة حسب الأقسام مباشرة دون بحث */}
-          {authorizedMenuGroups.map((group, gIdx) => {
-            const groupTitle = groupKeyMap[group.group] ? t(groupKeyMap[group.group]) : group.group;
+          {/* شريط البحث وتصنيف التابات داخل مركز القيادة */}
+          <div className="hub-search-container">
+            <div className="hub-search-input-wrapper">
+              <span className="hub-search-icon">🔍</span>
+              <input
+                type="text"
+                placeholder={language === 'en' ? "Search any screen or report..." : "ابحث عن أي شاشة أو تقرير (مثلاً: كاشير، فواتير، مخزون، أرباح...)"}
+                value={hubSearch}
+                onChange={(e) => setHubSearch(e.target.value)}
+                className="hub-search-input"
+                autoFocus={isOpen}
+              />
+              {hubSearch && (
+                <button type="button" onClick={() => setHubSearch('')} className="hub-clear-search-btn">
+                  ✕
+                </button>
+              )}
+            </div>
 
-            return (
-              <div key={gIdx} className="group-section">
-                <div className="group-header">
-                  <span>{groupTitle}</span>
-                  <span style={{ fontSize: '11px', color: '#C29B62', background: 'rgba(194, 155, 98, 0.15)', padding: '2px 8px', borderRadius: '10px' }}>
-                    {group.items.length} {language === 'en' ? 'Screens' : 'شاشات'}
-                  </span>
-                </div>
-                <div className="items-grid">
-                  {group.items.map((item, iIdx) => {
-                    const delay = (animationDelayCounter++) * 0.03;
-                    const isActive = pathname === item.path;
-                    const itemTitle = t('menu_' + item.id) || item.title;
-                    return (
-                      <Link key={iIdx} href={item.path} prefetch={false} onClick={() => setIsOpen(false)}>
-                        <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
-                          <div className="nav-card-left">
-                            <div className="icon-wrapper">{item.icon}</div>
-                            <div className="nav-title-block">
-                              <span className="nav-title">{itemTitle}</span>
-                              <span style={{ fontSize: '11px', color: 'rgba(44, 26, 18, 0.5)', fontWeight: 600 }}>{item.path}</span>
+            {/* تابات تصنيف الأقسام */}
+            <div className="hub-categories-track">
+              <button
+                type="button"
+                className={`hub-category-pill ${activeCategory === 'all' ? 'active' : ''}`}
+                onClick={() => setActiveCategory('all')}
+              >
+                <span>🌟 {language === 'en' ? 'All Screens' : 'جميع الشاشات'}</span>
+                <span className="hub-cat-count">{totalScreensCount}</span>
+              </button>
+              {authorizedMenuGroups.map((group) => {
+                const groupTitle = groupKeyMap[group.group] ? t(groupKeyMap[group.group]) : group.group;
+                return (
+                  <button
+                    key={group.group}
+                    type="button"
+                    className={`hub-category-pill ${activeCategory === group.group ? 'active' : ''}`}
+                    onClick={() => setActiveCategory(group.group)}
+                  >
+                    <span>{groupTitle}</span>
+                    <span className="hub-cat-count">{group.items.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* شبكة البطاقات المفروزة والمنقحة */}
+          {filteredMenuGroups.length > 0 ? (
+            filteredMenuGroups.map((group, gIdx) => {
+              const groupTitle = groupKeyMap[group.group] ? t(groupKeyMap[group.group]) : group.group;
+
+              return (
+                <div key={gIdx} className="group-section">
+                  <div className="group-header">
+                    <span>{groupTitle}</span>
+                    <span style={{ fontSize: '11px', color: '#C29B62', background: 'rgba(194, 155, 98, 0.15)', padding: '2px 8px', borderRadius: '10px' }}>
+                      {group.items.length} {language === 'en' ? 'Screens' : 'شاشات'}
+                    </span>
+                  </div>
+                  <div className="items-grid">
+                    {group.items.map((item, iIdx) => {
+                      const delay = (animationDelayCounter++) * 0.02;
+                      const isActive = pathname === item.path;
+                      const itemTitle = t('menu_' + item.id) || item.title;
+                      return (
+                        <Link key={iIdx} href={item.path} prefetch={false} onClick={() => setIsOpen(false)}>
+                          <div className={`nav-card ${isActive ? 'active' : ''}`} style={{ animationDelay: isOpen ? `${delay}s` : '0s' }}>
+                            <div className="nav-card-left">
+                              <div className="icon-wrapper">{item.icon}</div>
+                              <div className="nav-title-block">
+                                <span className="nav-title">{itemTitle}</span>
+                                <span style={{ fontSize: '11px', color: 'rgba(44, 26, 18, 0.5)', fontWeight: 600 }}>{item.path}</span>
+                              </div>
                             </div>
+                            {isActive ? (
+                              <div className="nav-card-active-dot" title="الشاشة المفتوحة حالياً"></div>
+                            ) : (
+                              <ArrowUpRight size={16} color="rgba(44, 26, 18, 0.35)" />
+                            )}
                           </div>
-                          {isActive ? (
-                            <div className="nav-card-active-dot" title="الشاشة المفتوحة حالياً"></div>
-                          ) : (
-                            <ArrowUpRight size={16} color="rgba(44, 26, 18, 0.35)" />
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
+              );
+            })
+          ) : (
+            <div className="hub-empty-state">
+              <div style={{ fontSize: '32px' }}>🔍</div>
+              <div style={{ fontWeight: 900, fontSize: '15px', color: '#1E130B', marginTop: '6px' }}>
+                {language === 'en' ? 'No matching screens found' : `لا توجد نتائج مطابقة لـ "${hubSearch}"`}
               </div>
-            );
-          })}
+              <button type="button" onClick={() => { setHubSearch(''); setActiveCategory('all'); }} className="hub-reset-btn">
+                {language === 'en' ? 'Reset search' : 'إعادة ضبط البحث وتصفية الشاشات'}
+              </button>
+            </div>
+          )}
 
           {/* المتصلين حالياً بالنظام */}
           {onlineUsers.length > 0 && (
-            <div className="group-section" style={{ marginTop: '10px' }}>
-              <div className="group-header" style={{ borderColor: 'rgba(78, 115, 79, 0.3)', color: '#4E734F' }}>
+            <div className="group-section" style={{ marginTop: '6px' }}>
+              <div className="group-header" style={{ borderColor: 'rgba(5, 150, 105, 0.3)', color: '#059669' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span className="online-dot-pulse"></span>
                   <span>{language === 'en' ? `Team Online (${onlineCount})` : `فريق العمل المتصل الآن (${onlineCount})`}</span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
                 {onlineUsers.map((user, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.85)', padding: '8px 14px', borderRadius: '14px', border: '1px solid rgba(78, 115, 79, 0.25)', boxShadow: '0 2px 8px rgba(44,26,18,0.03)' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#4E734F', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '13px' }}>
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#FFFFFF', padding: '8px 14px', borderRadius: '12px', border: '1px solid rgba(5, 150, 105, 0.25)', boxShadow: '0 2px 8px rgba(44,26,18,0.03)' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#059669', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '13px' }}>
                       {user.full_name?.charAt(0) || 'م'}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: '12.5px', fontWeight: 900, color: '#2C1A12' }}>{user.full_name}</span>
+                      <span style={{ fontSize: '12.5px', fontWeight: 900, color: '#1E130B' }}>{user.full_name}</span>
                       <span style={{ fontSize: '10.5px', color: '#C29B62', fontWeight: 700 }}>
                         {language === 'en' ? (user.role === 'super_admin' ? 'Admin' : 'Staff') : (user.role === 'super_admin' ? 'مدير' : 'موظف')}
                       </span>
@@ -939,7 +1210,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         </div>
       </nav>
 
-      {/* 4️⃣ شريط التنقل السفلي الذكي للجوال (Mobile Bottom Dock) */}
+      {/* 5️⃣ شريط التنقل السفلي الذكي للجوال (Mobile Bottom Dock) */}
       <div className="desert-bottom-dock no-print">
         <Link href="/Dashboard" prefetch={false} className={`dock-item ${pathname === '/Dashboard' ? 'active' : ''}`}>
           <Home />
@@ -963,11 +1234,11 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           style={{ background: 'none', border: 'none', cursor: 'pointer' }}
         >
           <Menu />
-          <span>القائمة</span>
+          <span>المزيد</span>
         </button>
       </div>
 
-      {/* 5️⃣ المحتوى الرئيسي للصفحة */}
+      {/* 6️⃣ المحتوى الرئيسي للصفحة */}
       <main className="main-content" style={{ 
           flex: 1, 
           boxSizing: 'border-box',
