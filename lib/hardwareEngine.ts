@@ -122,6 +122,48 @@ export function savePairedDevices(devices: ConnectedDevice[]): void {
   }
 }
 
+/** يمنع المتصفح من حذف بيانات التطبيق (الأجهزة والكاش) عند امتلاء مساحة التخزين */
+export async function requestPersistentStorage(): Promise<boolean> {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.storage?.persist) {
+      if (await navigator.storage.persisted()) return true;
+      return await navigator.storage.persist();
+    }
+  } catch {
+    /* غير مدعوم */
+  }
+  return false;
+}
+
+export interface NetworkPrefs {
+  subnetPrefix?: string;
+  startHost?: number;
+  endHost?: number;
+  networkGroupMode?: string;
+  singleTestIp?: string;
+  singleTestPort?: number;
+}
+
+const NETWORK_PREFS_KEY = 'taj_network_prefs_v1';
+
+export function loadNetworkPrefs(): NetworkPrefs {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(localStorage.getItem(NETWORK_PREFS_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveNetworkPrefs(prefs: NetworkPrefs): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(NETWORK_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    /* تجاهل */
+  }
+}
+
 /**
  * 🔌 استكشاف واقتران طابعة أو جهاز USB عبر WebUSB API
  */

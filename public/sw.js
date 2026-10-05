@@ -34,6 +34,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 3.5 الملفات الثابتة المجزّأة (hash) لا تتغير: Cache First لفتح التطبيق فوراً وبدون إنترنت
+  if (url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/_next/image')) {
+    event.respondWith(
+      caches.match(request).then((hit) => {
+        if (hit) return hit;
+        return fetch(request).then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone).catch(() => {}));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
   // 4. استراتيجية Network First مع Catch آمن لمنع أخطاء Uncaught TypeError
   event.respondWith(
     fetch(request)

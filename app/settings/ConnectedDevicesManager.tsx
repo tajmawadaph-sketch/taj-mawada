@@ -41,6 +41,9 @@ import {
   getHardwareCapabilities,
   loadPairedDevices,
   savePairedDevices,
+  requestPersistentStorage,
+  loadNetworkPrefs,
+  saveNetworkPrefs,
   pairUsbDevice,
   pairSerialDevice,
   pairHidScanner,
@@ -151,11 +154,42 @@ export default function ConnectedDevicesManager() {
     const caps = getHardwareCapabilities();
     setCapabilities(caps);
 
+    // منع المتصفح من مسح البيانات المحلية
+    requestPersistentStorage();
+
+    // استرجاع تفضيلات الشبكة المحفوظة
+    const prefs = loadNetworkPrefs();
+    if (prefs.networkGroupMode) setNetworkGroupMode(prefs.networkGroupMode);
+    if (prefs.singleTestIp) setSingleTestIp(prefs.singleTestIp);
+    if (prefs.singleTestPort) setSingleTestPort(prefs.singleTestPort);
+
     const loaded = loadPairedDevices();
     setDevices(loaded);
 
-    refreshNetworkInfo();
-  }, [refreshNetworkInfo]);
+    refreshNetworkInfo().finally(() => {
+      // إعادة فحص نبض كل جهاز مقترن تلقائياً لإظهار حالته الحقيقية فور الفتح
+      if (loaded.length === 0) return;
+      Promise.all(
+        loaded.map(async (d) => {
+          try {
+            const r = await performDeviceHandshake(d);
+            return { ...d, status: r.status, latency: r.latency ?? d.latency, lastSeen: r.message };
+          } catch {
+            return d;
+          }
+        })
+      ).then((refreshed) => {
+        setDevices(refreshed);
+        savePairedDevices(refreshed);
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // حفظ تفضيلات الشبكة عند تغييرها
+  useEffect(() => {
+    saveNetworkPrefs({ subnetPrefix, startHost, endHost, networkGroupMode, singleTestIp, singleTestPort });
+  }, [subnetPrefix, startHost, endHost, networkGroupMode, singleTestIp, singleTestPort]);
 
   // حفظ التغييرات وتحديث التخزين
   const updateAndSaveDevices = useCallback((updated: ConnectedDevice[]) => {
