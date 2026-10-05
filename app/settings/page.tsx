@@ -95,19 +95,19 @@ const TABLE_NAMES_EN: Record<string, string> = {
   audit_logs: 'Audit Logs & Trails'
 };
 
-type SettingsTab = 'devices' | 'backup' | 'restore' | 'reset' | 'permissions' | 'health' | 'audit';
+type SettingsTab = 'desktop' | 'devices' | 'backup' | 'restore' | 'reset' | 'permissions' | 'health' | 'audit';
 
 function SettingsPageContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as SettingsTab | null;
   const [activeTab, setActiveTab] = useState<SettingsTab>(
-    tabParam && ['devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'audit'].includes(tabParam)
+    tabParam && ['desktop', 'devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'audit'].includes(tabParam)
       ? tabParam
       : 'devices'
   ); 
 
   useEffect(() => {
-    if (tabParam && ['devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'audit'].includes(tabParam)) {
+    if (tabParam && ['desktop', 'devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'audit'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -128,6 +128,7 @@ function SettingsPageContent() {
   const isEn = language === 'en';
 
   const tabs: { id: SettingsTab; labelAr: string; labelEn: string; icon: string }[] = [
+    { id: 'desktop', labelAr: 'تحميل برنامج ويندوز (EXE)', labelEn: 'Download Desktop App', icon: '💻' },
     { id: 'devices', labelAr: 'الأجهزة والطرفيات ونقاط البيع', labelEn: 'Connected Devices and POS', icon: '🖨️' },
     { id: 'backup', labelAr: 'تصدير النسخ الاحتياطية', labelEn: 'Export Backup', icon: '📦' },
     { id: 'restore', labelAr: 'استعادة البيانات الذكية', labelEn: 'Smart Restore', icon: '📥' },
@@ -474,8 +475,45 @@ function SettingsPageContent() {
           ))}
         </div>
 
+        {/* تبويب تطبيق ويندوز المكتبي (EXE) */}
+        {activeTab === 'desktop' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <DesktopInstallerCard />
+          </div>
+        )}
+
         {/* 0. تبويب الأجهزة والطرفيات ونقاط البيع */}
-        {activeTab === 'devices' && <ConnectedDevicesManager />}
+        {activeTab === 'devices' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div
+              className="p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border shadow-sm"
+              style={{
+                background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.12) 0%, rgba(30, 19, 11, 0.04) 100%)',
+                borderColor: '#C29B62',
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🖥️</span>
+                <div>
+                  <h4 className="text-sm font-black text-[#1E130B] m-0">
+                    هل تحتاج للربط المباشر مع طابعات الشبكة (Port 9100) وكروت الجهاز بدون وسيط؟
+                  </h4>
+                  <p className="text-xs text-[#6B7280] m-0 mt-0.5">
+                    برنامج تاج المودة لسطح المكتب لويندوز يتيح الاتصال المباشر بطابعات الفواتير والكروت وبوابات الراوتر بدون قيود المتصفح.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveTab('desktop')}
+                className="min-h-[40px] px-5 py-2 rounded-xl text-xs font-black text-white cursor-pointer transition-all hover:opacity-90 shadow-sm shrink-0"
+                style={{ background: '#C29B62' }}
+              >
+                ⬇️ تنزيل تطبيق ويندوز الآن
+              </button>
+            </div>
+            <ConnectedDevicesManager />
+          </div>
+        )}
 
         {/* 1. تبويب تصدير النسخ الاحتياطية */}
         {activeTab === 'backup' && (

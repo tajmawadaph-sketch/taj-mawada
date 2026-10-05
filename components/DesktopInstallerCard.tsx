@@ -210,7 +210,7 @@ export default function DesktopInstallerCard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
           <button
             onClick={handleDownload}
             disabled={isDownloading}
@@ -233,6 +233,17 @@ export default function DesktopInstallerCard() {
               </>
             )}
           </button>
+
+          <a
+            href="https://github.com/tajmawadaph-sketch/taj-mawada/releases/download/v0.1.0/TajMawadah-Setup-0.1.0.exe"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all border border-[#C29B62] text-[#8C642D] hover:bg-[#C29B62] hover:text-white cursor-pointer no-underline text-center"
+            title="رابط تحميل احتياطي مباشر عبر السحابة"
+          >
+            <span>☁️</span>
+            <span>رابط سحابي بديل</span>
+          </a>
         </div>
       </div>
 

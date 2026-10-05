@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const infoOnly = searchParams.get('info') === 'true';
 
     const localExe = getLocalExePath();
-    const githubReleaseUrl = 'https://github.com/tajmawadaph-sketch/taj-mawada/releases/latest/download/TajMawadah-Setup-0.1.0.exe';
+    const githubReleaseUrl = 'https://github.com/tajmawadaph-sketch/taj-mawada/releases/download/v0.1.0/TajMawadah-Setup-0.1.0.exe';
 
     let stats: fs.Stats | null = null;
     let filename = 'TajMawadah-Setup-0.1.0.exe';
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     // إرجاع معلومات الملف فقط عند الطلب
     if (infoOnly) {
-      const sizeBytes = stats ? stats.size : 225329196;
+      const sizeBytes = stats ? stats.size : 225332211;
       const sizeFormatted = (sizeBytes / (1024 * 1024)).toFixed(1) + ' MB';
 
       return NextResponse.json({
@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         isMultiUser: true,
         source: stats ? 'local' : 'cloud',
         directDownloadUrl: '/api/backup/download-installer',
+        cloudDownloadUrl: githubReleaseUrl,
       });
     }
 
