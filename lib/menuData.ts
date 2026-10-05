@@ -62,6 +62,7 @@ export const menuGroups = [
             { id: 'audit', title: 'المراجعة والتدقيق', icon: '🔍', path: '/audit' },
             { id: 'fleet', title: 'إدارة السيارات', icon: '🚙', path: '/fleet' },
             { id: 'payroll', title: 'الرواتب والأجور', icon: '💵', path: '/payroll' },
+            { id: 'devices', title: 'الأجهزة والطرفيات (Hardware)', icon: '🖨️', path: '/settings/devices' },
             { id: 'settings', title: 'إعدادات النظام', icon: '⚙️', path: '/settings' }
         ] 
     }

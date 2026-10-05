@@ -1,6 +1,12 @@
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import dynamic from 'next/dynamic';
+import { useSearchParams } from 'next/navigation';
+
+const ConnectedDevicesManager = dynamic(() => import('./ConnectedDevicesManager'), { 
+  loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#C29B62' }}>⏳ جاري تحميل مركز الأجهزة والطرفيات...</div>,
+  ssr: false 
+});
 
 const PermissionsMatrix = dynamic(() => import('./PermissionsMatrix'), { 
   loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#1C73AB' }}>⏳ جاري تحميل مصفوفة الصلاحيات...</div>,
@@ -88,10 +94,23 @@ const TABLE_NAMES_EN: Record<string, string> = {
   audit_logs: 'Audit Logs & Trails'
 };
 
-type SettingsTab = 'backup' | 'restore' | 'reset' | 'permissions' | 'health' | 'audit';
+type SettingsTab = 'devices' | 'backup' | 'restore' | 'reset' | 'permissions' | 'health' | 'audit';
 
-export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('backup'); 
+function SettingsPageContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') as SettingsTab | null;
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    tabParam && ['devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'audit'].includes(tabParam)
+      ? tabParam
+      : 'devices'
+  ); 
+
+  useEffect(() => {
+    if (tabParam && ['devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'audit'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
   const [selectedTables, setSelectedTables] = useState<string[]>(SYSTEM_TABLES.map(t => t.id));
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -108,6 +127,7 @@ export default function SettingsPage() {
   const isEn = language === 'en';
 
   const tabs: { id: SettingsTab; labelAr: string; labelEn: string; icon: string }[] = [
+    { id: 'devices', labelAr: 'الأجهزة والطرفيات ونقاط البيع', labelEn: 'Connected Devices & POS', icon: '🖨️' },
     { id: 'backup', labelAr: 'تصدير النسخ الاحتياطية', labelEn: 'Export Backup', icon: '📦' },
     { id: 'restore', labelAr: 'استعادة البيانات الذكية', labelEn: 'Smart Restore', icon: '📥' },
     { id: 'reset', labelAr: 'التهيئة وتصفير الحركات', labelEn: 'Reset & Wipe', icon: '🚨' },
@@ -339,7 +359,24 @@ export default function SettingsPage() {
     let summary = null;
     let actions = null;
 
-    if (activeTab === 'backup') {
+    if (activeTab === 'devices') {
+      summary = (
+        <div className="sidebar-summary-glass">
+          <div className="icon-pulse">🖨️</div>
+          <p className="summary-title">{isEn ? 'Hardware & POS' : 'الأجهزة والطرفيات المتصلة'}</p>
+          <h3 className="summary-value" style={{ fontSize: '13px', marginTop: '6px', color: '#C29B62' }}>
+            {isEn ? 'Hardware Fleet Active' : 'مراقبة واختبار فوري'}
+          </h3>
+        </div>
+      );
+      actions = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textAlign: 'center' }}>
+            {isEn ? 'Hardware radar: Ready' : 'رادار فحص الطرفيات نشط'}
+          </div>
+        </div>
+      );
+    } else if (activeTab === 'backup') {
       summary = (
         <div className="sidebar-summary-glass">
           <div className="icon-pulse">📦</div>
@@ -432,6 +469,9 @@ export default function SettingsPage() {
             </button>
           ))}
         </div>
+
+        {/* 0. تبويب الأجهزة والطرفيات ونقاط البيع */}
+        {activeTab === 'devices' && <ConnectedDevicesManager />}
 
         {/* 1. تبويب تصدير النسخ الاحتياطية */}
         {activeTab === 'backup' && (
@@ -1169,5 +1209,13 @@ export default function SettingsPage() {
         @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </MasterPage>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div style={{ textAlign: 'center', padding: '60px', fontWeight: 800, color: '#C29B62' }}>⏳ جاري تحميل الإعدادات...</div>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }
