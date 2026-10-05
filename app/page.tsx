@@ -315,36 +315,6 @@ export default function WelcomeHomePage() {
                 color: #A8573C;
             }
 
-            /* ── Quick Stats Section ── */
-            .stats-banner {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                gap: 16px;
-            }
-
-            .stat-box {
-                background: linear-gradient(135deg, rgba(255, 253, 250, 0.85) 0%, rgba(255, 253, 250, 0.45) 100%);
-                backdrop-filter: blur(24px) saturate(160%);
-                border: 1px solid rgba(194, 155, 98, 0.3);
-                border-radius: 18px;
-                padding: 16px 20px;
-                display: flex;
-                align-items: center;
-                gap: 16px;
-                box-shadow: 0 4px 6px rgba(44, 26, 18, 0.06);
-            }
-
-            .stat-icon {
-                width: 46px;
-                height: 46px;
-                border-radius: 14px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 22px;
-                background: rgba(194, 155, 98, 0.2);
-                border: 1px solid rgba(194, 155, 98, 0.35);
-            }
 
             /* ── Custom Modal ── */
             .fav-overlay {
@@ -440,7 +410,6 @@ export default function WelcomeHomePage() {
                 .desert-card-item, .add-card-btn { padding: 16px 10px; border-radius: 16px; }
                 .card-icon-box, .add-icon-box { width: 48px; height: 48px; font-size: 24px; }
                 .card-title { font-size: 13px; }
-                .stats-banner { grid-template-columns: 1fr; }
             }
         `}</style>
 
@@ -451,30 +420,6 @@ export default function WelcomeHomePage() {
                 <p className="hero-subtitle">{quote}</p>
             </div>
 
-            {/* ── إحصائيات سريعة للخدمات البيطرية ── */}
-            <div className="stats-banner">
-                <div className="stat-box">
-                    <div className="stat-icon" style={{ color: '#C29B62' }}>🐎</div>
-                    <div>
-                        <div style={{ fontSize: '12px', color: 'rgba(44,26,18,0.6)', fontWeight: 700 }}>أدوية ومكملات الخيل</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: '#2C1A12' }}>متوفرة بالصيدلية</div>
-                    </div>
-                </div>
-                <div className="stat-box">
-                    <div className="stat-icon" style={{ color: '#A8573C' }}>🐪</div>
-                    <div>
-                        <div style={{ fontSize: '12px', color: 'rgba(44,26,18,0.6)', fontWeight: 700 }}>فيتامينات ومضادات الإبل</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: '#2C1A12' }}>جاهزة للصرف</div>
-                    </div>
-                </div>
-                <div className="stat-box">
-                    <div className="stat-icon" style={{ color: '#4E734F' }}>🧾</div>
-                    <div>
-                        <div style={{ fontSize: '12px', color: 'rgba(44,26,18,0.6)', fontWeight: 700 }}>نظام الفواتير المعتمد</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: '#4E734F' }}>متطابق مع ZATCA</div>
-                    </div>
-                </div>
-            </div>
 
             {/* ── شبكة الوصول السريع للمفضلة (Desert Glass Favorites) ── */}
             <div>
