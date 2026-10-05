@@ -1,342 +1,421 @@
 "use client";
 import React from 'react';
 import MasterPage from '@/components/MasterPage';
-import RawasiSidebarManager from '@/components/RawasiSidebarManager';
-import { THEME } from '@/lib/theme';
+import LoadingScreen from '@/components/LoadingScreen';
+import PrintHeader from '@/components/PrintHeader';
 import { formatCurrency } from '@/lib/helpers';
 import { useTripProfitabilityLogic } from './trip_profitability_logic';
 
 export default function TripProfitabilityPage() {
   const logic = useTripProfitabilityLogic();
 
-  const sidebarActions = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-      <button 
-        className="btn-main-glass blue" 
-        onClick={logic.handleRefresh}
-        disabled={logic.isLoading}
-      >
-        {logic.isLoading ? '⏳ جاري الحساب...' : '🔄 تحديث التقرير'}
-      </button>
-      <button 
-        className="btn-main-glass white" 
-        onClick={() => window.print()}
-      >
-        🖨️ طباعة تقرير الربحية
-      </button>
-    </div>
-  );
+  const getRatingBadge = (rating: string, netProfit: number) => {
+    if (rating === 'excellent') {
+      return {
+        bg: 'rgba(5, 150, 105, 0.1)',
+        color: '#059669',
+        border: 'rgba(5, 150, 105, 0.25)',
+        label: 'ممتازة 🌟'
+      };
+    } else if (rating === 'good') {
+      return {
+        bg: 'rgba(194, 155, 98, 0.15)',
+        color: '#8c6b32',
+        border: 'rgba(194, 155, 98, 0.35)',
+        label: 'جيدة ✓'
+      };
+    } else if (rating === 'fair') {
+      return {
+        bg: 'rgba(217, 119, 6, 0.1)',
+        color: '#b45309',
+        border: 'rgba(217, 119, 6, 0.25)',
+        label: 'مقبولة'
+      };
+    } else {
+      return {
+        bg: 'rgba(168, 87, 60, 0.12)',
+        color: '#A8573C',
+        border: 'rgba(168, 87, 60, 0.35)',
+        label: 'خسارة ⚠️'
+      };
+    }
+  };
 
   return (
-    <div className="clean-page">
-      <MasterPage icon="🚚" 
-        title="ربحية الرحلات (Trip Profitability)" 
-        subtitle="تحليل مالي شامل لإيرادات وتكاليف وصافي ربح كل رحلة توزيع"
-      >
-        <RawasiSidebarManager 
-          actions={sidebarActions}
-          summary={
-            <div className="summary-glass-card">
-              <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>الفترة الزمنية 📅</span>
-              <div style={{fontSize:'11px', color: THEME.primary, fontWeight:900, marginTop:'5px'}}>
-                من: {logic.dateRange.start} <br/> إلى: {logic.dateRange.end}
-              </div>
-            </div>
+    <MasterPage
+      icon="🚚"
+      title="تحليل ربحية رحلات التوزيع ومبيعات الفانات (Van Sales)"
+      subtitle="رصد المبيعات النقدية والآجلة، احتساب تكاليف البضاعة ومصروفات التشغيل، وحساب عمولات المناديب"
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', direction: 'rtl', minHeight: '100vh', paddingBottom: '50px' }}>
+        
+        {/* Print Styles */}
+        <style>{`
+          @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: #1E130B !important; }
+            table { width: 100% !important; border-collapse: collapse !important; }
+            th, td { border: 1px solid #C29B62 !important; padding: 6px 10px !important; font-size: 11px !important; }
           }
-        />
+          @media (max-width: 768px) {
+            .tp-kpi-grid { grid-template-columns: 1fr !important; }
+            .tp-filter-row { flex-direction: column !important; }
+          }
+        `}</style>
 
-        {/* شريط الفلاتر */}
-        <div className="filter-bar">
-          <div className="filter-group">
-            <label>من تاريخ:</label>
-            <input 
-              type="date" 
-              value={logic.dateRange.start} 
-              onChange={(e) => logic.handleDateChange('start', e.target.value)} 
+        <PrintHeader title="تقرير ربحية رحلات التوزيع ومبيعات الفانات" subtitle={`عن الفترة من ${logic.dateRange.start} إلى ${logic.dateRange.end}`} />
+
+        {/* 1. Header Toolbar */}
+        <div className="no-print" style={{
+          background: '#FFFFFF',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
+          borderRadius: '20px',
+          padding: '20px 24px',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '16px'
+        }}>
+          {/* Filters */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="ابحث برقم الرحلة، المندوب، أو اللوحة..."
+              value={logic.searchQuery}
+              onChange={(e) => logic.setSearchQuery(e.target.value)}
+              style={{
+                padding: '10px 14px',
+                borderRadius: '12px',
+                border: '1px solid rgba(194, 155, 98, 0.3)',
+                background: '#FDFBF7',
+                color: '#1E130B',
+                fontWeight: 700,
+                fontSize: '13px',
+                width: '240px',
+                outline: 'none',
+                minHeight: '44px'
+              }}
             />
+
+            {/* Driver Filter */}
+            <select
+              value={logic.selectedDriverId}
+              onChange={(e) => logic.setSelectedDriverId(e.target.value)}
+              style={{
+                padding: '10px 14px',
+                borderRadius: '12px',
+                border: '1px solid rgba(194, 155, 98, 0.3)',
+                background: '#FDFBF7',
+                color: '#1E130B',
+                fontWeight: 700,
+                fontSize: '13px',
+                minHeight: '44px'
+              }}
+            >
+              <option value="all">-- كافة المناديب --</option>
+              {logic.driversList.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+
+            {/* Date Pickers */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>من:</span>
+              <input
+                type="date"
+                value={logic.dateRange.start}
+                onChange={(e) => logic.handleDateChange('start', e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', minHeight: '40px' }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>إلى:</span>
+              <input
+                type="date"
+                value={logic.dateRange.end}
+                onChange={(e) => logic.handleDateChange('end', e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FDFBF7', color: '#1E130B', fontWeight: 700, fontSize: '13px', minHeight: '40px' }}
+              />
+            </div>
           </div>
-          <div className="filter-group">
-            <label>إلى تاريخ:</label>
-            <input 
-              type="date" 
-              value={logic.dateRange.end} 
-              onChange={(e) => logic.handleDateChange('end', e.target.value)} 
-            />
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              onClick={logic.handleRefresh}
+              style={{
+                background: '#FDFBF7',
+                color: '#1E130B',
+                border: '1px solid rgba(194, 155, 98, 0.35)',
+                padding: '10px 16px',
+                borderRadius: '12px',
+                fontWeight: 800,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                minHeight: '44px'
+              }}
+            >
+              <span>تحديث الأرقام</span>
+              <span>🔄</span>
+            </button>
+            <button
+              onClick={() => window.print()}
+              style={{
+                background: '#FDFBF7',
+                color: '#1E130B',
+                border: '1px solid rgba(194, 155, 98, 0.35)',
+                padding: '10px 16px',
+                borderRadius: '12px',
+                fontWeight: 800,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                minHeight: '44px'
+              }}
+            >
+              <span>طباعة A4</span>
+              <span>🖨️</span>
+            </button>
+            <button
+              onClick={logic.exportToExcel}
+              style={{
+                background: 'linear-gradient(135deg, #C29B62 0%, #A88348 100%)',
+                color: '#FFFFFF',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '12px',
+                fontWeight: 900,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 14px rgba(194, 155, 98, 0.25)',
+                minHeight: '44px'
+              }}
+            >
+              <span>تصدير Excel</span>
+              <span>📑</span>
+            </button>
           </div>
         </div>
 
         {logic.isLoading ? (
-          <div className="loading-state">
-            <div className="spinner">⏳</div>
-            جاري احتساب وتحليل ربحية الرحلات...
-          </div>
+          <LoadingScreen message="جاري احتساب مبيعات وتكاليف وعمولات رحلات التوزيع..." />
         ) : (
           <>
-            {/* ملخص الربحية */}
-            <div className="profit-summary-grid">
-              
-              <div className="profit-card sales-card">
-                <div className="profit-icon">💵</div>
-                <h3>إجمالي المبيعات</h3>
-                <div className="profit-amount">{formatCurrency(logic.summary.totalSales)}</div>
-                <div className="profit-base">
-                  إجمالي المبيعات المحققة من {logic.summary.tripsCount} رحلة
+            {/* 2. Top Luxury KPI Cards Grid */}
+            <div className="tp-kpi-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+              gap: '14px'
+            }}>
+              {/* Total Sales */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(194, 155, 98, 0.3)',
+                borderRadius: '16px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>إجمالي مبيعات الرحلات</span>
+                  <span style={{ fontSize: '18px' }}>💰</span>
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#1E130B', marginTop: '8px' }}>
+                  {formatCurrency(logic.summary.totalSales)}
+                </div>
+                <div style={{ fontSize: '12px', color: '#8c6b32', marginTop: '4px', fontWeight: 700 }}>
+                  نقد: {formatCurrency(logic.summary.cashSales)} | آجل: {formatCurrency(logic.summary.creditSales)}
                 </div>
               </div>
 
-              <div className="profit-card costs-card">
-                <div className="profit-icon">📉</div>
-                <h3>إجمالي التكاليف والمصروفات</h3>
-                <div className="profit-amount">{formatCurrency(logic.summary.totalExpenses + logic.summary.totalInventoryCost)}</div>
-                <div className="profit-base">
-                  تكلفة بضاعة: <span>{formatCurrency(logic.summary.totalInventoryCost)}</span> | مصاريف: <span>{formatCurrency(logic.summary.totalExpenses)}</span>
+              {/* Total Costs & Expenses */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1px solid rgba(194, 155, 98, 0.2)',
+                borderRadius: '16px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#6e5d4f' }}>تكلفة البضاعة والمصروفات</span>
+                  <span style={{ fontSize: '18px' }}>📉</span>
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#6e5d4f', marginTop: '8px' }}>
+                  {formatCurrency(logic.summary.totalInventoryCost + logic.summary.totalExpenses)}
+                </div>
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', fontWeight: 700 }}>
+                  بضاعة: {formatCurrency(logic.summary.totalInventoryCost)} | تشغيل: {formatCurrency(logic.summary.totalExpenses)}
                 </div>
               </div>
 
-              <div className={`profit-card net-card ${logic.summary.totalNetProfit >= 0 ? 'profitable' : 'loss'}`}>
-                <div className="profit-icon">💰</div>
-                <h3>صافي الربح الشامل</h3>
-                <div className="profit-amount">{formatCurrency(Math.abs(logic.summary.totalNetProfit))}</div>
-                <div className="profit-base status-badge">
-                  {logic.summary.totalNetProfit >= 0 ? 'أرباح تشغيلية (Profits)' : 'خسائر تشغيلية (Losses)'}
+              {/* Net Profit */}
+              <div style={{
+                background: '#FFFFFF',
+                border: `1.5px solid ${logic.summary.totalNetProfit >= 0 ? 'rgba(5, 150, 105, 0.35)' : 'rgba(168, 87, 60, 0.35)'}`,
+                borderRadius: '16px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 20px rgba(5, 150, 105, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: logic.summary.totalNetProfit >= 0 ? '#059669' : '#A8573C' }}>
+                    {logic.summary.totalNetProfit >= 0 ? 'صافي الربح التشغيلي المحقق' : 'صافي الخسارة التشغيلية'}
+                  </span>
+                  <span style={{ fontSize: '18px' }}>✨</span>
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: logic.summary.totalNetProfit >= 0 ? '#059669' : '#A8573C', marginTop: '8px' }}>
+                  {formatCurrency(Math.abs(logic.summary.totalNetProfit))}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6e5d4f', marginTop: '4px', fontWeight: 700 }}>
+                  متوسط هامش الربح: {logic.summary.avgMarginPct.toFixed(1)}% ({logic.summary.tripsCount} رحلة)
                 </div>
               </div>
 
+              {/* Commissions */}
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid rgba(194, 155, 98, 0.35)',
+                borderRadius: '16px',
+                padding: '18px 20px',
+                boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 900, color: '#8c6b32' }}>عمولات المناديب المستحقة</span>
+                  <span style={{ fontSize: '18px' }}>🎯</span>
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#C29B62', marginTop: '8px' }}>
+                  {formatCurrency(logic.summary.totalCommission)}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6e5d4f', marginTop: '4px', fontWeight: 700 }}>
+                  محسوبة تلقائياً بنسبة 2.5%
+                </div>
+              </div>
             </div>
 
-            {/* جدول التفاصيل */}
-            <h2 className="section-title">
-              <span>📊</span> تفاصيل ربحية كل رحلة
-            </h2>
-            <div className="table-glass-container">
-              <table className="aqua-table">
-                <thead>
-                  <tr>
-                    <th>رقم وتاريخ الرحلة</th>
-                    <th>السيارة والمندوب</th>
-                    <th>حالة الرحلة</th>
-                    <th style={{ textAlign: 'left' }}>المبيعات (إيراد)</th>
-                    <th style={{ textAlign: 'left' }}>تكلفة البضاعة</th>
-                    <th style={{ textAlign: 'left' }}>المصاريف</th>
-                    <th style={{ textAlign: 'left' }}>صافي الربح</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logic.trips.length === 0 ? (
+            {/* 3. Detailed Table */}
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '20px',
+              border: '1px solid rgba(194, 155, 98, 0.25)',
+              padding: '24px',
+              boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 900, color: '#1E130B' }}>
+                  📋 جدول تفاصيل ومؤشرات ربحية كل رحلة
+                </h3>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#8c6b32' }}>
+                  {logic.filteredTrips.length} رحلة مسجلة
+                </span>
+              </div>
+
+              <div style={{ overflowX: 'auto', borderRadius: '14px', border: '1px solid rgba(194, 155, 98, 0.2)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '13px' }}>
+                  <thead style={{ background: '#FDFBF7', borderBottom: '2px solid rgba(194, 155, 98, 0.25)' }}>
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#ef4444', fontWeight: 900 }}>
-                        لا توجد رحلات مسجلة في هذه الفترة
-                      </td>
+                      <th style={{ padding: '12px 14px', color: '#8c6b32', fontWeight: 900 }}>رقم وتاريخ الرحلة</th>
+                      <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>السيارة والمندوب</th>
+                      <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900 }}>المبيعات (نقد / آجل)</th>
+                      <th style={{ padding: '12px 14px', color: '#6e5d4f', fontWeight: 900 }}>تكلفة البضاعة</th>
+                      <th style={{ padding: '12px 14px', color: '#6e5d4f', fontWeight: 900 }}>المصاريف</th>
+                      <th style={{ padding: '12px 14px', color: '#8c6b32', fontWeight: 900 }}>العمولة (2.5%)</th>
+                      <th style={{ padding: '12px 14px', color: '#059669', fontWeight: 900 }}>صافي الربح</th>
+                      <th style={{ padding: '12px 14px', color: '#1E130B', fontWeight: 900, textAlign: 'center' }}>كفاءة الرحلة</th>
+                      <th style={{ padding: '12px 14px', color: '#6e5d4f', fontWeight: 900, textAlign: 'center' }}>الحالة</th>
                     </tr>
-                  ) : (
-                    logic.trips.map(t => (
-                      <tr key={t.id}>
-                        <td>
-                          <div style={{ fontWeight: 900, color: '#1e293b' }}>{t.operation_number}</div>
-                          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>{t.operation_date}</div>
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 800 }}>{t.vehicle_name}</div>
-                          <div style={{ fontSize: '12px', color: '#475569' }}>{t.driver_name}</div>
-                        </td>
-                        <td>
-                          <span className={`badge ${t.status === 'مغلق' ? 'badge-closed' : 'badge-open'}`}>
-                            {t.status}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'left', fontWeight: 900, color: '#10b981' }}>
-                          {formatCurrency(t.total_sales)}
-                        </td>
-                        <td style={{ textAlign: 'left', fontWeight: 800, color: '#ef4444' }}>
-                          {formatCurrency(t.inventory_cost)}
-                        </td>
-                        <td style={{ textAlign: 'left', fontWeight: 800, color: '#f59e0b' }}>
-                          {formatCurrency(t.total_expenses)}
-                        </td>
-                        <td style={{ textAlign: 'left', fontWeight: 900, color: t.net_profit >= 0 ? '#10b981' : '#ef4444' }}>
-                          {formatCurrency(t.net_profit)}
+                  </thead>
+                  <tbody>
+                    {logic.filteredTrips.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: '#6e5d4f', fontWeight: 700 }}>
+                          لا توجد رحلات مسجلة تطابق معايير البحث في الفترة المحددة.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      logic.filteredTrips.map((t, idx) => {
+                        const badge = getRatingBadge(t.rating, t.net_profit);
+                        return (
+                          <tr
+                            key={t.id || idx}
+                            style={{
+                              borderBottom: '1px solid rgba(194, 155, 98, 0.1)',
+                              background: idx % 2 === 0 ? '#FFFFFF' : '#FDFBF7'
+                            }}
+                          >
+                            <td style={{ padding: '12px 14px' }}>
+                              <div style={{ fontWeight: 900, color: '#1E130B', fontFamily: 'monospace' }}>{t.operation_number}</div>
+                              <div style={{ fontSize: '11px', color: '#6e5d4f', fontWeight: 600 }}>{t.operation_date}</div>
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div style={{ fontWeight: 800, color: '#1E130B' }}>{t.driver_name}</div>
+                              <div style={{ fontSize: '11px', color: '#8c6b32' }}>{t.vehicle_name}</div>
+                            </td>
+                            <td style={{ padding: '12px 14px' }}>
+                              <div style={{ fontWeight: 900, color: '#1E130B' }}>{formatCurrency(t.total_sales)}</div>
+                              <div style={{ fontSize: '11px', color: '#6e5d4f' }}>
+                                نقد: {formatCurrency(t.cash_sales)} | آجل: {formatCurrency(t.credit_sales)}
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 14px', fontWeight: 800, color: '#6e5d4f' }}>
+                              {formatCurrency(t.inventory_cost)}
+                            </td>
+                            <td style={{ padding: '12px 14px', fontWeight: 800, color: '#6e5d4f' }}>
+                              {formatCurrency(t.total_expenses)}
+                            </td>
+                            <td style={{ padding: '12px 14px', fontWeight: 800, color: '#C29B62' }}>
+                              {formatCurrency(t.commission_amount)}
+                            </td>
+                            <td style={{ padding: '12px 14px', fontWeight: 900, color: t.net_profit >= 0 ? '#059669' : '#A8573C', fontSize: '14px' }}>
+                              {formatCurrency(t.net_profit)}
+                              <div style={{ fontSize: '11px', color: '#6e5d4f', fontWeight: 600 }}>
+                                هامش: {t.net_margin_pct.toFixed(1)}%
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                fontWeight: 900,
+                                background: badge.bg,
+                                color: badge.color,
+                                border: `1px solid ${badge.border}`
+                              }}>
+                                {badge.label}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                              <span style={{
+                                padding: '3px 8px',
+                                borderRadius: '8px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                background: t.status === 'مغلق' ? 'rgba(100, 116, 139, 0.1)' : 'rgba(5, 150, 105, 0.1)',
+                                color: t.status === 'مغلق' ? '#475569' : '#059669'
+                              }}>
+                                {t.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}
-
-        <style>{`
-          .filter-bar {
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            border-radius: 20px;
-            padding: 20px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            align-items: flex-end;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.05);
-            margin-bottom: 25px;
-          }
-          .filter-group { display: flex; flex-direction: column; gap: 5px; }
-          .filter-group label { font-size: 12px; font-weight: 900; color: #1e293b; }
-          .filter-group input { 
-            width: 100%; 
-            padding: 10px 12px; 
-            border-radius: 12px; 
-            background: rgba(255, 255, 255, 0.65); 
-            border: 1px solid rgba(255, 255, 255, 0.8); 
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-            outline: none; 
-            font-weight: 700; 
-            color: #1e293b; 
-            transition: all 0.2s; 
-          }
-          .filter-group input:focus {
-            background: #ffffff; 
-            border-color: ${THEME.accent}; 
-            box-shadow: 0 0 0 4px rgba(202, 138, 4, 0.15); 
-          }
-          
-          .summary-glass-card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 20px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2); margin-bottom: 25px; }
-          .loading-state { text-align: center; padding: 100px; font-weight: 900; color: #64748b; }
-          .loading-state .spinner { font-size: 40px; margin-bottom: 15px; }
-
-          .section-title { color: #122946; font-weight: 900; margin-top: 40px; margin-bottom: 25px; border-bottom: 2px solid rgba(40,145,200,0.15); padding-bottom: 12px; display: flex; align-items: center; font-size: 20px; }
-          .section-title span { font-size: 26px; margin-left: 12px; }
-
-          .profit-summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-          }
-
-          .profit-card {
-            background: rgba(255,255,255,0.7);
-            backdrop-filter: blur(15px);
-            padding: 30px;
-            border-radius: 24px;
-            border: 1px solid rgba(255,255,255,0.5);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.05);
-            position: relative;
-            overflow: hidden;
-            text-align: center;
-          }
-          
-          .profit-card h3 {
-            font-size: 16px;
-            color: #475569;
-            font-weight: 900;
-            margin: 0 0 15px 0;
-          }
-
-          .profit-amount {
-            font-size: 32px;
-            font-weight: 900;
-            margin-bottom: 15px;
-          }
-
-          .profit-base {
-            font-size: 12px;
-            color: #64748b;
-            font-weight: 800;
-            padding-top: 15px;
-            border-top: 1px dashed rgba(0,0,0,0.1);
-          }
-          .profit-base span {
-            color: #1e293b;
-          }
-
-          .profit-icon {
-            position: absolute;
-            top: -15px;
-            right: -15px;
-            font-size: 120px;
-            opacity: 0.05;
-            transform: rotate(15deg);
-          }
-
-          .sales-card .profit-amount { color: #10b981; }
-          .costs-card .profit-amount { color: #ef4444; }
-          
-          .net-card {
-            background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
-            border-width: 2px;
-          }
-          .net-card.profitable { border-color: #10b981; }
-          .net-card.profitable .profit-amount { color: #059669; }
-          .net-card.profitable .status-badge { color: #059669; background: rgba(16, 185, 129, 0.1); padding: 5px 10px; border-radius: 8px; display: inline-block; margin-top: 10px; }
-
-          .net-card.loss { border-color: #ef4444; }
-          .net-card.loss .profit-amount { color: #b91c1c; }
-          .net-card.loss .status-badge { color: #b91c1c; background: rgba(239, 68, 68, 0.1); padding: 5px 10px; border-radius: 8px; display: inline-block; margin-top: 10px; }
-
-          /* Table Styles */
-          .table-glass-container {
-            background: rgba(255, 255, 255, 0.5);
-            backdrop-filter: blur(15px);
-            border-radius: 24px;
-            border: 1px solid rgba(255,255,255,0.4);
-            padding: 5px;
-            overflow-x: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.03);
-          }
-          .aqua-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-          }
-          .aqua-table th {
-            background: rgba(194, 155, 98, 0.12);
-            color: #2C1A12;
-            font-weight: 900;
-            padding: 18px 20px;
-            text-align: right;
-            font-size: 13px;
-            border-bottom: 2px solid rgba(194, 155, 98, 0.3);
-          }
-          .aqua-table td {
-            padding: 16px 20px;
-            border-bottom: 1px solid rgba(194, 155, 98, 0.12);
-            font-size: 14px;
-            vertical-align: middle;
-            color: #2C1A12;
-          }
-          .aqua-table tbody tr:hover {
-            background: rgba(194, 155, 98, 0.08);
-          }
-          
-          .badge {
-            padding: 6px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 900;
-          }
-          .badge-closed {
-            background: rgba(16, 185, 129, 0.15);
-            color: #059669;
-          }
-          .badge-open {
-            background: rgba(245, 158, 11, 0.15);
-            color: #d97706;
-          }
-
-          @media (max-width: 768px) {
-            .filter-bar { flex-direction: column !important; align-items: stretch !important; padding: 15px !important; }
-            .filter-group { width: 100% !important; justify-content: space-between !important; }
-            .filter-group input { flex: 1 !important; }
-            .profit-summary-grid { grid-template-columns: 1fr !important; gap: 15px !important; }
-            .profit-card { padding: 15px !important; border-radius: 16px !important; }
-            .profit-amount { font-size: 24px !important; }
-            .table-glass-container { border-radius: 16px !important; overflow-x: auto !important; }
-            .aqua-table { min-width: 650px !important; }
-            .aqua-table th, .aqua-table td { padding: 8px 10px !important; font-size: 11px !important; }
-          }
-        `}</style>
-      </MasterPage>
-    </div>
+      </div>
+    </MasterPage>
   );
 }
