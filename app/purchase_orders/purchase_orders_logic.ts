@@ -130,9 +130,6 @@ export function usePurchaseOrdersLogic() {
   };
 
   const handleUnapproveTransaction = async (transaction: any) => {
-    const confirmUnpost = confirm('هل أنت متأكد من إلغاء الاستلام؟ سيتم خصم الكمية من المستودع وعكس القيد المحاسبي.');
-    if (!confirmUnpost) return;
-
     // ⚡ تحديث تفاؤلي فوري
     setTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t));
 

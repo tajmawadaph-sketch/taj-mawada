@@ -302,16 +302,33 @@ export async function executeApproveTransaction(transactionId: string, options?:
     })
     .eq('id', transactionId);
 
-  // تحديث سعر التكلفة للصنف تلقائياً عند اعتماد حركة توريد أو شراء
+  // تحديث متوسط التكلفة المرجح (WAC) للصنف تلقائياً عند اعتماد حركة توريد أو شراء
   if ((txn.type === 'in' || txn.type === 'purchase') && unitPrice > 0 && txn.item_id) {
     try {
+      const { data: itmRecord } = await supabase
+        .from('inventory_items')
+        .select('cost_price, current_quantity')
+        .eq('id', txn.item_id)
+        .maybeSingle();
+
+      let newCost = unitPrice;
+      if (itmRecord) {
+        const currentQty = Math.max(0, Number(itmRecord.current_quantity) || 0);
+        const currentCost = Number(itmRecord.cost_price) || unitPrice;
+        const totalQty = currentQty + qty;
+        if (totalQty > 0) {
+          // Weighted Average Cost formula: ((Q_old * C_old) + (Q_new * C_new)) / Q_total
+          newCost = Math.round(((currentQty * currentCost) + (qty * unitPrice)) / totalQty * 100) / 100;
+        }
+      }
+
       await supabase
         .from('inventory_items')
-        .update({ cost_price: unitPrice })
+        .update({ cost_price: newCost })
         .eq('id', txn.item_id);
       emitTableChange('inventory_items');
     } catch (costErr) {
-      console.warn('Could not auto-sync cost_price:', costErr);
+      console.warn('Could not auto-sync weighted average cost_price:', costErr);
     }
   }
 

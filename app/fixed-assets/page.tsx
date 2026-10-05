@@ -4,6 +4,8 @@ import MasterPage from '@/components/MasterPage';
 import PrintHeader from '@/components/PrintHeader';
 import { formatCurrency } from '@/lib/helpers';
 import { showGlobalToast } from '@/lib/toast-context';
+import { useConfirm } from '@/components/ConfirmContext';
+import { QRCodeSVG } from 'qrcode.react';
 import * as XLSX from 'xlsx';
 import {
   FixedAsset,
@@ -15,6 +17,7 @@ import {
 } from '@/lib/assets_depreciation_engine';
 
 export default function FixedAssetsPage() {
+  const { showConfirm } = useConfirm();
   const [assets, setAssets] = useState<FixedAsset[]>([]);
   const [isClient, setIsClient] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -70,12 +73,19 @@ export default function FixedAssetsPage() {
   };
 
   const handleDeleteAsset = (id: string) => {
-    if (confirm("هل أنت متأكد من حذف هذا الأصل من السجل؟")) {
-      const updated = assets.filter(a => a.id !== id);
-      setAssets(updated);
-      saveFixedAssets(updated);
-      showGlobalToast("تم حذف الأصل بنجاح", 'info');
-    }
+    showConfirm({
+      title: "تأكيد حذف الأصل الرأسمالي",
+      message: "هل أنت متأكد من حذف هذا الأصل من السجل المحاسبي؟ لن يؤثر الحذف على القيود الدفترية المرحلة مسبقاً.",
+      type: "danger",
+      confirmText: "حذف نهائي",
+      cancelText: "إلغاء",
+      onConfirm: () => {
+        const updated = assets.filter(a => a.id !== id);
+        setAssets(updated);
+        saveFixedAssets(updated);
+        showGlobalToast("تم حذف الأصل بنجاح", 'info');
+      }
+    });
   };
 
   // Run Monthly Depreciation Generator
@@ -559,6 +569,79 @@ export default function FixedAssetsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* 4.1 Certified Audit Verification & SOCPA Signatures (Printed & On-Screen) */}
+        <div style={{
+          background: '#FFFFFF',
+          borderRadius: '16px',
+          border: '1px solid rgba(194, 155, 98, 0.3)',
+          padding: '20px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          boxShadow: '0 4px 18px rgba(30, 19, 11, 0.03)'
+        }}>
+          {/* Summary & QR Code Line */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1.5px dashed rgba(194, 155, 98, 0.3)', paddingBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ background: '#FFFFFF', padding: '6px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.35)' }}>
+                <QRCodeSVG
+                  value={`TAJ-ASSETS-REGISTRY|Cost:${totalCost}|Net:${totalNetBook}|Dep:${totalAccDep}|Count:${assets.length}|Date:${new Date().toISOString()}`}
+                  size={70}
+                  level="M"
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>
+                  سجل الأصول الرأسمالية والإهلاك المعتمد - صيدلية تاج المودة البيطرية
+                </div>
+                <div style={{ fontSize: '11px', color: '#6e5d4f', marginTop: '2px', fontWeight: 700 }}>
+                  وثيقة محاسبية رسمية صادرة ومطابقة لمعايير الهيئة السعودية للمحاسبين والمراجعين (SOCPA)
+                </div>
+                <div style={{ fontSize: '11px', color: '#8c6b32', marginTop: '2px', fontWeight: 800 }}>
+                  الرمز المشفر: TAJ-AST-{assets.length}-{Math.round(totalNetBook)} | تاريخ الاعتماد: {new Date().toLocaleDateString('ar-SA')}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '20px', textAlign: 'left' }}>
+              <div>
+                <div style={{ fontSize: '11px', color: '#6e5d4f', fontWeight: 700 }}>إجمالي التكلفة</div>
+                <div style={{ fontSize: '14px', fontWeight: 900, color: '#1E130B' }}>{formatCurrency(totalCost)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: '#6e5d4f', fontWeight: 700 }}>مجمع الإهلاك</div>
+                <div style={{ fontSize: '14px', fontWeight: 900, color: '#A8573C' }}>{formatCurrency(totalAccDep)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: '#6e5d4f', fontWeight: 700 }}>صافي القيمة الدفترية</div>
+                <div style={{ fontSize: '14px', fontWeight: 900, color: '#059669' }}>{formatCurrency(totalNetBook)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Official Signature Blocks */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', paddingTop: '6px', textAlign: 'center' }}>
+            <div style={{ border: '1px dashed rgba(194, 155, 98, 0.4)', borderRadius: '12px', padding: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 900, color: '#1E130B' }}>المحاسب المسؤول</div>
+              <div style={{ fontSize: '11px', color: '#6e5d4f', marginTop: '2px' }}>إعداد القيود ومطابقة الأصول</div>
+              <div style={{ height: '32px' }}></div>
+              <div style={{ borderTop: '1px solid rgba(194, 155, 98, 0.3)', paddingTop: '4px', fontSize: '11px', color: '#8c6b32', fontWeight: 800 }}>التوقيع والاعتماد</div>
+            </div>
+            <div style={{ border: '1px dashed rgba(194, 155, 98, 0.4)', borderRadius: '12px', padding: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 900, color: '#1E130B' }}>المدير المالي (CFO)</div>
+              <div style={{ fontSize: '11px', color: '#6e5d4f', marginTop: '2px' }}>اعتماد نسب الإهلاك ومراكز التكلفة</div>
+              <div style={{ height: '32px' }}></div>
+              <div style={{ borderTop: '1px solid rgba(194, 155, 98, 0.3)', paddingTop: '4px', fontSize: '11px', color: '#8c6b32', fontWeight: 800 }}>التوقيع والختم</div>
+            </div>
+            <div style={{ border: '1px dashed rgba(194, 155, 98, 0.4)', borderRadius: '12px', padding: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 900, color: '#1E130B' }}>الإدارة العامة / التدقيق الداخلي</div>
+              <div style={{ fontSize: '11px', color: '#6e5d4f', marginTop: '2px' }}>المصادقة السنوية والتقرير الختامي</div>
+              <div style={{ height: '32px' }}></div>
+              <div style={{ borderTop: '1px solid rgba(194, 155, 98, 0.3)', paddingTop: '4px', fontSize: '11px', color: '#8c6b32', fontWeight: 800 }}>الاعتماد النهائي</div>
+            </div>
           </div>
         </div>
 
