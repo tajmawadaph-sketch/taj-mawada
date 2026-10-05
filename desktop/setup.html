@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>إعداد تاج المودة</title>
+  <style>
+    @font-face { font-family: 'Cairo'; src: local('Cairo'); }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #FDFBF7; color: #1E130B; font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif; }
+    .card { width: min(520px, 94vw); background: #fff; border-radius: 20px; padding: 32px;
+      border: 1px solid rgba(194,155,98,.25); box-shadow: 0 4px 20px rgba(30,19,11,.05); }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    p { margin: 0 0 18px; color: #6e5d4f; font-size: 14px; line-height: 1.8; }
+    input { width: 100%; min-height: 44px; padding: 0 14px; border-radius: 12px; font-size: 15px; direction: ltr;
+      border: 1.5px solid rgba(194,155,98,.4); outline: none; }
+    input:focus { border-color: #C29B62; box-shadow: 0 0 0 3px rgba(194,155,98,.2); }
+    button { margin-top: 14px; width: 100%; min-height: 44px; border: none; border-radius: 12px; cursor: pointer;
+      background: #C29B62; color: #1E130B; font-weight: 900; font-size: 15px; font-family: inherit; }
+    .msg { margin-top: 12px; font-size: 13px; font-weight: 800; min-height: 20px; }
+    .err { color: #A8573C; } .ok { color: #059669; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>مرحباً بك في تاج المودة 👑</h1>
+    <p id="intro">أدخل رابط النظام المستضاف ليتم حفظه على هذا الجهاز وربط البرنامج به.</p>
+    <input id="url" type="url" placeholder="https://your-app.vercel.app" autofocus />
+    <button id="save">حفظ وفتح النظام</button>
+    <div id="msg" class="msg"></div>
+  </div>
+  <script>
+    const q = new URLSearchParams(location.search);
+    const msg = document.getElementById('msg');
+    if (q.get('error')) {
+      document.getElementById('intro').textContent = 'تعذر فتح النظام. تحقق من الإنترنت أو صحّح الرابط ثم أعد المحاولة.';
+      document.getElementById('url').value = q.get('url') || '';
+    }
+    document.getElementById('save').onclick = async () => {
+      msg.className = 'msg'; msg.textContent = 'جارٍ الحفظ...';
+      const r = await window.tajDesktop.setAppUrl(document.getElementById('url').value);
+      if (!r.ok) { msg.className = 'msg err'; msg.textContent = r.error; }
+    };
+  </script>
+</body>
+</html>

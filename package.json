@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "backup": "node scripts/backup_database.js"
+    "backup": "node scripts/backup_database.js",
+    "desktop:dev": "electron .",
+    "desktop:build": "electron-builder --config desktop/electron-builder.yml --win"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "^10.2.9",
@@ -67,9 +69,14 @@
     "@types/react-dom": "^19",
     "@types/react-signature-canvas": "^1.0.7",
     "autoprefixer": "^10.5.4",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "main": "desktop/main.js",
+  "description": "Taj Al-Mawadah ERP & POS",
+  "author": "Taj Al-Mawadah"
 }

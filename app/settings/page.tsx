@@ -25,6 +25,7 @@ const AuditLogs = dynamic(() => import('./AuditLogs'), {
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
 import MasterPage from '@/components/MasterPage';
 import GlassContainer from '@/components/GlassContainer';
+import DesktopInstallerCard from '@/components/DesktopInstallerCard';
 import { THEME } from '@/lib/theme'; 
 import { useToast } from '@/lib/toast-context';
 import { useQueryClient } from '@tanstack/react-query';
@@ -478,7 +479,9 @@ function SettingsPageContent() {
 
         {/* 1. تبويب تصدير النسخ الاحتياطية */}
         {activeTab === 'backup' && (
-          <GlassContainer>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <DesktopInstallerCard />
+            <GlassContainer>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '2px solid rgba(255, 255, 255, 0.5)', paddingBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
               <div>
                 <h2 style={{ fontSize: '16px', color: THEME.primary, margin: '0 0 4px 0', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -555,6 +558,7 @@ function SettingsPageContent() {
               </button>
             </div>
           </GlassContainer>
+          </div>
         )}
 
         {/* 2. تبويب استعادة البيانات الذكية */}

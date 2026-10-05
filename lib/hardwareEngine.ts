@@ -378,6 +378,33 @@ async function hardwareFetch(
 }
 
 export async function detectActiveLocalNetwork(): Promise<ActiveNetworkInfo> {
+  // 1. الأولوية القصوى: تشغيل تطبيق سطح المكتب (Desktop Native IPC)
+  if (typeof window !== 'undefined' && window.tajDesktop?.detectNetwork) {
+    try {
+      const nativeRes = await window.tajDesktop.detectNetwork();
+      if (nativeRes && nativeRes.success && nativeRes.adapters) {
+        const prim = nativeRes.primary || nativeRes.adapters.find((a: any) => a.status === 'connected') || nativeRes.adapters[0];
+        return {
+          ip: prim?.ip || '',
+          subnetPrefix: prim?.subnetPrefix || '192.168.1',
+          name: prim?.name || 'Local Adapter',
+          gateway: prim?.gateway || null,
+          gatewaySubnet: prim?.gatewaySubnet || null,
+          startHost: prim?.startHost || 1,
+          endHost: prim?.endHost || 30,
+          currentHost: prim?.currentHost || 1,
+          adapters: nativeRes.adapters || [],
+          allInterfaces: nativeRes.all || [],
+          bridgeConnected: true,
+          bridgeRequired: false
+        };
+      }
+    } catch (desktopErr) {
+      console.warn('Native desktop network detection error:', desktopErr);
+    }
+  }
+
+  // 2. المحاولة عبر الجسر المحلي أو سيرفر الويب المحلي
   const result = await hardwareFetch();
   const isLocalHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
@@ -423,6 +450,25 @@ export async function probeNetworkEndpoint(
   port: number = 9100,
   timeoutMs: number = 1500
 ): Promise<{ reachable: boolean; latency: number; hostAlive?: boolean; portOpen?: boolean; message?: string; error?: string }> {
+  // أولوية التشغيل في تطبيق سطح المكتب
+  if (typeof window !== 'undefined' && window.tajDesktop?.pingHost) {
+    try {
+      const nativePing = await window.tajDesktop.pingHost(ip, port, timeoutMs);
+      if (nativePing && nativePing.success) {
+        return {
+          reachable: !!nativePing.reachable,
+          latency: nativePing.latency || 0,
+          hostAlive: nativePing.hostAlive,
+          portOpen: nativePing.portOpen,
+          message: nativePing.message,
+          error: nativePing.error
+        };
+      }
+    } catch (e) {
+      console.warn('Desktop ping error:', e);
+    }
+  }
+
   try {
     const result = await hardwareFetch({ method: 'POST', body: { action: 'ping', ip, port, timeoutMs } });
     const res = { ok: !!result, json: async () => result!.data };
@@ -462,6 +508,26 @@ export async function scanLocalSubnet(
   port: number = 9100,
   onProgress?: (scanned: number, total: number, currentIp: string, found: Array<{ ip: string; port: number; latency: number; portOpen?: boolean }>) => void
 ): Promise<Array<{ ip: string; port: number; latency: number; portOpen?: boolean }>> {
+  // أولوية التشغيل في تطبيق سطح المكتب
+  if (typeof window !== 'undefined' && window.tajDesktop?.scanSubnet) {
+    try {
+      const nativeScan = await window.tajDesktop.scanSubnet({ subnetPrefix, startHost, endHost, port });
+      if (nativeScan && nativeScan.success && Array.isArray(nativeScan.discovered)) {
+        if (onProgress) {
+          onProgress(
+            nativeScan.scannedCount || (endHost - startHost + 1),
+            nativeScan.scannedCount || (endHost - startHost + 1),
+            `${subnetPrefix}.${endHost}`,
+            nativeScan.discovered
+          );
+        }
+        return nativeScan.discovered;
+      }
+    } catch (e) {
+      console.warn('Desktop scan error:', e);
+    }
+  }
+
   try {
     const result = await hardwareFetch({ method: 'POST', body: { action: 'scan', subnetPrefix, startHost, endHost, port } });
     const res = { ok: !!result, json: async () => result!.data };
@@ -616,6 +682,39 @@ export async function testThermalReceiptPrint(device: ConnectedDevice): Promise<
   const caps = getHardwareCapabilities();
   const nav = navigator as any;
 
+  // إذا كان الجهاز طابعة شبكة LAN ونعمل داخل تطبيق سطح المكتب (Desktop Native Raw Socket)
+  if (device.connectionType === 'lan' && device.ipAddress) {
+    if (typeof window !== 'undefined' && window.tajDesktop?.printRaw) {
+      try {
+        const encoder = new TextEncoder();
+        const initCmd = [0x1B, 0x40]; // ESC @
+        const alignCenter = [0x1B, 0x61, 0x01]; // ESC a 1
+        const boldOn = [0x1B, 0x45, 0x01]; // ESC E 1
+        const boldOff = [0x1B, 0x45, 0x00]; // ESC E 0
+        const cutCmd = [0x1D, 0x56, 0x41, 0x00]; // GS V A 0 (Cut)
+        const textBytes = Array.from(encoder.encode(
+          "\n================================\n" +
+          "  صيدلية تاج المودة البيطرية\n" +
+          "  TAJ AL-MAWADAH VET PHARMACY\n" +
+          "================================\n" +
+          "فحص جاهزية طابعة الشبكة (Port 9100)\n" +
+          "الجهاز: " + device.name + "\n" +
+          "الـ IP: " + device.ipAddress + "\n" +
+          "الحالة: متصل بنجاح ومستقر 🟢\n" +
+          "الوقت: " + new Date().toLocaleString('ar-SA') + "\n" +
+          "================================\n\n\n"
+        ));
+        const rawPayload = [...initCmd, ...alignCenter, ...boldOn, ...textBytes, ...boldOff, ...cutCmd];
+        const res = await window.tajDesktop.printRaw({ ip: device.ipAddress, port: device.port || 9100, data: rawPayload });
+        if (res.success) {
+          return { success: true, message: `تمت الطباعة الفورية وقص الورق على طابعة الشبكة (${device.ipAddress}:9100) 🖨️` };
+        }
+      } catch (printErr: any) {
+        console.warn('Desktop raw print error:', printErr);
+      }
+    }
+  }
+
   // إذا كان الجهاز USB ومتاح
   if (device.connectionType === 'usb' && caps.webUsb) {
     try {
@@ -748,6 +847,30 @@ export async function testThermalReceiptPrint(device: ConnectedDevice): Promise<
  * 🔓 فتح درج النقدية الإلكتروني بنبضة RJ11 (Kick Cash Drawer)
  */
 export async function openCashDrawer(device?: ConnectedDevice): Promise<{ success: boolean; message: string }> {
+  // 1. أولوية التشغيل في بيئة سطح المكتب عبر طابعة الشبكة
+  if (typeof window !== 'undefined' && window.tajDesktop?.kickDrawer) {
+    let targetIp = device?.ipAddress;
+    let targetPort = device?.port || 9100;
+    if (!targetIp) {
+      const paired = loadPairedDevices();
+      const lanPrinter = paired.find(d => d.connectionType === 'lan' && d.ipAddress);
+      if (lanPrinter) {
+        targetIp = lanPrinter.ipAddress;
+        targetPort = lanPrinter.port || 9100;
+      }
+    }
+    if (targetIp) {
+      try {
+        const res = await window.tajDesktop.kickDrawer({ ip: targetIp, port: targetPort });
+        if (res.success) {
+          return { success: true, message: `تم إرسال إشارة فتح درج النقدية عبر طابعة الشبكة (${targetIp}) بنجاح 🔓` };
+        }
+      } catch (err: any) {
+        console.warn('Desktop drawer kick error:', err);
+      }
+    }
+  }
+
   // نبضة الفتح القياسية لدرج النقدية ESC p 0 25 250
   const kickDrawerCmd = new Uint8Array([0x1B, 0x70, 0x00, 0x19, 0xFA]);
   const caps = getHardwareCapabilities();

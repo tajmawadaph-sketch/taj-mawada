@@ -1,0 +1,27 @@
+appId: com.tajmawadah.pos
+productName: Taj Al-Mawadah POS
+copyright: Taj Al-Mawadah
+directories:
+  output: dist-desktop
+files:
+  - desktop/**/*
+  - public/taj_logo.png
+  - package.json
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # بدون شهادة توقيع: سيظهر تحذير SmartScreen عند أول تثبيت (انظر الدليل)
+  signAndEditExecutable: false
+  artifactName: TajMawadah-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  # تثبيت لكل مستخدمي ويندوز على الجهاز (يطلب صلاحية مدير مرة واحدة)
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: تاج المودة
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
