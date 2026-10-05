@@ -262,13 +262,32 @@ export async function pairHidScanner(): Promise<ConnectedDevice> {
   return newDevice;
 }
 
+export interface NetworkAdapterDetail {
+  id: string;
+  type: 'ethernet' | 'wifi' | 'other';
+  displayName: string;
+  name: string;
+  status: 'connected' | 'disconnected';
+  ip?: string | null;
+  netmask?: string | null;
+  gateway?: string | null;
+  gatewaySubnet?: string | null;
+  subnetPrefix?: string | null;
+  startHost?: number;
+  endHost?: number;
+  currentHost?: number;
+}
+
 export interface ActiveNetworkInfo {
   ip: string;
   subnetPrefix: string;
   name: string;
+  gateway?: string | null;
+  gatewaySubnet?: string | null;
   startHost?: number;
   endHost?: number;
   currentHost?: number;
+  adapters?: NetworkAdapterDetail[];
   allInterfaces?: Array<{
     name: string;
     ip: string;
@@ -281,7 +300,7 @@ export interface ActiveNetworkInfo {
 }
 
 /**
- * 🌐 استكشاف الشبكة المحلية ومعلومات المحول النشط تلقائياً
+ * 🌐 استكشاف الشبكة المحلية ومعلومات المحول النشط وبطاقات الشبكة والبوابات تلقائياً
  */
 export async function detectActiveLocalNetwork(): Promise<ActiveNetworkInfo> {
   try {
@@ -293,9 +312,12 @@ export async function detectActiveLocalNetwork(): Promise<ActiveNetworkInfo> {
           ip: data.primary.ip,
           subnetPrefix: data.primary.subnetPrefix,
           name: data.primary.name,
+          gateway: data.primary.gateway,
+          gatewaySubnet: data.primary.gatewaySubnet,
           startHost: data.primary.startHost,
           endHost: data.primary.endHost,
           currentHost: data.primary.currentHost,
+          adapters: data.adapters || [],
           allInterfaces: data.all
         };
       }
@@ -308,9 +330,38 @@ export async function detectActiveLocalNetwork(): Promise<ActiveNetworkInfo> {
     ip: '192.168.1.1',
     subnetPrefix: '192.168.1',
     name: 'Default Subnet',
+    gateway: '192.168.1.1',
+    gatewaySubnet: '192.168.1',
     startHost: 1,
     endHost: 30,
-    currentHost: 1
+    currentHost: 1,
+    adapters: [
+      {
+        id: 'ethernet',
+        type: 'ethernet',
+        displayName: 'كرت الشبكة السلكية (Ethernet LAN)',
+        name: 'Ethernet',
+        status: 'disconnected',
+        ip: null,
+        netmask: null,
+        gateway: null
+      },
+      {
+        id: 'wifi',
+        type: 'wifi',
+        displayName: 'كرت الواي فاي اللاسلكي (Wi-Fi)',
+        name: 'Wi-Fi',
+        status: 'connected',
+        ip: '192.168.1.1',
+        netmask: '255.255.255.0',
+        gateway: '192.168.1.1',
+        subnetPrefix: '192.168.1',
+        gatewaySubnet: '192.168.1',
+        startHost: 1,
+        endHost: 30,
+        currentHost: 1
+      }
+    ]
   };
 }
 

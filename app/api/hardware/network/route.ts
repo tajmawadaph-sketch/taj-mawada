@@ -83,28 +83,86 @@ function getSubnetRange(ip: string, netmask: string) {
   }
 }
 
-// استخراج معلومات الشبكة المحلية النشطة
-function getLocalNetworkInfo() {
-  const interfaces = os.networkInterfaces();
-  const activeInterfaces: Array<{
-    name: string;
-    ip: string;
-    netmask: string;
-    cidr: string;
-    subnetPrefix: string;
-    startHost: number;
-    endHost: number;
-    currentHost: number;
-  }> = [];
+// استخراج معلومات بطاقات الشبكة (Ethernet & Wi-Fi) والبوابات الافتراضية بدقة
+export interface NetworkAdapterDetail {
+  id: string;
+  type: 'ethernet' | 'wifi' | 'other';
+  displayName: string;
+  name: string;
+  status: 'connected' | 'disconnected';
+  ip?: string | null;
+  netmask?: string | null;
+  gateway?: string | null;
+  gatewaySubnet?: string | null;
+  subnetPrefix?: string | null;
+  startHost?: number;
+  endHost?: number;
+  currentHost?: number;
+}
 
-  for (const [name, addrs] of Object.entries(interfaces)) {
+async function getLocalNetworkInfo(): Promise<{
+  primary: any;
+  adapters: NetworkAdapterDetail[];
+  all: any[];
+}> {
+  let rawAdapters: NetworkAdapterDetail[] = [];
+
+  if (process.platform === 'win32') {
+    try {
+      const { stdout } = await execPromise('ipconfig', { timeout: 3500 });
+      const lines = stdout.split(/\r?\n/);
+      let current: any = null;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const headerMatch = line.match(/^(Ethernet adapter|Wireless LAN adapter)\s+(.+?):$/i);
+        if (headerMatch) {
+          if (current) rawAdapters.push(current);
+          const isWifi = headerMatch[1].toLowerCase().includes('wireless');
+          current = {
+            id: isWifi ? 'wifi' : 'ethernet',
+            type: isWifi ? 'wifi' : 'ethernet',
+            displayName: isWifi ? 'كرت الواي فاي اللاسلكي (Wi-Fi)' : 'كرت الشبكة السلكية (Ethernet LAN)',
+            name: headerMatch[2].trim(),
+            status: 'connected',
+            ip: null,
+            netmask: null,
+            gateway: null
+          };
+          continue;
+        }
+
+        if (current) {
+          if (trimmed.includes('Media disconnected')) {
+            current.status = 'disconnected';
+          }
+          const ipMatch = trimmed.match(/IPv4 Address[.\s]+:\s*([0-9.]+)/i);
+          if (ipMatch) current.ip = ipMatch[1];
+          const maskMatch = trimmed.match(/Subnet Mask[.\s]+:\s*([0-9.]+)/i);
+          if (maskMatch) current.netmask = maskMatch[1];
+          const gwMatch = trimmed.match(/Default Gateway[.\s]+:\s*([0-9.]+)/i);
+          if (gwMatch && gwMatch[1] !== '0.0.0.0') current.gateway = gwMatch[1];
+        }
+      }
+      if (current) rawAdapters.push(current);
+
+      rawAdapters = rawAdapters.filter(a => !a.name.toLowerCase().includes('bluetooth') && !a.name.includes('*'));
+    } catch (err) {
+      console.warn('ipconfig parsing warning:', err);
+    }
+  }
+
+  // دعم تكميلي عبر os.networkInterfaces()
+  const ifaces = os.networkInterfaces();
+  const osActiveList: any[] = [];
+  for (const [name, addrs] of Object.entries(ifaces)) {
     if (!addrs) continue;
     for (const addr of addrs) {
       if (addr.family === 'IPv4' && !addr.internal && !addr.address.startsWith('169.254.')) {
         const parts = addr.address.split('.');
         const subnetPrefix = `${parts[0]}.${parts[1]}.${parts[2]}`;
         const range = getSubnetRange(addr.address, addr.netmask);
-        activeInterfaces.push({
+        osActiveList.push({
           name,
           ip: addr.address,
           netmask: addr.netmask,
@@ -114,27 +172,88 @@ function getLocalNetworkInfo() {
           endHost: range.endHost,
           currentHost: range.currentHost
         });
+
+        const matched = rawAdapters.find(a => 
+          a.name.toLowerCase() === name.toLowerCase() || 
+          (a.type === 'wifi' && name.toLowerCase().includes('wi-fi')) ||
+          (a.type === 'ethernet' && name.toLowerCase().includes('ethernet'))
+        );
+        if (matched) {
+          if (!matched.ip) matched.ip = addr.address;
+          if (!matched.netmask) matched.netmask = addr.netmask;
+          matched.status = 'connected';
+        }
       }
     }
   }
 
-  // الواجهة الأساسية المفضلة (Wi-Fi أو Ethernet)
-  const primary = activeInterfaces.find(i => 
-    i.name.toLowerCase().includes('wi-fi') || 
-    i.name.toLowerCase().includes('wlan') || 
-    i.name.toLowerCase().includes('ethernet')
-  ) || activeInterfaces[0] || {
-    name: 'Default Subnet',
-    ip: '192.168.1.1',
-    netmask: '255.255.255.0',
-    cidr: '192.168.1.1/24',
-    subnetPrefix: '192.168.1',
-    startHost: 1,
-    endHost: 30,
-    currentHost: 1
+  // ضمان إبراز كرت الإيثرنت وكرت الواي فاي دائماً
+  const hasEthernet = rawAdapters.some(a => a.type === 'ethernet');
+  const hasWifi = rawAdapters.some(a => a.type === 'wifi');
+
+  if (!hasEthernet) {
+    rawAdapters.unshift({
+      id: 'ethernet',
+      type: 'ethernet',
+      displayName: 'كرت الشبكة السلكية (Ethernet LAN)',
+      name: 'Ethernet',
+      status: 'disconnected',
+      ip: null,
+      netmask: null,
+      gateway: null
+    });
+  }
+
+  if (!hasWifi) {
+    rawAdapters.push({
+      id: 'wifi',
+      type: 'wifi',
+      displayName: 'كرت الواي فاي اللاسلكي (Wi-Fi)',
+      name: 'Wi-Fi',
+      status: 'disconnected',
+      ip: null,
+      netmask: null,
+      gateway: null
+    });
+  }
+
+  // إثراء تفاصيل نطاق الشبكة والـ Gateway Subnet لكل محول
+  const adapters: NetworkAdapterDetail[] = rawAdapters.map(a => {
+    if (a.status === 'connected' && a.ip) {
+      const parts = a.ip.split('.');
+      const subnetPrefix = `${parts[0]}.${parts[1]}.${parts[2]}`;
+      const range = getSubnetRange(a.ip, a.netmask || '255.255.255.0');
+      const gwSubnet = a.gateway ? a.gateway.split('.').slice(0, 3).join('.') : subnetPrefix;
+      return {
+        ...a,
+        subnetPrefix,
+        gatewaySubnet: gwSubnet,
+        startHost: range.startHost,
+        endHost: range.endHost,
+        currentHost: range.currentHost
+      };
+    }
+    return a;
+  });
+
+  const primaryAdapter = adapters.find(a => a.status === 'connected' && a.ip) || adapters[0];
+  const primary = {
+    name: primaryAdapter.name,
+    ip: primaryAdapter.ip || '192.168.1.1',
+    netmask: primaryAdapter.netmask || '255.255.255.0',
+    gateway: primaryAdapter.gateway || null,
+    gatewaySubnet: primaryAdapter.gatewaySubnet || '192.168.1',
+    subnetPrefix: primaryAdapter.subnetPrefix || '192.168.1',
+    startHost: primaryAdapter.startHost || 1,
+    endHost: primaryAdapter.endHost || 30,
+    currentHost: primaryAdapter.currentHost || 1
   };
 
-  return { primary, all: activeInterfaces };
+  return {
+    primary,
+    adapters,
+    all: osActiveList.length > 0 ? osActiveList : [primary]
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -143,10 +262,11 @@ export async function GET(req: NextRequest) {
     const action = searchParams.get('action') || 'detect_network';
 
     if (action === 'detect_network') {
-      const netInfo = getLocalNetworkInfo();
+      const netInfo = await getLocalNetworkInfo();
       return NextResponse.json({
         success: true,
         primary: netInfo.primary,
+        adapters: netInfo.adapters,
         all: netInfo.all
       });
     }

@@ -37,6 +37,7 @@ import {
   ConnectedDevice,
   HardwareCapabilities,
   ActiveNetworkInfo,
+  NetworkAdapterDetail,
   getHardwareCapabilities,
   loadPairedDevices,
   savePairedDevices,
@@ -83,8 +84,8 @@ export default function ConnectedDevicesManager() {
   // معلومات الشبكة المستكشفة تلقائياً
   const [detectedNetwork, setDetectedNetwork] = useState<ActiveNetworkInfo | null>(null);
 
-  // نمط مجموعة الشبكة (شبكة الجهاز الحالي / راوتر 192.168.1 / راوتر 192.168.0 / مخصص)
-  const [networkGroupMode, setNetworkGroupMode] = useState<'current' | 'router1' | 'router0' | 'custom'>('current');
+  // نمط مجموعة الشبكة (كرت إيثرنت / كرت واي فاي / راوتر 192.168.1 / راوتر 192.168.0 / مخصص)
+  const [networkGroupMode, setNetworkGroupMode] = useState<string>('current');
 
   // فحص عنوان IP فردي مباشر في أي شبكة
   const [singleTestIp, setSingleTestIp] = useState('');
@@ -123,19 +124,21 @@ export default function ConnectedDevicesManager() {
   // نافذة تأكيد الحذف (بدون native confirm)
   const [deviceToDelete, setDeviceToDelete] = useState<ConnectedDevice | null>(null);
 
-  // وظيفة اكتشاف الشبكة النشطة
+  // وظيفة اكتشاف الشبكة النشطة وبطاقات الشبكة
   const refreshNetworkInfo = useCallback(async () => {
     try {
       const netInfo = await detectActiveLocalNetwork();
-      if (netInfo && netInfo.subnetPrefix) {
+      if (netInfo) {
         setDetectedNetwork(netInfo);
-        setSubnetPrefix(netInfo.subnetPrefix);
-        if (netInfo.startHost && netInfo.endHost) {
-          setStartHost(netInfo.startHost);
-          setEndHost(Math.min(netInfo.endHost, 30));
-        }
-        if (!singleTestIp) {
-          setSingleTestIp(`${netInfo.subnetPrefix}.150`);
+        const activeAdapter = netInfo.adapters?.find(a => a.status === 'connected' && a.ip) || netInfo.adapters?.[0];
+        const targetSubnet = activeAdapter?.gatewaySubnet || activeAdapter?.subnetPrefix || netInfo.subnetPrefix;
+        if (targetSubnet) {
+          setSubnetPrefix(targetSubnet);
+          setStartHost(activeAdapter?.startHost || netInfo.startHost || 1);
+          setEndHost(activeAdapter?.endHost ? Math.min(activeAdapter.endHost, 30) : 30);
+          if (!singleTestIp) {
+            setSingleTestIp(`${targetSubnet}.150`);
+          }
         }
       }
     } catch (e) {
@@ -350,6 +353,73 @@ export default function ConnectedDevicesManager() {
     }
   };
 
+  // ⚡ مسح شبكة كرت محدد عبر الـ Gateway
+  const handleScanAdapterNetwork = (adapter: NetworkAdapterDetail) => {
+    if (!adapter.ip && adapter.status === 'disconnected') {
+      showToast(isEn ? 'Network adapter is disconnected. Please connect the cable.' : 'كرت الشبكة مفصول. يرجى توصيل الكابل بالراوتر أو السويتش أولاً.', 'warning');
+      return;
+    }
+
+    const targetSubnet = adapter.gatewaySubnet || adapter.subnetPrefix || '192.168.1';
+    const sHost = adapter.startHost || 1;
+    const eHost = adapter.endHost || 30;
+
+    setNetworkGroupMode(adapter.type === 'wifi' ? 'wifi' : 'ethernet');
+    setSubnetPrefix(targetSubnet);
+    setStartHost(sHost);
+    setEndHost(eHost);
+    setSingleTestIp(`${targetSubnet}.150`);
+
+    const gwText = adapter.gateway ? ` (البوابة: ${adapter.gateway})` : '';
+    showToast(
+      isEn 
+        ? `Scanning ${adapter.name} network (${targetSubnet}.x)...` 
+        : `بدء المسح في شبكة ${adapter.displayName}${gwText} على النطاق ${targetSubnet}.x 🔍`,
+      'info'
+    );
+
+    setTimeout(() => {
+      handleStartSubnetScan();
+    }, 60);
+  };
+
+  // ➕ إضافة كرت محدد كنقطة بيع POS
+  const handleAddAdapterAsPos = (adapter: NetworkAdapterDetail) => {
+    if (!adapter.ip) {
+      showToast(isEn ? 'Adapter has no IP assigned.' : 'لا يوجد عنوان IP نشط لهذا الكرت حالياً.', 'warning');
+      return;
+    }
+
+    const exists = devices.find(d => d.ipAddress === adapter.ip);
+    if (exists) {
+      showToast(isEn ? 'This adapter IP is already registered.' : 'هذا الكرت مسجل بالفعل في قائمة الطرفيات!', 'warning');
+      return;
+    }
+
+    const newDev: ConnectedDevice = {
+      id: `pos-${adapter.id}-${Date.now().toString(36)}`,
+      name: `محطة الكاشير (${adapter.displayName})`,
+      category: 'pos_terminal',
+      brand: 'Taj POS Station',
+      model: `${adapter.name} (${adapter.type === 'wifi' ? 'Wireless' : 'Wired'})`,
+      connectionType: 'lan',
+      ipAddress: adapter.ip,
+      port: 8080,
+      terminalId: `TID-${adapter.ip.split('.').pop()?.padStart(4, '0') || '0001'}`,
+      isDefault: !devices.some(d => d.category === 'pos_terminal' && d.isDefault),
+      status: 'online',
+      latency: 1,
+      lastSeen: `متصل محلياً عبر ${adapter.displayName} 🟢`,
+      notes: `كرت: ${adapter.name} | Gateway: ${adapter.gateway || 'N/A'} | Mask: ${adapter.netmask || 'N/A'}`
+    };
+
+    const updated = [...devices, newDev];
+    updateAndSaveDevices(updated);
+    playPosBeep();
+    triggerHaptic(120);
+    showToast(isEn ? `Registered ${adapter.name} (${adapter.ip}) as POS Terminal.` : `تم تسجيل ${adapter.displayName} (${adapter.ip}) كطرفية كاشير 🟢`, 'success');
+  };
+
   // 💻 إضافة جهاز الكاشير الحالي كطرفية بيع في النظام
   const handleAddCurrentMachineAsPos = () => {
     if (!detectedNetwork) return;
@@ -373,7 +443,7 @@ export default function ConnectedDevicesManager() {
       status: 'online',
       latency: 1,
       lastSeen: 'متصل ومحلي (جهاز الكاشير الحالي) 🟢',
-      notes: `تم إضافة هذا الجهاز بنجاح من محول ${detectedNetwork.name}`
+      notes: `تم إضافة هذا الجهاز بنجاح من محول ${detectedNetwork.name} | Gateway: ${detectedNetwork.gateway || 'N/A'}`
     };
 
     const updated = [...devices, newDev];
@@ -387,9 +457,11 @@ export default function ConnectedDevicesManager() {
   const handleScanCurrentMachineNetwork = () => {
     if (detectedNetwork) {
       setNetworkGroupMode('current');
-      setSubnetPrefix(detectedNetwork.subnetPrefix);
+      const targetSub = detectedNetwork.gatewaySubnet || detectedNetwork.subnetPrefix;
+      setSubnetPrefix(targetSub);
       setStartHost(detectedNetwork.startHost || 1);
       setEndHost(detectedNetwork.endHost || 30);
+      setSingleTestIp(`${targetSub}.150`);
       setTimeout(() => {
         handleStartSubnetScan();
       }, 50);
@@ -399,13 +471,34 @@ export default function ConnectedDevicesManager() {
   };
 
   // 🔄 تبديل مجموعة الشبكة
-  const handleSelectNetworkGroup = (mode: 'current' | 'router1' | 'router0' | 'custom', customPrefix?: string) => {
+  const handleSelectNetworkGroup = (mode: string, customPrefix?: string) => {
     setNetworkGroupMode(mode);
-    if (mode === 'current' && detectedNetwork) {
-      setSubnetPrefix(detectedNetwork.subnetPrefix);
+    if (mode === 'ethernet') {
+      const eth = detectedNetwork?.adapters?.find(a => a.type === 'ethernet');
+      if (eth && eth.ip) {
+        const sub = eth.gatewaySubnet || eth.subnetPrefix || '192.168.1';
+        setSubnetPrefix(sub);
+        setStartHost(eth.startHost || 1);
+        setEndHost(eth.endHost || 30);
+        setSingleTestIp(`${sub}.150`);
+      } else {
+        setSubnetPrefix('192.168.1');
+      }
+    } else if (mode === 'wifi') {
+      const wf = detectedNetwork?.adapters?.find(a => a.type === 'wifi');
+      if (wf && wf.ip) {
+        const sub = wf.gatewaySubnet || wf.subnetPrefix || '172.20.10';
+        setSubnetPrefix(sub);
+        setStartHost(wf.startHost || 1);
+        setEndHost(wf.endHost || 30);
+        setSingleTestIp(`${sub}.150`);
+      }
+    } else if (mode === 'current' && detectedNetwork) {
+      const targetSub = detectedNetwork.gatewaySubnet || detectedNetwork.subnetPrefix;
+      setSubnetPrefix(targetSub);
       setStartHost(detectedNetwork.startHost || 1);
       setEndHost(detectedNetwork.endHost || 30);
-      setSingleTestIp(`${detectedNetwork.subnetPrefix}.150`);
+      setSingleTestIp(`${targetSub}.150`);
     } else if (mode === 'router1') {
       setSubnetPrefix('192.168.1');
       setStartHost(1);
@@ -1623,43 +1716,39 @@ export default function ConnectedDevicesManager() {
             {discoveryTab === 'network' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 
-                {/* 1️⃣ بطاقة هذا الجهاز الحالي والمسح في شبكته التلقائية */}
+                {/* 1️⃣ لوحة كروت الشبكة المزدوجة وبواباتها الافتراضية (Dual Network Adapters & Gateways) */}
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.15) 0%, rgba(5, 150, 105, 0.1) 100%)',
+                  background: '#FFFFFF',
                   borderRadius: '18px',
-                  padding: '16px 18px',
+                  padding: '18px 20px',
                   border: '1.5px solid rgba(194, 155, 98, 0.35)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px',
-                  boxShadow: '0 4px 18px rgba(30, 19, 11, 0.04)'
+                  gap: '14px',
+                  boxShadow: '0 6px 24px rgba(30, 19, 11, 0.05)'
                 }}>
+                  {/* رأس لوحة الكروت */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{
-                        width: '44px',
-                        height: '44px',
+                        width: '42px',
+                        height: '42px',
                         borderRadius: '12px',
-                        background: 'rgba(5, 150, 105, 0.15)',
-                        border: '1.5px solid rgba(5, 150, 105, 0.35)',
+                        background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.2) 0%, rgba(5, 150, 105, 0.15) 100%)',
+                        border: '1px solid rgba(194, 155, 98, 0.35)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '22px'
+                        fontSize: '20px'
                       }}>
-                        💻
+                        🖧
                       </div>
                       <div>
-                        <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#6e5d4f' }}>
-                          عنوان IP هذا الجهاز الحالي (Local POS Terminal):
+                        <div style={{ fontSize: '14.5px', fontWeight: 900, color: '#1E130B' }}>
+                          كروت الشبكة المتصلة بالجهاز وبوابات الراوتر (Dual Adapters & Gateways)
                         </div>
-                        <div style={{ fontSize: '16px', fontWeight: 900, color: '#1E130B', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                          <span>{detectedNetwork ? detectedNetwork.ip : 'جاري فحص المحول...'}</span>
-                          {detectedNetwork && (
-                            <span style={{ fontSize: '11px', background: '#FFFFFF', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(194, 155, 98, 0.3)', color: '#059669', fontWeight: 800 }}>
-                              {detectedNetwork.name} ({detectedNetwork.subnetPrefix}.x)
-                            </span>
-                          )}
+                        <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#6e5d4f' }}>
+                          كشف كرت الإيثرنت (Ethernet) وكرت الواي فاي (Wi-Fi) وسحب الـ IP والـ Gateway والمسح المباشر في نطاق كل منهما
                         </div>
                       </div>
                     </div>
@@ -1668,70 +1757,205 @@ export default function ConnectedDevicesManager() {
                       type="button"
                       onClick={refreshNetworkInfo}
                       style={{
-                        background: '#FFFFFF',
-                        border: '1px solid rgba(194, 155, 98, 0.3)',
-                        borderRadius: '8px',
-                        padding: '6px 12px',
-                        fontSize: '11.5px',
-                        fontWeight: 800,
-                        color: '#C29B62',
+                        background: '#FDFBF7',
+                        border: '1.5px solid rgba(194, 155, 98, 0.3)',
+                        borderRadius: '10px',
+                        padding: '7px 14px',
+                        fontSize: '12px',
+                        fontWeight: 900,
+                        color: '#1E130B',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '5px'
+                        gap: '6px',
+                        boxShadow: '0 2px 8px rgba(30, 19, 11, 0.04)'
                       }}
                     >
-                      <RefreshCw size={12} />
-                      <span>تحديث المحول</span>
+                      <RefreshCw size={13} color="#C29B62" />
+                      <span>تحديث حالة الكروت</span>
                     </button>
                   </div>
 
-                  {/* زران إجرائيان لجهاز الكاشير الحالي */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={handleScanCurrentMachineNetwork}
-                      disabled={isScanningSubnet}
-                      style={{
-                        height: '44px',
-                        borderRadius: '10px',
-                        background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                        color: '#FFFFFF',
-                        border: 'none',
-                        fontWeight: 900,
-                        fontSize: '12.5px',
-                        cursor: isScanningSubnet ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        boxShadow: '0 3px 10px rgba(5, 150, 105, 0.25)'
-                      }}
-                    >
-                      <Search size={14} />
-                      <span>🔍 مسح وبحث في شبكة هذا الجهاز تلقائياً</span>
-                    </button>
+                  {/* بطاقات الكروت المزدوجة */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                    gap: '14px'
+                  }}>
+                    {(detectedNetwork?.adapters && detectedNetwork.adapters.length > 0
+                      ? detectedNetwork.adapters
+                      : [
+                          {
+                            id: 'ethernet',
+                            type: 'ethernet' as const,
+                            displayName: 'كرت الشبكة السلكية (Ethernet LAN)',
+                            name: 'Ethernet',
+                            status: 'disconnected' as const,
+                            ip: null,
+                            netmask: null,
+                            gateway: null
+                          },
+                          {
+                            id: 'wifi',
+                            type: 'wifi' as const,
+                            displayName: 'كرت الواي فاي اللاسلكي (Wi-Fi)',
+                            name: 'Wi-Fi',
+                            status: 'connected' as const,
+                            ip: detectedNetwork?.ip || '172.20.10.6',
+                            netmask: '255.255.255.240',
+                            gateway: detectedNetwork?.gateway || '172.20.10.1',
+                            gatewaySubnet: detectedNetwork?.gatewaySubnet || '172.20.10',
+                            subnetPrefix: detectedNetwork?.subnetPrefix || '172.20.10',
+                            startHost: detectedNetwork?.startHost || 1,
+                            endHost: detectedNetwork?.endHost || 14
+                          }
+                        ]
+                    ).map((adapter, idx) => {
+                      const isEth = adapter.type === 'ethernet';
+                      const isConnected = adapter.status === 'connected' && !!adapter.ip;
 
-                    <button
-                      type="button"
-                      onClick={handleAddCurrentMachineAsPos}
-                      style={{
-                        height: '44px',
-                        borderRadius: '10px',
-                        background: '#FFFFFF',
-                        color: '#1E130B',
-                        border: '1.5px solid #C29B62',
-                        fontWeight: 900,
-                        fontSize: '12.5px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <span>➕ تسجيل هذا الجهاز كطرفية بيع (POS)</span>
-                    </button>
+                      return (
+                        <div
+                          key={adapter.id || idx}
+                          style={{
+                            background: isConnected ? 'rgba(253, 251, 247, 0.8)' : '#FAFAFA',
+                            border: `1.5px solid ${isConnected ? 'rgba(5, 150, 105, 0.35)' : 'rgba(168, 87, 60, 0.25)'}`,
+                            borderRadius: '16px',
+                            padding: '16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: '12px',
+                            boxShadow: isConnected ? '0 4px 16px rgba(5, 150, 105, 0.05)' : 'none'
+                          }}
+                        >
+                          <div>
+                            {/* شريط عنوان الكرت */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '20px' }}>{isEth ? '🔌' : '📶'}</span>
+                                <div>
+                                  <div style={{ fontSize: '13.5px', fontWeight: 900, color: '#1E130B' }}>
+                                    {adapter.displayName}
+                                  </div>
+                                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#6e5d4f' }}>
+                                    المحول: {adapter.name}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{
+                                padding: '4px 10px',
+                                borderRadius: '8px',
+                                fontSize: '11px',
+                                fontWeight: 900,
+                                background: isConnected ? 'rgba(5, 150, 105, 0.12)' : 'rgba(168, 87, 60, 0.12)',
+                                color: isConnected ? '#059669' : '#A8573C',
+                                border: `1px solid ${isConnected ? 'rgba(5, 150, 105, 0.3)' : 'rgba(168, 87, 60, 0.3)'}`
+                              }}>
+                                {isConnected ? '🟢 متصل ونشط' : '🔴 الكابل مفصول'}
+                              </div>
+                            </div>
+
+                            {/* تفاصيل الكرت الفنية والـ Gateway */}
+                            {isConnected ? (
+                              <div style={{
+                                background: '#FFFFFF',
+                                borderRadius: '12px',
+                                padding: '10px 12px',
+                                border: '1px solid rgba(194, 155, 98, 0.2)',
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(2, 1fr)',
+                                gap: '8px',
+                                fontSize: '11.5px'
+                              }}>
+                                <div>
+                                  <span style={{ color: '#6e5d4f', fontWeight: 700, display: 'block' }}>عنوان IP الكرت:</span>
+                                  <span style={{ color: '#1E130B', fontWeight: 900, fontSize: '12.5px' }}>{adapter.ip}</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: '#6e5d4f', fontWeight: 700, display: 'block' }}>بوابة الراوتر (Gateway):</span>
+                                  <span style={{ color: '#059669', fontWeight: 900, fontSize: '12.5px' }}>{adapter.gateway || 'غير محدد'}</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: '#6e5d4f', fontWeight: 700, display: 'block' }}>قناع الشبكة (Mask):</span>
+                                  <span style={{ color: '#1E130B', fontWeight: 800 }}>{adapter.netmask || '255.255.255.0'}</span>
+                                </div>
+                                <div>
+                                  <span style={{ color: '#6e5d4f', fontWeight: 700, display: 'block' }}>نطاق الجروب المتاح:</span>
+                                  <span style={{ color: '#C29B62', fontWeight: 900 }}>
+                                    {adapter.gatewaySubnet || adapter.subnetPrefix}.({adapter.startHost || 1} - {adapter.endHost || 254})
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{
+                                background: 'rgba(168, 87, 60, 0.05)',
+                                border: '1px dashed rgba(168, 87, 60, 0.3)',
+                                borderRadius: '12px',
+                                padding: '12px',
+                                fontSize: '11.5px',
+                                color: '#A8573C',
+                                fontWeight: 800,
+                                lineHeight: 1.5
+                              }}>
+                                ⚠️ كابل الشبكة غير متصل حالياً بهذا الكرت. عند توصيل الكابل بالسويتش أو الراوتر، اضغط زر &quot;تحديث حالة الكروت&quot; بالأعلى لاكتشاف الـ IP والبوابة فوراً.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* أزرار الإجراءات للكرت */}
+                          {isConnected && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '8px', marginTop: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleScanAdapterNetwork(adapter)}
+                                disabled={isScanningSubnet}
+                                style={{
+                                  height: '42px',
+                                  borderRadius: '10px',
+                                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  fontWeight: 900,
+                                  fontSize: '11.5px',
+                                  cursor: isScanningSubnet ? 'not-allowed' : 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px',
+                                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)'
+                                }}
+                              >
+                                <Search size={13} />
+                                <span>⚡ مسح شبكة هذا الكرت</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleAddAdapterAsPos(adapter)}
+                                style={{
+                                  height: '42px',
+                                  borderRadius: '10px',
+                                  background: '#FFFFFF',
+                                  color: '#1E130B',
+                                  border: '1.5px solid #C29B62',
+                                  fontWeight: 900,
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <span>➕ تسجيل كـ POS</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1749,22 +1973,47 @@ export default function ConnectedDevicesManager() {
                     اختر مجموعة الشبكة المراد البحث فيها أو حدد شبكة بجروب آخر:
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectNetworkGroup('current')}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        fontSize: '11px',
-                        fontWeight: 900,
-                        cursor: 'pointer',
-                        border: `1.5px solid ${networkGroupMode === 'current' ? '#059669' : 'rgba(194, 155, 98, 0.3)'}`,
-                        background: networkGroupMode === 'current' ? '#059669' : '#FFFFFF',
-                        color: networkGroupMode === 'current' ? '#FFFFFF' : '#1E130B'
-                      }}
-                    >
-                      🟢 شبكة هذا الجهاز ({detectedNetwork ? `${detectedNetwork.subnetPrefix}.x` : 'الحالية'})
-                    </button>
+                    {/* خيار كرت الإيثرنت إذا كان متوفراً */}
+                    {detectedNetwork?.adapters?.filter(a => a.type === 'ethernet').map((eth) => (
+                      <button
+                        key={eth.id}
+                        type="button"
+                        onClick={() => handleSelectNetworkGroup('ethernet')}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 900,
+                          cursor: 'pointer',
+                          border: `1.5px solid ${networkGroupMode === 'ethernet' ? '#059669' : 'rgba(194, 155, 98, 0.3)'}`,
+                          background: networkGroupMode === 'ethernet' ? '#059669' : '#FFFFFF',
+                          color: networkGroupMode === 'ethernet' ? '#FFFFFF' : '#1E130B'
+                        }}
+                      >
+                        🔌 كرت إيثرنت {eth.ip ? `(${eth.gatewaySubnet || eth.subnetPrefix}.x)` : '(مفصول)'}
+                      </button>
+                    ))}
+
+                    {/* خيار كرت الواي فاي */}
+                    {detectedNetwork?.adapters?.filter(a => a.type === 'wifi').map((wf) => (
+                      <button
+                        key={wf.id}
+                        type="button"
+                        onClick={() => handleSelectNetworkGroup('wifi')}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: 900,
+                          cursor: 'pointer',
+                          border: `1.5px solid ${networkGroupMode === 'wifi' ? '#059669' : 'rgba(194, 155, 98, 0.3)'}`,
+                          background: networkGroupMode === 'wifi' ? '#059669' : '#FFFFFF',
+                          color: networkGroupMode === 'wifi' ? '#FFFFFF' : '#1E130B'
+                        }}
+                      >
+                        📶 كرت واي فاي {wf.ip ? `(${wf.gatewaySubnet || wf.subnetPrefix}.x)` : '(مفصول)'}
+                      </button>
+                    ))}
 
                     <button
                       type="button"
