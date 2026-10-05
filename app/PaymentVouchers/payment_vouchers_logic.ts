@@ -6,6 +6,8 @@ import { useUniversalPosting } from '@/lib/accounting_engine';
 import { useRealtimeInvalidate } from '@/lib/useRealtimeSync';
 import { useAuth } from '@/components/authGuard';
 import { notifyVoucherCreated } from '@/lib/notificationService';
+import { ACC } from '@/lib/account-ids';
+import * as XLSX from 'xlsx';
 
 
 export function usePaymentVouchersLogic() {
@@ -179,10 +181,20 @@ export function usePaymentVouchersLogic() {
     const saveMutation = useMutation({
         mutationFn: async (voucherData: any) => {
             const payload = { ...voucherData };
-            
+
             if (payload.payee_id && !payload.partner_id) {
                 payload.partner_id = payload.payee_id;
             }
+
+            // Smart fallback defaults for accounts
+            if (!payload.credit_account_id) {
+                const isBank = payload.payment_method?.includes('بنك') || payload.payment_method?.includes('تحويل') || payload.payment_method?.includes('شبكة') || payload.payment_method?.includes('مدى');
+                payload.credit_account_id = isBank ? ACC.BANK_ALRAJHI : ACC.CASH_BOX;
+            }
+            if (!payload.debit_account_id) {
+                payload.debit_account_id = ACC.SUPPLIERS_AP;
+            }
+
             delete payload.payee_id;
             delete payload.payee_name;
             delete payload.debit_account_name;
@@ -364,7 +376,23 @@ export function usePaymentVouchersLogic() {
             },
             isProcessing,
             handleBulkFixSave,
-            exportToExcel: () => {}
+            exportToExcel: () => {
+                const wb = XLSX.utils.book_new();
+                const rows = displayedVouchers.map((pv: any, idx: number) => ({
+                    '#': idx + 1,
+                    'رقم السند': pv.voucher_number || '---',
+                    'التاريخ': pv.date || '---',
+                    'المستفيد': pv.payee?.name || pv.payee_name || pv.partner?.name || 'مورد / جهة صرف',
+                    'المبلغ (ر.س)': Number(pv.amount || 0),
+                    'طريقة الصرف': pv.payment_method || 'نقدي',
+                    'حساب الخزينة/البنك (دائن)': pv.credit_account?.name || 'الخزينة الرئيسية',
+                    'حساب التوجيه (مدين)': pv.debit_account?.name || 'الموردين',
+                    'الحالة': (pv.is_posted || pv.status === 'معتمد' || pv.status === 'مرحل') ? 'معتمد' : 'مسودة',
+                    'البيان': pv.description || pv.notes || '---'
+                }));
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "سندات_الصرف");
+                XLSX.writeFile(wb, `Payment_Vouchers_${new Date().toISOString().split('T')[0]}.xlsx`);
+            }
         }
     };
 }

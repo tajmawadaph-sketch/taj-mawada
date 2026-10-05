@@ -7,7 +7,8 @@ import { fetchPaginatedData } from '@/lib/supabase-pagination';
 import { useRealtimeInvalidate } from '@/lib/useRealtimeSync';
 import { useAuth } from '@/components/authGuard';
 import { notifyVoucherCreated } from '@/lib/notificationService';
-
+import { ACC } from '@/lib/account-ids';
+import * as XLSX from 'xlsx';
 
 export function useReceiptVouchersLogic() {
     const queryClient = useQueryClient();
@@ -16,7 +17,7 @@ export function useReceiptVouchersLogic() {
     // 🔄 تحديث فوري ذكي
     useRealtimeInvalidate(['receipt_vouchers', 'invoices'], ['receipt_vouchers', 'invoices']);
 
-    // 🎯 دالة سحرية لتحديث الكاش لحظياً (Optimistic UI)
+    // 🎯 دالة لتحديث الكاش لحظياً (Optimistic UI)
     const updateRowsInCache = (targetIds: any[], updatedFields: any) => {
         queryClient.setQueryData(['receipt_vouchers'], (oldData: any[]) => {
             if (!oldData) return [];
@@ -26,13 +27,23 @@ export function useReceiptVouchersLogic() {
     };
 
     const [globalSearch, setGlobalSearch] = useState('');
-    const deferredSearch = useDeferredValue(globalSearch); // 🚀 تأخير ذكي لمنع التقطيع
+    const deferredSearch = useDeferredValue(globalSearch);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [rowsPerPage, setRowsPerPage] = useState(50);
+    const [rowsPerPage, setRowsPerPage] = useState(25);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [currentRecord, setCurrentRecord] = useState<any>({});
     const [focusedIndex, setFocusedIndex] = useState(-1);
+
+    // Filter states
+    const [statusFilter, setStatusFilter] = useState<'all' | 'posted' | 'draft'>('all');
+    const [categoryFilter, setCategoryFilter] = useState<'all' | 'customers' | 'delegates'>('all');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+
+    // Print modal states
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+    const [selectedRecordForPrint, setSelectedRecordForPrint] = useState<any>(null);
 
     // 🚀 State الخاصة بالتصحيح المجمع لحسابات السندات
     const [isBulkFixModalOpen, setIsBulkFixModalOpen] = useState(false);
@@ -48,7 +59,7 @@ export function useReceiptVouchersLogic() {
     // =========================================================================
     // 📥 جلب البيانات (Data Fetching)
     // =========================================================================
-    const { profile, can } = useAuth();
+    const { profile } = useAuth();
     
     const { data: allData = [], isLoading } = useQuery({
         queryKey: ['receipt_vouchers'],
@@ -72,7 +83,6 @@ export function useReceiptVouchersLogic() {
             };
 
             const rec = await fetchPaginatedData(buildQuery, 'id');
-
             return rec || [];
         },
         enabled: !!profile
@@ -97,7 +107,7 @@ export function useReceiptVouchersLogic() {
                 .neq('status', 'closed')
                 .order('operation_date', { ascending: false });
             if (error) throw error;
-            return data?.map((op:any) => ({
+            return data?.map((op: any) => ({
                 id: op.id,
                 operation_number: op.operation_number,
                 status: op.status,
@@ -112,17 +122,36 @@ export function useReceiptVouchersLogic() {
     // =========================================================================
     const allFiltered = useMemo(() => {
         return allData.filter(rec => {
-            const searchStr = (deferredSearch || '').toLowerCase();
-            return (
+            const searchStr = (deferredSearch || '').toLowerCase().trim();
+            const matchesSearch = !searchStr || (
                 rec.receipt_number?.toLowerCase().includes(searchStr) || 
                 rec.partners?.name?.toLowerCase().includes(searchStr) ||
                 rec.notes?.toLowerCase().includes(searchStr) ||
-                rec.reference_number?.toLowerCase().includes(searchStr)
+                rec.reference_number?.toLowerCase().includes(searchStr) ||
+                rec.amount?.toString().includes(searchStr)
             );
-        });
-    }, [allData, deferredSearch]);
 
-    useEffect(() => { setCurrentPage(1); }, [deferredSearch, rowsPerPage]);
+            // Status filter
+            const isPosted = ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(rec.status || '').trim().toLowerCase()) || rec.is_posted;
+            let matchesStatus = true;
+            if (statusFilter === 'posted') matchesStatus = isPosted;
+            else if (statusFilter === 'draft') matchesStatus = !isPosted;
+
+            // Category filter
+            let matchesCategory = true;
+            if (categoryFilter === 'delegates') matchesCategory = !!rec.delegate_id || !!rec.fleet_operation_id;
+            else if (categoryFilter === 'customers') matchesCategory = !rec.delegate_id && !rec.fleet_operation_id;
+
+            // Date filters
+            let matchesDate = true;
+            if (dateFrom && rec.date) matchesDate = matchesDate && new Date(rec.date) >= new Date(dateFrom);
+            if (dateTo && rec.date) matchesDate = matchesDate && new Date(rec.date) <= new Date(dateTo);
+
+            return matchesSearch && matchesStatus && matchesCategory && matchesDate;
+        });
+    }, [allData, deferredSearch, statusFilter, categoryFilter, dateFrom, dateTo]);
+
+    useEffect(() => { setCurrentPage(1); }, [deferredSearch, rowsPerPage, statusFilter, categoryFilter, dateFrom, dateTo]);
 
     const receipts = useMemo(() => {
         const start = (currentPage - 1) * rowsPerPage;
@@ -130,11 +159,18 @@ export function useReceiptVouchersLogic() {
     }, [allFiltered, currentPage, rowsPerPage]);
 
     const kpis = useMemo(() => {
+        const postedVouchers = allFiltered.filter(i => ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(i.status || '').trim().toLowerCase()) || i.is_posted);
+        const pendingVouchers = allFiltered.filter(i => !['posted', 'معتمد', 'مرحل', 'approved'].includes(String(i.status || '').trim().toLowerCase()) && !i.is_posted);
+        const delegateVouchers = allFiltered.filter(i => !!i.delegate_id || !!i.fleet_operation_id);
+
         return {
             total: allFiltered.length,
-            posted: allFiltered.filter(i => ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(i.status || '').trim().toLowerCase()) || i.is_posted).length,
-            pending: allFiltered.filter(i => !['posted', 'معتمد', 'مرحل', 'approved'].includes(String(i.status || '').trim().toLowerCase()) && !i.is_posted).length,
-            totalAmount: allFiltered.reduce((sum, r) => sum + Number(r.amount || 0), 0)
+            posted: postedVouchers.length,
+            pending: pendingVouchers.length,
+            delegateCount: delegateVouchers.length,
+            totalAmount: allFiltered.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+            postedAmount: postedVouchers.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+            delegateAmount: delegateVouchers.reduce((sum, r) => sum + Number(r.amount || 0), 0)
         };
     }, [allFiltered]);
 
@@ -149,8 +185,15 @@ export function useReceiptVouchersLogic() {
             
             if (amount <= 0) throw new Error("يجب أن يكون المبلغ أكبر من صفر");
 
+            // Smart fallback for default accounts
+            const defaultSafe = (record.payment_method?.includes('بنك') || record.payment_method?.includes('تحويل') || record.payment_method?.includes('شبكة') || record.payment_method?.includes('مدى'))
+                ? ACC.BANK_ALRAJHI
+                : ACC.CASH_BOX;
+
+            const defaultPartnerAcc = record.delegate_id ? ACC.EMPLOYEE_CUSTODY : ACC.CUSTOMERS_AR;
+
             const voucherData = {
-                receipt_number: record.receipt_number || `RV-${Date.now()}`, 
+                receipt_number: record.receipt_number || `RV-${Date.now().toString().slice(-6)}`, 
                 date: record.date || new Date().toISOString().split('T')[0],
                 payment_method: record.payment_method || 'نقدي (كاش)',
                 amount: amount, 
@@ -159,8 +202,8 @@ export function useReceiptVouchersLogic() {
                 fleet_operation_id: cleanId(record.fleet_operation_id),
                 job_order_id: cleanId(record.job_order_id),
                 delegate_id: cleanId(record.delegate_id),
-                safe_bank_acc_id: cleanId(record.safe_bank_acc_id),
-                partner_acc_id: cleanId(record.partner_acc_id),
+                safe_bank_acc_id: cleanId(record.safe_bank_acc_id) || defaultSafe,
+                partner_acc_id: cleanId(record.partner_acc_id) || defaultPartnerAcc,
                 reference_number: record.reference_number || null,
                 attachment_url: record.attachment_url || null,
                 notes: record.notes || null,
@@ -186,15 +229,16 @@ export function useReceiptVouchersLogic() {
         },
         onSuccess: () => {
             setIsEditModalOpen(false);
-            showToast("تم حفظ السند بنجاح 💾", "success");
+            showToast("تم حفظ سند القبض بنجاح 💾", "success");
             queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
             queryClient.invalidateQueries({ queryKey: ['accounts_report_with_lines'] }); 
             queryClient.invalidateQueries({ queryKey: ['journal_master_view'] });
+            queryClient.invalidateQueries({ queryKey: ['cash_flows_list'] });
         },
         onError: (err: any) => showToast(`خطأ أثناء الحفظ: ${err.message}`, "error")
     });
 
-    // 🛡️ دوال مساعدة للترحيل وفك الترحيل والحذف المباشر لسندات القبض
+    // 🛡️ ترحيل مباشر لسندات القبض آلياً إلى دفتر اليومية
     const directPostReceipts = async (ids: string[]) => {
         try {
             const { error } = await supabase.rpc('post_receipts_bulk', { p_ids: ids });
@@ -203,48 +247,59 @@ export function useReceiptVouchersLogic() {
 
         const { data: rvs } = await supabase.from('receipt_vouchers').select('*').in('id', ids);
         for (const rv of (rvs || [])) {
-            if (rv.status === 'معتمد') continue;
-            const { data: jh } = await supabase.from('journal_headers').insert([{
-                entry_date: rv.date || new Date().toISOString().split('T')[0],
-                description: `سند قبض رقم ${rv.receipt_number || ''}`,
+            if (rv.status === 'معتمد' || rv.is_posted) continue;
+
+            const entryDate = rv.date || new Date().toISOString().split('T')[0];
+            const amt = Number(rv.amount || 0);
+            if (amt <= 0) continue;
+
+            const { data: jh, error: jhErr } = await supabase.from('journal_headers').insert([{
+                entry_date: entryDate,
+                description: `سند قبض رقم ${rv.receipt_number || rv.id} - ${rv.notes || 'تحصيل نقدي'}`,
                 reference_id: rv.id,
                 v_type: 'receipt',
                 status: 'posted',
                 fleet_operation_id: rv.fleet_operation_id || null
             }]).select().single();
 
-            if (jh) {
-                const amt = Number(rv.amount || 0);
-                const lines: any[] = [];
-                if (amt > 0 && rv.safe_bank_acc_id) {
-                    lines.push({
-                        header_id: jh.id,
-                        account_id: rv.safe_bank_acc_id,
-                        partner_id: rv.partner_id || null,
-                        debit: amt,
-                        credit: 0,
-                        notes: `تحصيل نقدية سند قبض #${rv.receipt_number || ''}`,
-                        fleet_operation_id: rv.fleet_operation_id || null,
-                        delegate_id: rv.delegate_id || null
-                    });
+            if (jhErr || !jh) continue;
+
+            // Resolve accounts
+            const safeAccId = rv.safe_bank_acc_id || (
+                (rv.payment_method?.includes('بنك') || rv.payment_method?.includes('تحويل') || rv.payment_method?.includes('شبكة') || rv.payment_method?.includes('مدى'))
+                    ? ACC.BANK_ALRAJHI
+                    : ACC.CASH_BOX
+            );
+
+            const partnerAccId = rv.partner_acc_id || (
+                rv.delegate_id ? ACC.EMPLOYEE_CUSTODY : ACC.CUSTOMERS_AR
+            );
+
+            const lines: any[] = [
+                {
+                    header_id: jh.id,
+                    account_id: safeAccId,
+                    partner_id: rv.partner_id || null,
+                    debit: amt,
+                    credit: 0,
+                    notes: `توريد خزانة/بنك لسند قبض #${rv.receipt_number || ''}`,
+                    fleet_operation_id: rv.fleet_operation_id || null,
+                    delegate_id: rv.delegate_id || null
+                },
+                {
+                    header_id: jh.id,
+                    account_id: partnerAccId,
+                    partner_id: rv.partner_id || null,
+                    debit: 0,
+                    credit: amt,
+                    notes: rv.delegate_id ? `توريد عهدة مندوب سند قبض #${rv.receipt_number || ''}` : `سداد عميل سند قبض #${rv.receipt_number || ''}`,
+                    fleet_operation_id: rv.fleet_operation_id || null,
+                    delegate_id: rv.delegate_id || null
                 }
-                if (amt > 0 && rv.partner_acc_id) {
-                    lines.push({
-                        header_id: jh.id,
-                        account_id: rv.partner_acc_id,
-                        partner_id: rv.partner_id || null,
-                        debit: 0,
-                        credit: amt,
-                        notes: `سداد عميل سند قبض #${rv.receipt_number || ''}`,
-                        fleet_operation_id: rv.fleet_operation_id || null,
-                        delegate_id: rv.delegate_id || null
-                    });
-                }
-                if (lines.length > 0) {
-                    await supabase.from('journal_lines').insert(lines);
-                }
-            }
-            await supabase.from('receipt_vouchers').update({ status: 'معتمد' }).eq('id', rv.id);
+            ];
+
+            await supabase.from('journal_lines').insert(lines);
+            await supabase.from('receipt_vouchers').update({ status: 'معتمد', is_posted: true }).eq('id', rv.id);
         }
     };
 
@@ -260,7 +315,7 @@ export function useReceiptVouchersLogic() {
             await supabase.from('journal_lines').delete().in('header_id', headerIds);
             await supabase.from('journal_headers').delete().in('id', headerIds);
         }
-        await supabase.from('receipt_vouchers').update({ status: 'مسودة' }).in('id', ids);
+        await supabase.from('receipt_vouchers').update({ status: 'مسودة', is_posted: false }).in('id', ids);
     };
 
     const directDeleteReceipts = async (ids: string[]) => {
@@ -288,10 +343,11 @@ export function useReceiptVouchersLogic() {
         },
         onSuccess: () => {
             setSelectedIds([]);
-            showToast("تم الاعتماد والترحيل بنجاح ✅", "success");
+            showToast("تم الاعتماد والترحيل إلى شجرة الحسابات بنجاح ✅", "success");
             queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
             queryClient.invalidateQueries({ queryKey: ['journal_master_view'] });
             queryClient.invalidateQueries({ queryKey: ['accounts_report_with_lines'] });
+            queryClient.invalidateQueries({ queryKey: ['cash_flows_list'] });
         },
         onError: (err: any) => showToast(`خطأ أثناء الترحيل: ${err.message}`, "error")
     });
@@ -315,6 +371,7 @@ export function useReceiptVouchersLogic() {
             queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
             queryClient.invalidateQueries({ queryKey: ['journal_master_view'] });
             queryClient.invalidateQueries({ queryKey: ['accounts_report_with_lines'] });
+            queryClient.invalidateQueries({ queryKey: ['cash_flows_list'] });
         },
         onError: (err: any) => showToast(`خطأ أثناء الإلغاء: ${err.message}`, "error")
     });
@@ -355,7 +412,6 @@ export function useReceiptVouchersLogic() {
             const CHUNK_SIZE = 50; 
             for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
                 const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
-                // التحديث يتم للسندات (المسودة) فقط للحفاظ على نزاهة القيود
                 const { error } = await supabase.from('receipt_vouchers').update(updatePayload).in('id', chunk).eq('status', 'مسودة'); 
                 if (error) throw new Error(error.message);
             }
@@ -372,9 +428,29 @@ export function useReceiptVouchersLogic() {
         onError: (err: any) => showToast(`خطأ أثناء التصحيح: ${err.message}`, 'error')
     });
 
-    // التنقل الذكي بالكيبورد داخل الجدول
+    // Export to Excel
+    const exportToExcel = () => {
+        const wb = XLSX.utils.book_new();
+        const rows = allFiltered.map((rv, idx) => ({
+            '#': idx + 1,
+            'رقم السند': rv.receipt_number || '---',
+            'التاريخ': rv.date || '---',
+            'العميل / الجهة': rv.partners?.name || (rv.invoices?.invoice_number ? `فاتورة #${rv.invoices.invoice_number}` : (rv.notes || 'عميل نقدي')),
+            'المبلغ (ر.س)': Number(rv.amount || 0),
+            'طريقة الدفع': rv.payment_method || 'نقدي',
+            'الحالة': ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(rv.status || '').trim().toLowerCase()) || rv.is_posted ? 'معتمد' : 'مسودة',
+            'المرجع': rv.reference_number || '---',
+            'المندوب': rv.delegate_id ? 'نعم (عهدة مندوب)' : '---',
+            'البيان': rv.notes || '---'
+        }));
+
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "سندات_القبض");
+        XLSX.writeFile(wb, `Receipt_Vouchers_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    // التنقل بالكيبورد
     const handleTableKeyDown = (e: React.KeyboardEvent) => {
-        if (isEditModalOpen || isBulkFixModalOpen) return; 
+        if (isEditModalOpen || isBulkFixModalOpen || isPrintModalOpen) return; 
         switch (e.key) {
             case 'ArrowDown': e.preventDefault(); setFocusedIndex(prev => (prev < receipts.length - 1 ? prev + 1 : prev)); break;
             case 'ArrowUp': e.preventDefault(); setFocusedIndex(prev => (prev > 0 ? prev - 1 : prev)); break;
@@ -391,6 +467,23 @@ export function useReceiptVouchersLogic() {
         rowsPerPage, setRowsPerPage, kpis, isEditModalOpen, setIsEditModalOpen,
         currentRecord, setCurrentRecord, 
         
+        // Filters
+        statusFilter, setStatusFilter,
+        categoryFilter, setCategoryFilter,
+        dateFrom, setDateFrom,
+        dateTo, setDateTo,
+
+        // Print modal
+        isPrintModalOpen, setIsPrintModalOpen,
+        selectedRecordForPrint, setSelectedRecordForPrint,
+        handlePrintVoucher: (record: any) => {
+            setSelectedRecordForPrint(record);
+            setIsPrintModalOpen(true);
+        },
+
+        // Export
+        exportToExcel,
+        
         // 🚀 أدوات ميزة التصحيح المجمع
         delegates, fleetOperations,
         isBulkFixModalOpen, setIsBulkFixModalOpen,
@@ -404,7 +497,7 @@ export function useReceiptVouchersLogic() {
         }, 
         handleEdit: (rec: any) => { 
             if (canUserEdit(rec)) { setCurrentRecord(rec); setIsEditModalOpen(true); }
-            else showToast("لا يمكن تعديل سند معتمد", "warning");
+            else showToast("لا يمكن تعديل سند معتمد. قم بفك الترحيل أولاً.", "warning");
         }, 
         
         handleSave: (record: any) => {
@@ -414,27 +507,25 @@ export function useReceiptVouchersLogic() {
             saveMutation.mutate(record);
         }, 
         handlePostSelected: () => { 
-            if(permissions.canPost) {
+            if (permissions.canPost) {
                 postMutation.mutate(); 
             } else {
-                import('@/lib/audit').then(({ logCustomAuditEvent }) => logCustomAuditEvent('receipt_vouchers', 'FAILED_POST', null, null, { error: "ليس لديك صلاحية الترحيل" }));
                 showToast("ليس لديك صلاحية الترحيل", "error");
             }
         }, 
         handleUnpostSelected: () => { 
-            if(permissions.canUnpost) {
+            if (permissions.canUnpost) {
                 unpostMutation.mutate(); 
             } else {
-                import('@/lib/audit').then(({ logCustomAuditEvent }) => logCustomAuditEvent('receipt_vouchers', 'FAILED_UNPOST', null, null, { error: "ليس لديك صلاحية فك الترحيل" }));
                 showToast("ليس لديك صلاحية فك الترحيل", "error");
             }
         },
         handleDeleteSelected: () => { 
-            const posted = receipts.filter((r:any) => selectedIds.includes(String(r.id)) && (r.status === 'مرحل' || r.status === 'معتمد' || r.is_posted));
+            const posted = receipts.filter((r: any) => selectedIds.includes(String(r.id)) && (r.status === 'مرحل' || r.status === 'معتمد' || r.is_posted));
             if (posted.length > 0) {
                 return showToast("⚠️ لا يمكن حذف سجلات مرحلة. يرجى فك الترحيل أولاً.", "error");
             }
-            if(confirm("تأكيد الحذف النهائي؟")) deleteMutation.mutate(); 
+            if (confirm("تأكيد الحذف النهائي للسندات المحددة؟")) deleteMutation.mutate(); 
         }, 
         
         focusedIndex, setFocusedIndex, handleTableKeyDown,

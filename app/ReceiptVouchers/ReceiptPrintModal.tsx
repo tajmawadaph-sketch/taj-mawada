@@ -1,12 +1,18 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { formatCurrency, formatDate, tafqeet } from '@/lib/helpers'; 
-import { QRCodeSVG } from 'qrcode.react'; 
+import { formatCurrency, formatDate, tafqeet } from '@/lib/helpers';
+import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '@/lib/supabase';
 
-export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
-    const [mounted, setMounted] = useState(false); 
-    const [creatorInfo, setCreatorInfo] = useState<{ fullName: string }>({ fullName: 'المحاسب المعتمد' }); 
+interface ReceiptPrintModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    record: any;
+}
+
+export default function ReceiptPrintModal({ isOpen, onClose, record }: ReceiptPrintModalProps) {
+    const [mounted, setMounted] = useState(false);
+    const [creatorInfo, setCreatorInfo] = useState<{ fullName: string }>({ fullName: 'المحاسب المعتمد' });
     const [printFormat, setPrintFormat] = useState<'a4' | 'thermal'>('a4');
 
     useEffect(() => { setMounted(true); }, []);
@@ -28,32 +34,34 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                     fetchedFullName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || '';
                 }
 
-                setCreatorInfo({ 
-                    fullName: fetchedFullName || 'المحاسب المعتمد' 
+                setCreatorInfo({
+                    fullName: fetchedFullName || 'أمين الخزينة المعتمد'
                 });
-            } catch (err) { console.error("Error", err); }
+            } catch (err) {
+                console.error("Error fetching creator info", err);
+            }
         };
         fetchCreatorInfo();
-    }, [isOpen, record?.created_by]);
+    }, [isOpen, record]);
 
     if (!isOpen || !mounted || !record) return null;
 
     const handlePrint = () => {
-        document.title = record?.voucher_number ? `سند_صرف_${record.voucher_number}` : 'سند_صرف';
+        document.title = record?.receipt_number ? `سند_قبض_${record.receipt_number}` : 'سند_قبض';
         window.print();
     };
 
-    const finalFullName = creatorInfo?.fullName || 'المحاسب المعتمد';
+    const finalFullName = creatorInfo?.fullName || 'أمين الخزينة المعتمد';
     const creationDateObj = record?.date ? new Date(record.date) : new Date();
-    const creationTime = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
     const creationDate = formatDate(record.date);
-    
+    const creationTime = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+
     const amountNum = Number(record.amount || 0);
     const amountInWords = tafqeet(amountNum);
-    const payeeName = record.payee?.name || record.payee_name || record.partner?.name || 'مورد / جهة صرف';
+    const partnerDisplayName = record.partners?.name || record.partner_name || (record.invoices?.invoice_number ? `عميل فاتورة #${record.invoices.invoice_number}` : (record.notes || 'عميل نقدي'));
 
-    // QR Code for payment voucher
-    const qrData = `صيدلية تاج المودة البيطرية\nسند صرف نقدية رقم: ${record.voucher_number || '---'}\nالتاريخ: ${creationDate}\nالمبلغ: ${amountNum} ر.س\nالمستفيد: ${payeeName}\nطريقة الصرف: ${record.payment_method || 'نقدي'}`;
+    // QR Verification Text (ZATCA & Luxury Verification standard)
+    const qrData = `صيدلية تاج المودة البيطرية\nسند قبض رقم: ${record.receipt_number || '---'}\nالتاريخ: ${creationDate}\nالمبلغ: ${amountNum} ر.س\nالعميل: ${partnerDisplayName}\nطريقة الدفع: ${record.payment_method || 'نقدي'}`;
 
     return (
         <div style={{
@@ -88,7 +96,7 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                 }
             `}</style>
 
-            {/* Controls Bar */}
+            {/* Action Bar */}
             <div className="no-print-controls" style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -177,10 +185,10 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                 </button>
             </div>
 
-            {/* Printable Content */}
+            {/* Printable Area */}
             <div className="print-area">
                 {printFormat === 'a4' ? (
-                    /* A4 Luxury Format */
+                    /* A4 Official Format */
                     <div style={{
                         width: '210mm',
                         minHeight: '297mm',
@@ -224,15 +232,15 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                                 <div style={{ textAlign: 'left' }}>
                                     <div style={{
                                         display: 'inline-block',
-                                        border: '2px solid #A8573C',
+                                        border: '2px solid #C29B62',
                                         borderRadius: '12px',
                                         padding: '8px 14px',
                                         textAlign: 'center',
                                         background: '#FDFBF7'
                                     }}>
                                         <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748b' }}>رقم السند</div>
-                                        <div style={{ fontSize: '15px', fontWeight: 900, color: '#A8573C', marginTop: '2px' }}>
-                                            {record.voucher_number || '---'}
+                                        <div style={{ fontSize: '15px', fontWeight: 900, color: '#1E130B', marginTop: '2px' }}>
+                                            {record.receipt_number || '---'}
                                         </div>
                                     </div>
                                 </div>
@@ -242,23 +250,23 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                             <div style={{ textAlign: 'center', marginBottom: '25px' }}>
                                 <div style={{
                                     display: 'inline-block',
-                                    background: 'linear-gradient(135deg, #A8573C 0%, #C29B62 100%)',
+                                    background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
                                     color: '#FFFFFF',
                                     padding: '8px 40px',
                                     borderRadius: '50px',
                                     fontSize: '18px',
                                     fontWeight: 900,
                                     letterSpacing: '1px',
-                                    boxShadow: '0 4px 15px rgba(168, 87, 60, 0.3)'
+                                    boxShadow: '0 4px 15px rgba(194, 155, 98, 0.3)'
                                 }}>
-                                    سند صرف نقدية رسمي (Official Payment Voucher)
+                                    سند قبض نقدية رسمي (Official Receipt Voucher)
                                 </div>
                             </div>
 
                             {/* Amount Highlight Box */}
                             <div style={{
                                 background: '#FDFBF7',
-                                border: '1.5px solid rgba(168, 87, 60, 0.35)',
+                                border: '1.5px solid rgba(194, 155, 98, 0.35)',
                                 borderRadius: '16px',
                                 padding: '16px 24px',
                                 display: 'flex',
@@ -267,15 +275,15 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                                 marginBottom: '24px'
                             }}>
                                 <div>
-                                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#64748b' }}>المبلغ المصروف رقماً:</span>
-                                    <div style={{ fontSize: '28px', fontWeight: 900, color: '#A8573C', marginTop: '4px' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#64748b' }}>المبلغ المستلم رقماً:</span>
+                                    <div style={{ fontSize: '28px', fontWeight: 900, color: '#059669', marginTop: '4px' }}>
                                         {formatCurrency(amountNum)}
                                     </div>
                                 </div>
                                 <div style={{ textAlign: 'left' }}>
-                                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748b' }}>طريقة الصرف:</span>
+                                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748b' }}>طريقة الاستلام:</span>
                                     <div style={{ fontSize: '16px', fontWeight: 900, color: '#1E130B', marginTop: '4px' }}>
-                                        {record.payment_method || 'نقدي'}
+                                        {record.payment_method || 'نقدي (كاش)'}
                                     </div>
                                 </div>
                             </div>
@@ -290,9 +298,9 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                     <tbody>
                                         <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.15)', background: '#FDFBF7' }}>
-                                            <td style={{ padding: '12px 18px', fontWeight: 800, color: '#64748b', width: '22%' }}>يُصرف إلى المكرم:</td>
+                                            <td style={{ padding: '12px 18px', fontWeight: 800, color: '#64748b', width: '22%' }}>استلمنا من المكرم:</td>
                                             <td style={{ padding: '12px 18px', fontWeight: 900, color: '#1E130B', fontSize: '15px' }} colSpan={3}>
-                                                {payeeName}
+                                                {partnerDisplayName}
                                             </td>
                                         </tr>
                                         <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.15)' }}>
@@ -306,15 +314,31 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                                             <td style={{ padding: '12px 18px', fontWeight: 800, color: '#1E130B' }}>
                                                 {creationDate} ({creationTime})
                                             </td>
-                                            <td style={{ padding: '12px 18px', fontWeight: 800, color: '#64748b', width: '20%' }}>خصماً من حساب:</td>
+                                            <td style={{ padding: '12px 18px', fontWeight: 800, color: '#64748b', width: '20%' }}>رقم المرجع / الإشعار:</td>
                                             <td style={{ padding: '12px 18px', fontWeight: 800, color: '#1E130B' }}>
-                                                {record.credit_account?.name || 'الخزينة الرئيسية'}
+                                                {record.reference_number || '---'}
                                             </td>
                                         </tr>
+                                        {record.invoices?.invoice_number && (
+                                            <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.15)' }}>
+                                                <td style={{ padding: '12px 18px', fontWeight: 800, color: '#64748b' }}>سداد فاتورة مبيعات:</td>
+                                                <td style={{ padding: '12px 18px', fontWeight: 800, color: '#059669' }} colSpan={3}>
+                                                    فاتورة رقم #{record.invoices.invoice_number}
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {record.fleet_operation_id && (
+                                            <tr style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.15)' }}>
+                                                <td style={{ padding: '12px 18px', fontWeight: 800, color: '#64748b' }}>توريد عهدة رحلة أسطول:</td>
+                                                <td style={{ padding: '12px 18px', fontWeight: 800, color: '#8c6b32' }} colSpan={3}>
+                                                    رحلة أسطول رقم {record.fleet_operation_id}
+                                                </td>
+                                            </tr>
+                                        )}
                                         <tr>
                                             <td style={{ padding: '12px 18px', fontWeight: 800, color: '#64748b' }}>وذلك عن / البيان:</td>
                                             <td style={{ padding: '12px 18px', fontWeight: 800, color: '#1E130B' }} colSpan={3}>
-                                                {record.description || record.notes || 'صرف دفعة نقدية معتمدة'}
+                                                {record.notes || 'سداد دفعة نقدية لحساب الصيدلية'}
                                             </td>
                                         </tr>
                                     </tbody>
@@ -335,7 +359,7 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                             }}>
                                 <div>
                                     <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748b', marginBottom: '40px' }}>
-                                        المُستلم / المستفيد
+                                        المُسلّم / العميل
                                     </div>
                                     <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>
                                         ................................
@@ -343,7 +367,7 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748b', marginBottom: '40px' }}>
-                                        أمين الصندوق
+                                        أمين الخزينة / المستلم
                                     </div>
                                     <div style={{ fontSize: '13px', fontWeight: 900, color: '#1E130B' }}>
                                         {finalFullName}
@@ -351,10 +375,10 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                                 </div>
                                 <div>
                                     <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748b', marginBottom: '40px' }}>
-                                        اعتماد المدير المالي
+                                        اعتماد الإدارة المالية
                                     </div>
                                     <div style={{ fontSize: '13px', fontWeight: 900, color: '#059669' }}>
-                                        معتمد نظامياً ✓
+                                        معتمد إلكترونياً ✓
                                     </div>
                                 </div>
                             </div>
@@ -367,7 +391,7 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                                 borderTop: '1px solid rgba(194, 155, 98, 0.15)',
                                 paddingTop: '10px'
                             }}>
-                                هذا السند صادر إلكترونياً من نظام تاج المودة لإدارة الصيدليات والأسطول ومعتمد برمز QR المشفر.
+                                هذا السند صادر إلكترونياً من نظام تاج المودة لإدارة الصيدليات والأسطول ومعتمد نظامياً برمز QR المشفر.
                             </div>
                         </div>
                     </div>
@@ -393,33 +417,42 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                         <div style={{ fontSize: '11px', color: '#555' }}>
                             Taj Al-Mawadah Pharmacy
                         </div>
+                        <div style={{ fontSize: '10px', color: '#666', margin: '4px 0' }}>
+                            س.ت: 1010000000 | ضريبي: 300000000000003
+                        </div>
                         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '8px 0', fontWeight: 'bold', fontSize: '14px' }}>
-                            سند صرف نقدية
+                            سند قبض نقدية
                         </div>
 
                         <table style={{ width: '100%', fontSize: '11px', textAlign: 'right', marginBottom: '8px' }}>
                             <tbody>
                                 <tr>
                                     <td style={{ color: '#555' }}>رقم السند:</td>
-                                    <td style={{ fontWeight: 'bold' }}>{record.voucher_number || '---'}</td>
+                                    <td style={{ fontWeight: 'bold' }}>{record.receipt_number || '---'}</td>
                                 </tr>
                                 <tr>
                                     <td style={{ color: '#555' }}>التاريخ:</td>
                                     <td>{creationDate} {creationTime}</td>
                                 </tr>
                                 <tr>
-                                    <td style={{ color: '#555' }}>المستفيد:</td>
-                                    <td style={{ fontWeight: 'bold' }}>{payeeName}</td>
+                                    <td style={{ color: '#555' }}>المستلم من:</td>
+                                    <td style={{ fontWeight: 'bold' }}>{partnerDisplayName}</td>
                                 </tr>
                                 <tr>
-                                    <td style={{ color: '#555' }}>طريقة الصرف:</td>
+                                    <td style={{ color: '#555' }}>طريقة الدفع:</td>
                                     <td>{record.payment_method || 'نقدي'}</td>
                                 </tr>
+                                {record.reference_number && (
+                                    <tr>
+                                        <td style={{ color: '#555' }}>المرجع:</td>
+                                        <td>{record.reference_number}</td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
 
                         <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', margin: '8px 0' }}>
-                            <div style={{ fontSize: '11px', color: '#555' }}>المبلغ المصروف:</div>
+                            <div style={{ fontSize: '11px', color: '#555' }}>المبلغ المستلم:</div>
                             <div style={{ fontSize: '20px', fontWeight: 'bold', marginTop: '2px' }}>
                                 {formatCurrency(amountNum)}
                             </div>
@@ -428,9 +461,9 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                             </div>
                         </div>
 
-                        {(record.description || record.notes) && (
+                        {record.notes && (
                             <div style={{ fontSize: '10px', textAlign: 'right', marginBottom: '8px', color: '#444' }}>
-                                <b>البيان:</b> {record.description || record.notes}
+                                <b>البيان:</b> {record.notes}
                             </div>
                         )}
 
@@ -439,7 +472,10 @@ export default function PaymentPrintModal({ isOpen, onClose, record }: any) {
                         </div>
 
                         <div style={{ fontSize: '10px', color: '#555', marginTop: '8px' }}>
-                            المحاسب: {finalFullName}
+                            المستلم: {finalFullName}
+                        </div>
+                        <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
+                            شكراً لتعاملكم معنا
                         </div>
                     </div>
                 )}

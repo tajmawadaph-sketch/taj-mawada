@@ -3,86 +3,61 @@
 import React, { useState, useEffect, useMemo } from 'react'; 
 import { createPortal } from 'react-dom'; 
 import { usePaymentVouchersLogic } from './payment_vouchers_logic';
-import { THEME } from '@/lib/theme';
 import SmartCombo from '@/components/SmartCombo'; 
-import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
-import { usePermissions } from '@/lib/PermissionsContext'; 
-import SecureAction from '@/components/SecureAction';      
-import { formatCurrency } from '@/lib/helpers';
+import { formatCurrency, formatDate } from '@/lib/helpers';
 import MasterPage from '@/components/MasterPage';
+import PrintHeader from '@/components/PrintHeader';
 import RawasiSmartTable from '@/components/rawasismarttable';
 import { useConfirm } from '@/components/ConfirmContext';
-
-
 import PaymentVoucherModal from './PaymentVoucherModal'; 
 import PaymentPrintModal from './PaymentPrintModal'; 
 import LoadingScreen from '@/components/LoadingScreen';
 
 export default function PaymentVouchersPage() {
   const { showConfirm } = useConfirm();
-
-    
   const logic = usePaymentVouchersLogic();
 
-  // 🚀 اختصار الحفظ (Ctrl + Enter)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (logic.isModalOpen && e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault();
-        if (!logic.isSaving) logic.handleSaveVoucher();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [logic.isModalOpen, logic.isSaving]);
-
-  // 🚀 اختصار إضافة جديد (Alt + N)
+  // Keyboard shortcut: Alt+N for new voucher
   useEffect(() => {
     const handleAddShortcut = (e: KeyboardEvent) => {
-      if (!logic.isModalOpen && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
+      if (!logic.state.isEditModalOpen && e.altKey && (e.code === 'KeyN' || e.key.toLowerCase() === 'n' || e.key === 'ى')) {
         e.preventDefault();
-        logic.handleAddVoucher();
+        logic.actions.handleAddNew();
       }
     };
     window.addEventListener('keydown', handleAddShortcut);
     return () => window.removeEventListener('keydown', handleAddShortcut);
-  }, [logic.isModalOpen]);
+  }, [logic.state.isEditModalOpen]);
 
   const [mounted, setMounted] = useState(false); 
-  const { can, loading: permsLoading } = usePermissions();
-
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
 
   useEffect(() => setMounted(true), []);
 
-  // 🚀 التعديل هنا: استخراج *جميع* العناصر المفلترة (وليس الصفحة الحالية فقط) لتحديد الكل
   const allFilteredIds = useMemo(() => {
     return logic.data.map((v: any) => String(v.id));
   }, [logic.data]);
 
-  // التحقق مما إذا كانت كل العناصر المفلترة محددة
   const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every((id: string) => logic.state.selectedIds.includes(id));
 
-  // 🚀 مصفوفة الأعمدة للجدول
+  // Table Columns
   const voucherColumns = useMemo(() => [
     {
       header: (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <input 
                   type="checkbox" 
-                  className="custom-checkbox"
                   checked={isAllSelected}
-                  title="تحديد كل السجلات المفلترة"
+                  title="تحديد كل السجلات"
                   onChange={() => {
                       if (isAllSelected) {
-                          // إلغاء تحديد جميع السجلات المفلترة
                           logic.actions.setSelectedIds(logic.state.selectedIds.filter((id: string) => !allFilteredIds.includes(id)));
                       } else {
-                          // تحديد جميع السجلات المفلترة
                           logic.actions.setSelectedIds([...new Set([...logic.state.selectedIds, ...allFilteredIds])]);
                       }
                   }}
+                  style={{ width: '16px', height: '16px', accentColor: '#C29B62', cursor: 'pointer' }}
               />
           </div>
       ), 
@@ -94,429 +69,725 @@ export default function PaymentVouchersPage() {
           <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
               <input 
                   type="checkbox" 
-                  className="custom-checkbox" 
                   checked={isSelected} 
                   onChange={(e) => {
                       e.stopPropagation();
-                      if (isSelected) logic.actions.setSelectedIds(logic.state.selectedIds.filter((i:any) => i !== String(row.id))); 
+                      if (isSelected) logic.actions.setSelectedIds(logic.state.selectedIds.filter((i: any) => i !== String(row.id))); 
                       else logic.actions.setSelectedIds([...logic.state.selectedIds, String(row.id)]); 
                   }} 
+                  style={{ width: '16px', height: '16px', accentColor: '#C29B62', cursor: 'pointer' }}
               />
           </div>
         );
       }
     },
-    { header: 'رقم السند', accessor: 'voucher_number', render: (row: any) => row ? <b style={{ color: THEME.primary, fontSize: '14px' }}>#{row.voucher_number}</b> : null },
-    { header: 'التاريخ', accessor: 'date', render: (row: any) => row ? <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>{row.date}</span> : null },
     { 
-      header: 'المستفيد', 
-      accessor: 'payee_name', 
-      render: (row: any) => row ? <b style={{ fontWeight: 900, color: '#1e293b' }}>👤 {row.payee?.name || row.payee_name || '---'}</b> : null 
+      header: 'رقم السند', 
+      accessor: 'voucher_number', 
+      render: (row: any) => row ? (
+        <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '13px' }}>
+          #{row.voucher_number}
+        </div>
+      ) : null 
     },
     { 
-      header: 'الحساب الدائن (الخزينة)', 
+      header: 'التاريخ', 
+      accessor: 'date', 
+      render: (row: any) => row ? <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>{formatDate(row.date)}</span> : null 
+    },
+    { 
+      header: 'المستفيد / جهة الصرف', 
+      accessor: 'payee_name', 
+      render: (row: any) => row ? (
+        <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '13px' }}>
+          👤 {row.payee?.name || row.payee_name || 'جهة غير محددة'}
+        </div>
+      ) : null 
+    },
+    { 
+      header: 'طريقة الصرف', 
+      accessor: 'payment_method', 
+      render: (row: any) => {
+        if (!row) return null;
+        const method = row.payment_method || 'نقدي';
+        const isBank = method.includes('بنك') || method.includes('تحويل') || method.includes('شبكة') || method.includes('مدى');
+        return (
+          <span style={{
+            background: isBank ? 'rgba(30, 19, 11, 0.06)' : 'rgba(194, 155, 98, 0.12)',
+            color: isBank ? '#1E130B' : '#8c6b32',
+            padding: '4px 10px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 800
+          }}>
+            {isBank ? '🏦 ' : '💵 '}{method}
+          </span>
+        );
+      }
+    },
+    { 
+      header: 'حساب الخزينة (دائن)', 
       accessor: 'credit_account_id', 
       render: (row: any) => row ? (
-        <span style={{ fontSize:'11px', background: 'rgba(255, 255, 255, 0.6)', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>
-          🏦 {row.credit_account?.name || '---'} 
+        <span style={{ fontSize: '11px', background: '#FDFBF7', border: '1px solid rgba(194, 155, 98, 0.25)', padding: '4px 8px', borderRadius: '6px', color: '#1E130B', fontWeight: 800 }}>
+          🏦 {row.credit_account?.name || 'الخزينة الرئيسية'} 
         </span>
       ) : null 
     },
     { 
-      header: 'الحساب المدين', 
+      header: 'حساب التوجيه (مدين)', 
       accessor: 'debit_account_id', 
       render: (row: any) => row ? (
-        <span style={{ fontSize:'11px', background: 'rgba(255, 255, 255, 0.6)', padding: '4px 10px', borderRadius: '8px', color: '#475569', fontWeight: 900 }}>
-          🧾 {row.debit_account?.name || '---'}
+        <span style={{ fontSize: '11px', background: '#FDFBF7', border: '1px solid rgba(194, 155, 98, 0.25)', padding: '4px 8px', borderRadius: '6px', color: '#1E130B', fontWeight: 800 }}>
+          🧾 {row.debit_account?.name || 'حساب المصروف/المورد'}
         </span>
       ) : null 
     },
-    { header: 'البيان', accessor: 'description', render: (row: any) => row ? <span style={{ fontSize:'12px', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>{row.description}</span> : null },
-    { header: 'المبلغ', accessor: 'amount', render: (row: any) => row ? <span style={{ color: THEME.danger, fontWeight: 900, fontSize: '15px' }}>{formatCurrency(row.amount)}</span> : null },
+    { 
+      header: 'البيان', 
+      accessor: 'description', 
+      render: (row: any) => row ? (
+        <span style={{ fontSize: '12px', color: '#64748b', maxWidth: '180px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>
+          {row.description || row.notes || '---'}
+        </span>
+      ) : null 
+    },
+    { 
+      header: 'المبلغ المصروف', 
+      accessor: 'amount', 
+      render: (row: any) => row ? <span style={{ color: '#A8573C', fontWeight: 900, fontSize: '15px' }}>{formatCurrency(row.amount)}</span> : null 
+    },
     {
       header: 'الحالة',
       accessor: 'is_posted',
       render: (row: any) => {
         if (!row) return null;
         const isPosted = row.is_posted === true || ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(row.status || '').trim().toLowerCase());
-        return isPosted ? 
-          <span style={{ display: 'inline-block', background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معتمد ✅</span> : 
-          <span style={{ display: 'inline-block', background: '#fff7ed', color: '#d97706', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 900 }}>معلق ⏳</span>;
+        return (
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '4px 12px',
+            borderRadius: '20px',
+            fontSize: '11px',
+            fontWeight: 900,
+            background: isPosted ? 'rgba(5, 150, 105, 0.1)' : 'rgba(217, 119, 6, 0.1)',
+            color: isPosted ? '#059669' : '#b45309',
+            border: isPosted ? '1px solid rgba(5, 150, 105, 0.25)' : '1px solid rgba(217, 119, 6, 0.25)'
+          }}>
+            <span>{isPosted ? '● مرحل بالدفاتر' : '○ مسودة قيد التدقيق'}</span>
+          </div>
+        );
       }
     },
     {
       header: 'الإجراءات',
       accessor: 'actions',
-      minWidth: '220px',
       render: (row: any) => {
         if (!row) return null;
         const isPosted = row.is_posted === true || ['posted', 'معتمد', 'مرحل', 'approved'].includes(String(row.status || '').trim().toLowerCase());
         return (
-          <div 
-            className="table-actions-container" 
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'row', 
-              flexWrap: 'nowrap', 
-              gap: '5px', 
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              minWidth: '205px' 
-            }}
-          >
-            {/* 🚀 زر الترحيل وفك الترحيل الفوري بجانب السند */}
-            <SecureAction module="payments" action="post">
-              {isPosted ? (
-                <button
-                  type="button"
-                  disabled={logic.actions.isProcessing}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    logic.actions.handleUnpostSingle(row.id);
-                  }}
-                  className="table-action-btn"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%)',
-                    color: '#b45309',
-                    border: '1px solid rgba(245, 158, 11, 0.4)',
-                    padding: '5px 8px',
-                    borderRadius: '8px',
-                    fontWeight: 800,
-                    fontSize: '11px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    cursor: logic.actions.isProcessing ? 'wait' : 'pointer',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    opacity: logic.actions.isProcessing ? 0.6 : 1
-                  }}
-                  title="فك ترحيل هذا السند وإعادته لمسودة"
-                >
-                  <span>↩️</span>
-                  <span>فك</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={logic.actions.isProcessing}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    logic.actions.handlePostSingle(row.id);
-                  }}
-                  className="table-action-btn"
-                  style={{
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    color: 'white',
-                    border: 'none',
-                    padding: '5px 9px',
-                    borderRadius: '8px',
-                    fontWeight: 800,
-                    fontSize: '11px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    cursor: logic.actions.isProcessing ? 'wait' : 'pointer',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
-                    opacity: logic.actions.isProcessing ? 0.6 : 1
-                  }}
-                  title="اعتماد وترحيل سند الصرف محاسبياً"
-                >
-                  <span>🚀</span>
-                  <span>ترحيل</span>
-                </button>
-              )}
-            </SecureAction>
-
-            {/* ✏️ زر تعديل السند المباشر (للسندات المعلقة) */}
-            {!row.is_posted && (
-              <SecureAction module="payments" action="edit">
-                <button 
-                  type="button"
-                  className="table-action-btn edit-btn" 
-                  style={{
-                    background: 'linear-gradient(135deg, #1C73AB 0%, #2891C8 100%)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '5px 8px',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    logic.actions.handleEditRow(row);
-                  }}
-                  title="تعديل السند"
-                >
-                  <span>✏️</span>
-                  <span>تعديل</span>
-                </button>
-              </SecureAction>
-            )}
-
-            {/* 🗑️ زر حذف السند المباشر (للسندات المعلقة) */}
-            {!row.is_posted && (
-              <SecureAction module="payments" action="delete">
-                <button 
-                  type="button"
-                  className="table-action-btn delete-btn" 
-                  style={{
-                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '5px 8px',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    showConfirm({
-                      title: 'حذف سند الصرف',
-                      message: `هل أنت متأكد من حذف سند الصرف رقم (#${row.voucher_number}) بمبلغ (${formatCurrency(row.amount)}) نهائياً؟`,
-                      type: 'danger',
-                      onConfirm: () => logic.actions.handleDeleteSingle(row.id)
-                    });
-                  }}
-                  title="حذف السند"
-                >
-                  <span>🗑️</span>
-                  <span>حذف</span>
-                </button>
-              </SecureAction>
-            )}
-
-            {/* 🖨️ زر طباعة السند */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+            {/* Quick Print button */}
             <button 
               type="button"
-              onClick={(e) => { e.stopPropagation(); setPrintData(row); setIsPrintModalOpen(true); }} 
-              className="table-action-btn"
+              onClick={() => { setPrintData(row); setIsPrintModalOpen(true); }} 
               style={{ 
-                background: 'rgba(255, 255, 255, 0.7)', 
-                border: '1px solid rgba(28, 115, 171, 0.2)', 
-                color: '#1C73AB',
-                padding: '5px 8px', 
+                background: '#FFFFFF', 
+                border: '1px solid rgba(194, 155, 98, 0.35)', 
+                color: '#1E130B',
+                padding: '5px 10px', 
                 borderRadius: '8px', 
                 cursor: 'pointer', 
-                fontSize: '12px',
+                fontSize: '11px',
                 fontWeight: 800,
                 display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                whiteSpace: 'nowrap',
-                flexShrink: 0
+                gap: '4px'
               }}
               title="طباعة السند"
             >
-              <span>🖨️</span>
+              <span>🖨️ طباعة</span>
             </button>
+
+            {/* Quick Post / Unpost button */}
+            {isPosted ? (
+              <button
+                type="button"
+                disabled={logic.actions.isProcessing}
+                onClick={() => logic.actions.handleUnpostSingle(row.id)}
+                style={{
+                  background: 'rgba(217, 119, 6, 0.1)',
+                  color: '#b45309',
+                  border: '1px solid rgba(217, 119, 6, 0.3)',
+                  padding: '5px 8px',
+                  borderRadius: '8px',
+                  fontWeight: 800,
+                  fontSize: '11px',
+                  cursor: 'pointer'
+                }}
+                title="فك الترحيل"
+              >
+                ↩️ فك
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={logic.actions.isProcessing}
+                onClick={() => logic.actions.handlePostSingle(row.id)}
+                style={{
+                  background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '5px 8px',
+                  borderRadius: '8px',
+                  fontWeight: 800,
+                  fontSize: '11px',
+                  cursor: 'pointer'
+                }}
+                title="اعتماد وترحيل"
+              >
+                🚀 ترحيل
+              </button>
+            )}
+
+            {/* Edit */}
+            {!isPosted && (
+              <button 
+                type="button"
+                style={{
+                  background: '#FDFBF7',
+                  border: '1px solid rgba(194, 155, 98, 0.25)',
+                  color: '#8c6b32',
+                  borderRadius: '8px',
+                  padding: '5px 8px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+                onClick={() => logic.actions.handleEditRow(row)}
+                title="تعديل السند"
+              >
+                ✏️
+              </button>
+            )}
+
+            {/* Delete */}
+            {!isPosted && (
+              <button 
+                type="button"
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  color: '#ef4444',
+                  borderRadius: '8px',
+                  padding: '5px 8px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+                onClick={() => {
+                  showConfirm({
+                    title: 'حذف سند الصرف',
+                    message: `هل أنت متأكد من حذف سند الصرف رقم (#${row.voucher_number}) بمبلغ (${formatCurrency(row.amount)}) نهائياً؟`,
+                    type: 'danger',
+                    onConfirm: () => logic.actions.handleDeleteSingle(row.id)
+                  });
+                }}
+                title="حذف السند"
+              >
+                🗑️
+              </button>
+            )}
           </div>
         );
       }
     }
-  ], [logic.state.selectedIds, isAllSelected, allFilteredIds, logic.actions]); 
-
-  // 🚀 القائمة الجانبية للأزرار الإجرائية
-  const sidebarActions = useMemo(() => {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <SecureAction module="payments" action="create">
-          <button className="btn-main-glass gold" onClick={logic.actions.handleAddNew}>➕ إصدار سند صرف</button>
-        </SecureAction>
-
-        {logic.state.selectedIds.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '5px', paddingTop: '15px', borderTop: '1px dashed rgba(255,255,255,0.2)' }}>            
-            <div style={{ textAlign: 'center', marginBottom: '5px' }}>
-              <p style={{ fontSize: '11px', color: '#475569', fontWeight: 900, margin: 0 }}>
-                تم تحديد ({logic.state.selectedIds.length}) سجل
-              </p>
-              <button 
-                onClick={() => logic.actions.setSelectedIds([])}
-                style={{ background: 'none', border: 'none', color: THEME.primary, fontSize: '10px', fontWeight: 900, cursor: 'pointer', textDecoration: 'underline' }}
-              >
-                إلغاء التحديد
-              </button>
-            </div>
-            
-            {/* 🚀 الزرار الجديد بتاع التصحيح المجمع */}
-            <SecureAction module="payments" action="edit">
-              <button className="btn-main-glass blue" onClick={() => logic.actions.setIsBulkFixModalOpen(true)}>🛠️ تصحيح التوجيه مجمع</button>
-            </SecureAction>
-
-            {logic.state.selectedIds.length === 1 && (
-              <SecureAction module="payments" action="edit">
-                <button className="btn-main-glass white" onClick={logic.actions.handleEditSelected}>✏️ تعديل السجل</button>
-              </SecureAction>
-            )}
-            <SecureAction module="payments" action="post">
-              <button className="btn-main-glass green" onClick={logic.actions.handlePostSelected}>🚀 اعتماد وترحيل</button>
-            </SecureAction>
-            <SecureAction module="payments" action="post">
-              <button className="btn-main-glass yellow" onClick={logic.actions.handleUnpostSelected}>↩️ فك الترحيل</button>
-            </SecureAction>
-            <SecureAction module="payments" action="delete">
-              <button className="btn-main-glass red" onClick={() => {
-                  showConfirm({
-                      title: 'حذف السجلات نهائياً',
-                      message: `هل أنت متأكد من حذف عدد (${logic.state.selectedIds.length}) سند صرف بشكل نهائي؟ هذا الإجراء لا يمكن التراجع عنه.`,
-                      type: 'danger',
-                      onConfirm: () => {
-                          logic.actions.handleDeleteSelected();
-                      }
-                  });
-              }}>
-                🗑️ حذف نهائي
-              </button>
-            </SecureAction>
-          </div>
-        )}
-      </div>
-    );
-  }, [logic.state.selectedIds, logic.actions]);
+  ], [logic.state.selectedIds, isAllSelected, allFilteredIds, logic.actions]);
 
   return (
-    <>
-      <div className="clean-page">
-        <MasterPage icon="📤" title="سندات الصرف" subtitle="إدارة المدفوعات والتحويلات المالية والتوجيه المحاسبي الدقيق">
-            <RawasiSidebarManager 
-              summary={
-                <div className="summary-glass-card">
-                  <span style={{fontSize:'12px', fontWeight:800, color:'#64748b'}}>
-                    {logic.state.filterStatus === 'معتمد' ? 'إجمالي السندات المعتمدة 📉' : 
-                     logic.state.filterStatus === 'معلق' ? 'إجمالي السندات المعلقة ⏳' : 
-                     'إجمالي المدفوعات 🏦'}
-                  </span>
-                  
-                  <div className="val" style={{fontSize:'24px', fontWeight:900, color: THEME.danger, marginTop:'5px'}}>
-                    {/* 🚀 رجعنا نعتمد على جمع الشاشة الدقيق لأنه تفاعلي مع البحث والتاريخ */}
-                    {formatCurrency(logic.totals.totalAmount)}
-                  </div>
-                </div>
-              }
-              actions={sidebarActions}
-              customFilters={
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
-                  <div>
-                    <label style={{ color: 'white', fontSize: '11px', fontWeight: 900, display: 'block', marginBottom: '8px' }}>تصفية حسب الحالة:</label>
-                    <div style={{ display: 'flex', gap: '5px' }}>
-                      {['الكل', 'معتمد', 'معلق'].map(type => (
-                        <button 
-                          key={type} 
-                          onClick={() => logic.actions.setFilterStatus(type)} 
-                          className={`filter-btn ${logic.state.filterStatus === type ? 'active' : ''}`}
-                        >
-                          {type}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              }
-              watchDeps={[logic.state.selectedIds, logic.totals.totalAmount, logic.state.rowsPerPage, logic.data.length, logic.state.filterStatus]}
-            />
+    <MasterPage
+      icon="📤"
+      title="إدارة سندات الصرف والمدفوعات (Payment Vouchers)"
+      subtitle="توثيق المدفوعات النقدية والبنكية للموردين والمصروفات والعهد، وترحيل القيود آلياً"
+    >
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+        direction: 'rtl',
+        minHeight: '100vh',
+        paddingBottom: '50px'
+      }}>
+        <style>{`
+          @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: #1E130B !important; }
+            table { width: 100% !important; border-collapse: collapse !important; }
+            th, td { border: 1px solid #C29B62 !important; padding: 6px 10px !important; font-size: 11px !important; }
+          }
+          .filter-pill-btn {
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-weight: 800;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+          }
+          @media (max-width: 768px) {
+            .pv-kpi-grid { grid-template-columns: 1fr !important; }
+            .pv-toolbar-row { flex-direction: column !important; }
+          }
+        `}</style>
 
-            <style>{`
-              .custom-checkbox { width: 20px; height: 20px; accent-color: ${THEME.goldAccent}; cursor: pointer; transition: 0.1s; }
-              .btn-main-glass { width: 100%; padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(15px); font-weight: 900; cursor: pointer; transition: 0.2s; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-              .btn-main-glass.gold { background: linear-gradient(135deg, rgba(40, 145, 200, 0.9), rgba(151, 115, 50, 1)); color: white; }
-              .btn-main-glass.blue { background: linear-gradient(135deg, rgba(14, 165, 233, 0.8), rgba(2, 132, 199, 0.9)); color: white; }
-              .btn-main-glass.green { background: linear-gradient(135deg, rgba(34, 197, 94, 0.8), rgba(22, 163, 74, 0.9)); color: white; }
-              .btn-main-glass.yellow { background: linear-gradient(135deg, rgba(245, 158, 11, 0.8), rgba(217, 119, 6, 0.9)); color: white; }
-              .btn-main-glass.white { background: rgba(255, 255, 255, 0.6); color: #1e293b; border: 1px solid rgba(255,255,255,0.8); }
-              .btn-main-glass.red { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
-              .btn-main-glass:hover { transform: translateY(-3px); filter: brightness(1.1); }
-              .summary-glass-card { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 20px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2); margin-bottom: 25px; }
-              .filter-btn { flex: 1; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.1); color: white; border: none; font-weight: 900; cursor: pointer; font-size: 11px; transition: 0.3s; white-space: nowrap !important; word-break: keep-all !important; min-height: 34px !important; }
-              .filter-btn.active { background: ${THEME.goldAccent}; color: #1e293b; }
-            `}</style>
+        <PrintHeader
+          title="كشف سندات الصرف والمدفوعات المالية"
+          subtitle={`تاريخ الكشف: ${new Date().toLocaleDateString('ar-SA')}`}
+        />
 
-            {(logic.isLoading || permsLoading) ? (
-              <LoadingScreen message="جاري المزامنة..." fullScreen={false} />
-            ) : (
-              <div className="clickable-rows summary-glass-card cinematic-scroll">
-                <RawasiSmartTable 
-                  data={logic.data}
-                  columns={voucherColumns} 
-                  onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
-                  enablePagination={true}
-                  currentPage={logic.state.currentPage}
-                  totalItems={logic.data.length}
-                  rowsPerPage={logic.state.rowsPerPage}
-                  onPageChange={logic.actions.setCurrentPage}
-                  onRowsChange={logic.actions.setRowsPerPage}
-                />
+        {/* 1. Header Toolbar */}
+        <div className="no-print" style={{
+          background: '#FFFFFF',
+          borderRadius: '20px',
+          padding: '22px 26px',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #A8573C 0%, #C29B62 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#FFFFFF',
+                fontSize: '24px',
+                boxShadow: '0 4px 14px rgba(168, 87, 60, 0.35)'
+              }}>
+                📤
               </div>
-            )}
-        </MasterPage>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#1E130B' }}>
+                  سندات الصرف والمدفوعات
+                </h2>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#64748b', fontWeight: 700 }}>
+                  صرف مستحقات الموردين، تسليم سلف وعهد العمل، والمصروفات الإدارية والتشغيلية
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={logic.actions.handleAddNew}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                  color: '#FFFFFF',
+                  fontWeight: 900,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(194, 155, 98, 0.35)',
+                  minHeight: '44px'
+                }}
+              >
+                <span>➕ إصدار سند صرف جديد</span>
+                <span style={{ fontSize: '10px', opacity: 0.8 }}>(Alt+N)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={logic.actions.exportToExcel}
+                disabled={logic.data.length === 0}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '12px',
+                  border: '1.5px solid rgba(194, 155, 98, 0.35)',
+                  background: '#FFFFFF',
+                  color: '#1E130B',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  minHeight: '44px'
+                }}
+              >
+                <span>تصدير إكسيل</span>
+                <span>📑</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filters Row */}
+          <div className="pv-toolbar-row" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            flexWrap: 'wrap',
+            paddingTop: '16px',
+            borderTop: '1px solid rgba(194, 155, 98, 0.15)'
+          }}>
+            {/* Search Input */}
+            <div style={{ flex: '1 1 280px', position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="بحث برقم السند، المستفيد، الحساب، أو البيان..."
+                value={logic.state.globalSearch}
+                onChange={(e) => logic.actions.setGlobalSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '11px 18px 11px 38px',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(194, 155, 98, 0.3)',
+                  background: '#FDFBF7',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#1E130B',
+                  outline: 'none',
+                  minHeight: '44px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <span style={{ position: 'absolute', left: '14px', top: '12px', fontSize: '16px', color: '#C29B62' }}>🔍</span>
+            </div>
+
+            {/* Status Tabs */}
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {['الكل', 'معتمد', 'معلق'].map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  className="filter-pill-btn"
+                  onClick={() => logic.actions.setFilterStatus(type)}
+                  style={{
+                    background: logic.state.filterStatus === type ? '#1E130B' : '#FDFBF7',
+                    color: logic.state.filterStatus === type ? '#FDFBF7' : '#1E130B',
+                    border: logic.state.filterStatus === type ? '1px solid #1E130B' : '1px solid rgba(194, 155, 98, 0.3)'
+                  }}
+                >
+                  {type === 'معتمد' ? 'معتمد ✅' : (type === 'معلق' ? 'معلق ⏳' : 'كافة السندات')}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Batch Actions Bar (When rows selected) */}
+          {logic.state.selectedIds.length > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 18px',
+              borderRadius: '12px',
+              background: '#FDFBF7',
+              border: '1.5px solid #C29B62',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ fontWeight: 900, color: '#1E130B', fontSize: '13px' }}>
+                تم تحديد ({logic.state.selectedIds.length}) سند صرف
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={logic.actions.handlePostSelected}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: '#059669',
+                    color: '#FFFFFF',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🚀 اعتماد وترحيل للدفاتر
+                </button>
+                <button
+                  type="button"
+                  onClick={logic.actions.handleUnpostSelected}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #b45309',
+                    background: '#FFFFFF',
+                    color: '#b45309',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ↩️ فك الترحيل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => logic.actions.setIsBulkFixModalOpen(true)}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #8c6b32',
+                    background: '#FFFFFF',
+                    color: '#8c6b32',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🛠️ تصحيح التوجيه
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    showConfirm({
+                      title: 'حذف السجلات نهائياً',
+                      message: `هل أنت متأكد من حذف عدد (${logic.state.selectedIds.length}) سند صرف بشكل نهائي؟`,
+                      type: 'danger',
+                      onConfirm: () => logic.actions.handleDeleteSelected()
+                    });
+                  }}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #ef4444',
+                    background: '#fef2f2',
+                    color: '#ef4444',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🗑️ حذف نهائي
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Luxury KPI Cards */}
+        <div className="pv-kpi-grid" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '16px'
+        }}>
+          {/* KPI 1: Total Amount */}
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '18px',
+            padding: '20px 22px',
+            border: '1px solid rgba(194, 155, 98, 0.25)',
+            boxShadow: '0 4px 18px rgba(30, 19, 11, 0.04)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: '#A8573C' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#A8573C' }}>إجمالي المدفوعات 📤</span>
+              <span style={{ fontSize: '20px' }}>💸</span>
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#A8573C', margin: '8px 0 4px 0' }}>
+              {formatCurrency(logic.totals.totalAmount)}
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>
+              إجمالي {logic.totals.count} سند صرف مسجل
+            </div>
+          </div>
+
+          {/* KPI 2: Server Posted Amount */}
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '18px',
+            padding: '20px 22px',
+            border: '1px solid rgba(194, 155, 98, 0.25)',
+            boxShadow: '0 4px 18px rgba(30, 19, 11, 0.04)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: '#059669' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#059669' }}>المعتمد والمرحل للدفاتر ✅</span>
+              <span style={{ fontSize: '20px' }}>📖</span>
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#059669', margin: '8px 0 4px 0' }}>
+              {formatCurrency(logic.totals.serverTotalPosted)}
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>
+              مقيد ومخصوم من الخزينة والبنوك
+            </div>
+          </div>
+
+          {/* KPI 3: Server Pending Amount */}
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '18px',
+            padding: '20px 22px',
+            border: '1px solid rgba(194, 155, 98, 0.25)',
+            boxShadow: '0 4px 18px rgba(30, 19, 11, 0.04)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: '#b45309' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#b45309' }}>سندات معلقة قيد التدقيق ⏳</span>
+              <span style={{ fontSize: '20px' }}>⚖️</span>
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#b45309', margin: '8px 0 4px 0' }}>
+              {formatCurrency(logic.totals.serverTotalPending)}
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>
+              بانتظار الاعتماد المالي النهائي
+            </div>
+          </div>
+
+          {/* KPI 4: Fleet Operations & Custody */}
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '18px',
+            padding: '20px 22px',
+            border: '1px solid rgba(194, 155, 98, 0.25)',
+            boxShadow: '0 4px 18px rgba(30, 19, 11, 0.04)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: '#C29B62' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#8c6b32' }}>رحلات الأسطول المفتوحة 🚚</span>
+              <span style={{ fontSize: '20px' }}>🚐</span>
+            </div>
+            <div style={{ fontSize: '28px', fontWeight: 900, color: '#1E130B', margin: '8px 0 4px 0' }}>
+              {logic.state.fleetOperations.length} <span style={{ fontSize: '14px', fontWeight: 700, color: '#64748b' }}>رحلة</span>
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>
+              متاحة لربط عهد ومصروفات الوقود
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Table Card */}
+        <div style={{
+          background: '#FFFFFF',
+          borderRadius: '20px',
+          border: '1px solid rgba(194, 155, 98, 0.25)',
+          boxShadow: '0 4px 20px rgba(30, 19, 11, 0.05)',
+          overflow: 'hidden'
+        }}>
+          {logic.isLoading ? (
+            <LoadingScreen message="جاري مزامنة سندات الصرف..." fullScreen={false} />
+          ) : (
+            <div>
+              <RawasiSmartTable 
+                data={logic.data}
+                columns={voucherColumns} 
+                onRowClick={(row) => { setPrintData(row); setIsPrintModalOpen(true); }}
+                enablePagination={true}
+                currentPage={logic.state.currentPage}
+                totalItems={logic.data.length}
+                rowsPerPage={logic.state.rowsPerPage}
+                onPageChange={logic.actions.setCurrentPage}
+                onRowsChange={logic.actions.setRowsPerPage}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 🚀 المودال الجديد للتصحيح المجمع */}
+      {/* Bulk Fix Modal */}
       {mounted && logic.state.isBulkFixModalOpen && createPortal(
-          <div style={{ position: 'fixed', inset: 0, zIndex: 999999999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(10px)', padding: '50px 20px', overflowY: 'auto' }}>
-              <div style={{ position: 'fixed', inset: 0 }} onClick={() => logic.actions.setIsBulkFixModalOpen(false)} />
-              <div className="cinematic-scroll" style={{ background: 'white', borderRadius: '32px', width: '100%', maxWidth: '600px', padding: '40px', position: 'relative', zIndex: 10, margin: 'auto', boxShadow: '0 50px 100px -20px rgba(0,0,0,0.5)' }}>
-                  <h2 style={{ fontWeight: 900, textAlign: 'center', marginBottom: '30px', color: THEME.primary, fontSize: '24px' }}>🛠️ تصحيح الحسابات لـ ({logic.state.selectedIds.length}) سند معلق</h2>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', zIndex: 50, position: 'relative' }}>
-                      <div style={{ zIndex: 60, position: 'relative' }}>
-                          <SmartCombo 
-                              label="🧾 الحساب المدين الجديد (من حـ)" 
-                              table="accounts" 
-                              displayCol="name" 
-                              initialDisplay={logic.state.bulkFixAccounts.debit_account_name} 
-                              onSelect={(val:any) => {
-                                  logic.actions.setBulkFixAccounts({
-                                      ...logic.state.bulkFixAccounts, 
-                                      debit_account_name: val?.name || '',
-                                      debit_account_id: val?.id || null 
-                                  });
-                              }} 
-                              strict={true} 
-                          />
-                      </div>
-                      <div style={{ zIndex: 50, position: 'relative' }}>
-                          <SmartCombo 
-                              label="🏦 الحساب الدائن الجديد (إلى حـ)" 
-                              table="accounts" 
-                              displayCol="name" 
-                              initialDisplay={logic.state.bulkFixAccounts.credit_account_name} 
-                              onSelect={(val:any) => {
-                                  logic.actions.setBulkFixAccounts({
-                                      ...logic.state.bulkFixAccounts, 
-                                      credit_account_name: val?.name || '',
-                                      credit_account_id: val?.id || null 
-                                  });
-                              }} 
-                              strict={true} 
-                          />
-                      </div>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(30, 19, 11, 0.7)', backdropFilter: 'blur(8px)', padding: '20px', direction: 'rtl' }}>
+              <div style={{ background: '#FFFFFF', borderRadius: '24px', width: '100%', maxWidth: '550px', padding: '35px', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', border: '1px solid rgba(194, 155, 98, 0.3)' }}>
+                  <h3 style={{ margin: '0 0 10px 0', color: '#1E130B', fontWeight: 900, fontSize: '20px' }}>
+                    🛠️ تصحيح التوجيه المحاسبي لـ ({logic.state.selectedIds.length}) سند
+                  </h3>
+                  <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '25px', fontWeight: 700 }}>
+                    تعديل الحساب المدين أو الدائن للسندات غير المرحلة دفعة واحدة
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <SmartCombo 
+                          label="🧾 الحساب المدين الجديد (الطرف المستفيد / المصروف)" 
+                          table="accounts" 
+                          displayCol="name" 
+                          initialDisplay={logic.state.bulkFixAccounts.debit_account_name} 
+                          onSelect={(val: any) => {
+                              logic.actions.setBulkFixAccounts({
+                                  ...logic.state.bulkFixAccounts, 
+                                  debit_account_name: val?.name || '',
+                                  debit_account_id: val?.id || null 
+                              });
+                          }} 
+                          strict={true} 
+                      />
+                      <SmartCombo 
+                          label="🏦 الحساب الدائن الجديد (الخزينة أو البنك)" 
+                          table="accounts" 
+                          displayCol="name" 
+                          initialDisplay={logic.state.bulkFixAccounts.credit_account_name} 
+                          onSelect={(val: any) => {
+                              logic.actions.setBulkFixAccounts({
+                                  ...logic.state.bulkFixAccounts, 
+                                  credit_account_name: val?.name || '',
+                                  credit_account_id: val?.id || null 
+                              });
+                          }} 
+                          strict={true} 
+                      />
                   </div>
-                  <div style={{ display: 'flex', gap: '15px', marginTop: '40px' }}>
-                      <button onClick={logic.actions.handleBulkFixSave} disabled={logic.isLoading} style={{ flex: 2, padding: '18px', borderRadius: '16px', background: THEME.info, color: 'white', fontWeight: 900, border: 'none', cursor: 'pointer', fontSize: '16px' }}>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '35px' }}>
+                      <button 
+                        onClick={logic.actions.handleBulkFixSave} 
+                        disabled={logic.isLoading} 
+                        style={{ 
+                          flex: 2, 
+                          padding: '14px', 
+                          borderRadius: '12px', 
+                          background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)', 
+                          color: '#FFFFFF', 
+                          fontWeight: 900, 
+                          border: 'none', 
+                          cursor: 'pointer' 
+                        }}
+                      >
                           {logic.isLoading ? '⏳ جاري الحفظ...' : '✅ تطبيق التعديلات'}
                       </button>
-                      <button onClick={()=>logic.actions.setIsBulkFixModalOpen(false)} style={{ flex: 1, padding: '18px', borderRadius: '16px', border: '2px solid rgba(40, 145, 200, 0.15)', background: 'white', color: '#64748b', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}>إلغاء</button>
+                      <button 
+                        onClick={() => logic.actions.setIsBulkFixModalOpen(false)} 
+                        style={{ 
+                          flex: 1, 
+                          padding: '14px', 
+                          borderRadius: '12px', 
+                          border: '1px solid rgba(194, 155, 98, 0.25)', 
+                          background: '#FDFBF7', 
+                          color: '#64748b', 
+                          fontWeight: 900, 
+                          cursor: 'pointer' 
+                        }}
+                      >
+                        إلغاء
+                      </button>
                   </div>
               </div>
           </div>,
           document.body
       )}
 
-      {/* 🚀 مودال التعديل والإضافة المربوط باللوجيك الجديد */}
+      {/* Edit / Add Modal */}
       {mounted && logic.state.isEditModalOpen && (
           <PaymentVoucherModal 
               isOpen={logic.state.isEditModalOpen} 
@@ -531,6 +802,7 @@ export default function PaymentVouchersPage() {
           />
       )}
 
+      {/* Print Modal with QR */}
       {mounted && isPrintModalOpen && (
           <PaymentPrintModal 
             isOpen={isPrintModalOpen} 
@@ -538,6 +810,6 @@ export default function PaymentVouchersPage() {
             record={printData} 
           />
       )}
-    </>
+    </MasterPage>
   );
 }
