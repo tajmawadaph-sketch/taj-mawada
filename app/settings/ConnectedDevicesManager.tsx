@@ -44,6 +44,7 @@ import {
   pairHidScanner,
   scanLocalSubnet,
   probeNetworkEndpoint,
+  detectActiveLocalNetwork,
   performDeviceHandshake,
   testThermalReceiptPrint,
   openCashDrawer,
@@ -78,10 +79,19 @@ export default function ConnectedDevicesManager() {
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
   const [discoveryTab, setDiscoveryTab] = useState<'usb' | 'serial' | 'hid' | 'network' | 'manual'>('usb');
 
-  // فحص الشبكة المحلية (Local Subnet Scanner)
+  // معلومات الشبكة المستكشفة تلقائياً
+  const [detectedNetwork, setDetectedNetwork] = useState<{ ip: string; subnetPrefix: string; name: string } | null>(null);
+
+  // فحص عنوان IP فردي مباشر
+  const [singleTestIp, setSingleTestIp] = useState('');
+  const [singleTestPort, setSingleTestPort] = useState(9100);
+  const [isSingleTesting, setIsSingleTesting] = useState(false);
+  const [singleTestResult, setSingleTestResult] = useState<{ reachable: boolean; latency: number; message?: string; hostAlive?: boolean; portOpen?: boolean; error?: string } | null>(null);
+
+  // فحص نطاق الشبكة المحلية (Local Subnet Scanner)
   const [subnetPrefix, setSubnetPrefix] = useState('192.168.1');
-  const [startHost, setStartHost] = useState(100);
-  const [endHost, setEndHost] = useState(150);
+  const [startHost, setStartHost] = useState(1);
+  const [endHost, setEndHost] = useState(30);
   const [scanPort, setScanPort] = useState(9100);
   const [isScanningSubnet, setIsScanningSubnet] = useState(false);
   const [subnetProgress, setSubnetProgress] = useState<{ scanned: number; total: number; currentIp: string }>({ scanned: 0, total: 0, currentIp: '' });
@@ -107,14 +117,32 @@ export default function ConnectedDevicesManager() {
   // نافذة تأكيد الحذف (بدون native confirm)
   const [deviceToDelete, setDeviceToDelete] = useState<ConnectedDevice | null>(null);
 
-  // تحميل الأجهزة المخزنة وقدرات المتصفح عند بدء التشغيل
+  // وظيفة اكتشاف الشبكة النشطة
+  const refreshNetworkInfo = useCallback(async () => {
+    try {
+      const netInfo = await detectActiveLocalNetwork();
+      if (netInfo && netInfo.subnetPrefix) {
+        setDetectedNetwork(netInfo);
+        setSubnetPrefix(netInfo.subnetPrefix);
+        if (!singleTestIp) {
+          setSingleTestIp(`${netInfo.subnetPrefix}.150`);
+        }
+      }
+    } catch (e) {
+      console.warn('Network detect failed:', e);
+    }
+  }, [singleTestIp]);
+
+  // تحميل الأجهزة المخزنة وقدرات المتصفح واستكشاف الشبكة عند بدء التشغيل
   useEffect(() => {
     const caps = getHardwareCapabilities();
     setCapabilities(caps);
 
     const loaded = loadPairedDevices();
     setDevices(loaded);
-  }, []);
+
+    refreshNetworkInfo();
+  }, [refreshNetworkInfo]);
 
   // حفظ التغييرات وتحديث التخزين
   const updateAndSaveDevices = useCallback((updated: ConnectedDevice[]) => {
@@ -288,6 +316,30 @@ export default function ConnectedDevicesManager() {
     }
   };
 
+  // ⚡ فحص فوري ومباشر لعنوان IP فردي
+  const handleSingleIpTest = async () => {
+    if (!singleTestIp.trim()) {
+      showToast(isEn ? 'Please enter a valid IP address.' : 'يرجى إدخال عنوان IP صالح.', 'warning');
+      return;
+    }
+    setIsSingleTesting(true);
+    setSingleTestResult(null);
+    try {
+      const res = await probeNetworkEndpoint(singleTestIp.trim(), singleTestPort);
+      setSingleTestResult(res);
+      playPosBeep();
+      triggerHaptic(80);
+      showToast(
+        res.message || (res.reachable ? 'الجهاز متصل ومستجيب 🟢' : 'الجهاز غير متاح 🔴'), 
+        res.reachable ? 'success' : 'error'
+      );
+    } catch (err: any) {
+      showToast(err.message || 'فشل فحص العنوان', 'error');
+    } finally {
+      setIsSingleTesting(false);
+    }
+  };
+
   // 🌐 بدء فحص الشبكة المحلية (Local Subnet Scanner)
   const handleStartSubnetScan = async () => {
     setIsScanningSubnet(true);
@@ -313,7 +365,7 @@ export default function ConnectedDevicesManager() {
       if (found.length > 0) {
         showToast(isEn ? `Discovered ${found.length} responsive network devices!` : `تم اكتشاف ${found.length} أجهزة شبكية متصلة ومستجيبة! 🟢`, 'success');
       } else {
-        showToast(isEn ? 'No responsive devices found in this range.' : 'لم يتم العثور على أجهزة تستجيب في هذا النطاق.', 'warning');
+        showToast(isEn ? 'No responsive devices found in this range.' : `لم يتم العثور على أجهزة تستجيب في النطاق ${subnetPrefix}.${startHost}-${endHost}.`, 'warning');
       }
     } catch (err: any) {
       setIsScanningSubnet(false);
@@ -1477,129 +1529,278 @@ export default function ConnectedDevicesManager() {
 
             {/* محتوى تاب فحص الشبكة المحلية */}
             {discoveryTab === 'network' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* شريط حالة الشبكة المحلية المكتشفة تلقائياً */}
                 <div style={{
-                  background: '#FDFBF7',
+                  background: 'linear-gradient(135deg, rgba(194, 155, 98, 0.12) 0%, rgba(5, 150, 105, 0.08) 100%)',
                   borderRadius: '14px',
                   padding: '12px 14px',
-                  border: '1px solid rgba(194, 155, 98, 0.25)',
-                  fontSize: '12px',
-                  color: '#6e5d4f'
+                  border: '1px solid rgba(194, 155, 98, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px'
                 }}>
-                  فحص نطاق عناوين IP في الشبكة المحلية للكشف عن طابعات الفواتير الشبكية وأجهزة مدى المستجيبة:
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '8px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>نطاق الشبكة</label>
-                    <input
-                      type="text"
-                      value={subnetPrefix}
-                      onChange={(e) => setSubnetPrefix(e.target.value)}
-                      style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>من Host</label>
-                    <input
-                      type="number"
-                      value={startHost}
-                      onChange={(e) => setStartHost(Number(e.target.value))}
-                      style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>إلى Host</label>
-                    <input
-                      type="number"
-                      value={endHost}
-                      onChange={(e) => setEndHost(Number(e.target.value))}
-                      style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>المنفذ</label>
-                    <input
-                      type="number"
-                      value={scanPort}
-                      onChange={(e) => setScanPort(Number(e.target.value))}
-                      style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleStartSubnetScan}
-                  disabled={isScanningSubnet}
-                  style={{
-                    height: '44px',
-                    borderRadius: '12px',
-                    background: isScanningSubnet ? '#6e5d4f' : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    fontWeight: 900,
-                    fontSize: '13px',
-                    cursor: isScanningSubnet ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <RefreshCw size={15} className={isScanningSubnet ? 'animate-spin' : ''} />
-                  <span>{isScanningSubnet ? `جاري فحص: ${subnetProgress.currentIp} (${subnetProgress.scanned}/${subnetProgress.total})` : 'بدء فحص نطاق الشبكة الآن 🌐'}</span>
-                </button>
-
-                {/* قائمة الأجهزة المكتشفة في الشبكة */}
-                {discoveredIps.length > 0 && (
-                  <div style={{
-                    background: '#FDFBF7',
-                    border: '1.5px solid rgba(5, 150, 105, 0.3)',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    maxHeight: '160px',
-                    overflowY: 'auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px'
-                  }}>
-                    <div style={{ fontSize: '11.5px', fontWeight: 900, color: '#059669' }}>
-                      تم العثور على ({discoveredIps.length}) أجهزة نشطة في الشبكة:
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Wifi size={16} color="#059669" />
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#6e5d4f' }}>الشبكة المحلية الحالية: </span>
+                      <strong style={{ fontSize: '12px', color: '#1E130B' }}>
+                        {detectedNetwork ? `${detectedNetwork.name} (${detectedNetwork.ip})` : 'جاري فحص المحول...'}
+                      </strong>
                     </div>
-                    {discoveredIps.map((found, idx) => (
-                      <div key={idx} style={{
+                  </div>
+                  <button
+                    type="button"
+                    onClick={refreshNetworkInfo}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid rgba(194, 155, 98, 0.3)',
+                      borderRadius: '8px',
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      color: '#C29B62',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <RefreshCw size={11} />
+                    <span>تحديث الشبكة</span>
+                  </button>
+                </div>
+
+                {/* 1️⃣ أداة الفحص الفوري لعنوان IP محدد (Single IP Instant Probe) */}
+                <div style={{
+                  background: '#FDFBF7',
+                  border: '1.5px solid rgba(194, 155, 98, 0.3)',
+                  borderRadius: '16px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: 900, color: '#1E130B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🎯</span>
+                    <span>فحص فوري لعنوان IP محدد (طابعة أو جهاز مدى)</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>عنوان الـ IP</label>
+                      <input
+                        type="text"
+                        placeholder="172.20.10.150"
+                        value={singleTestIp}
+                        onChange={(e) => setSingleTestIp(e.target.value)}
+                        style={{ width: '100%', height: '40px', padding: '0 10px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FFFFFF', fontWeight: 800, fontSize: '12.5px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>المنفذ (Port)</label>
+                      <select
+                        value={singleTestPort}
+                        onChange={(e) => setSingleTestPort(Number(e.target.value))}
+                        style={{ width: '100%', height: '40px', padding: '0 8px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FFFFFF', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                      >
+                        <option value={9100}>9100 (طابعة حرارية RAW)</option>
+                        <option value={8080}>8080 (جهاز مدى / Pax)</option>
+                        <option value={80}>80 (ويب / إدارة الطابعة)</option>
+                        <option value={443}>443 (HTTPS)</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSingleIpTest}
+                      disabled={isSingleTesting}
+                      style={{
+                        height: '40px',
+                        padding: '0 14px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontWeight: 900,
+                        fontSize: '12px',
+                        cursor: isSingleTesting ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '6px 10px',
-                        background: '#FFFFFF',
-                        borderRadius: '8px',
-                        border: '1px solid rgba(194, 155, 98, 0.2)'
-                      }}>
-                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E130B' }}>
-                          🟢 {found.ip}:{found.port} <span style={{ fontSize: '10.5px', color: '#059669' }}>({found.latency}ms)</span>
-                        </div>
+                        gap: '6px'
+                      }}
+                    >
+                      <RefreshCw size={13} className={isSingleTesting ? 'animate-spin' : ''} />
+                      <span>{isSingleTesting ? 'جاري الفحص...' : '⚡ فحص فوري'}</span>
+                    </button>
+                  </div>
+
+                  {/* نتيجة الفحص الفوري */}
+                  {singleTestResult && (
+                    <div style={{
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: singleTestResult.reachable ? 'rgba(5, 150, 105, 0.08)' : 'rgba(168, 87, 60, 0.08)',
+                      border: `1px solid ${singleTestResult.reachable ? 'rgba(5, 150, 105, 0.25)' : 'rgba(168, 87, 60, 0.25)'}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '8px'
+                    }}>
+                      <div style={{ fontSize: '12px', fontWeight: 800, color: singleTestResult.reachable ? '#059669' : '#A8573C' }}>
+                        {singleTestResult.message || (singleTestResult.reachable ? '🟢 الجهاز متصل ومستجيب' : '🔴 تعذر الاتصال بالجهاز')}
+                      </div>
+                      {singleTestResult.reachable && (
                         <button
                           type="button"
-                          onClick={() => handleAddDiscoveredIp(found)}
+                          onClick={() => handleAddDiscoveredIp({ ip: singleTestIp.trim(), port: singleTestPort, latency: singleTestResult.latency })}
                           style={{
-                            padding: '4px 10px',
-                            borderRadius: '6px',
+                            padding: '5px 12px',
+                            borderRadius: '8px',
                             background: '#059669',
                             color: '#FFFFFF',
                             border: 'none',
-                            fontWeight: 800,
+                            fontWeight: 900,
                             fontSize: '11px',
                             cursor: 'pointer'
                           }}
                         >
-                          ➕ اعتماد
+                          ➕ إضافة كجهاز معتمد
                         </button>
-                      </div>
-                    ))}
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2️⃣ أداة فاحص نطاق الشبكة الشامل (Subnet Scanner) */}
+                <div style={{
+                  background: '#FDFBF7',
+                  border: '1px solid rgba(194, 155, 98, 0.25)',
+                  borderRadius: '16px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: 900, color: '#1E130B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>📡</span>
+                    <span>فحص نطاق شبكة محلي كامل (Subnet Range Scan)</span>
                   </div>
-                )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>نطاق الشبكة</label>
+                      <input
+                        type="text"
+                        value={subnetPrefix}
+                        onChange={(e) => setSubnetPrefix(e.target.value)}
+                        style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FFFFFF', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>من Host</label>
+                      <input
+                        type="number"
+                        value={startHost}
+                        onChange={(e) => setStartHost(Number(e.target.value))}
+                        style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FFFFFF', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>إلى Host</label>
+                      <input
+                        type="number"
+                        value={endHost}
+                        onChange={(e) => setEndHost(Number(e.target.value))}
+                        style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FFFFFF', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#6e5d4f', marginBottom: '3px' }}>المنفذ</label>
+                      <input
+                        type="number"
+                        value={scanPort}
+                        onChange={(e) => setScanPort(Number(e.target.value))}
+                        style={{ width: '100%', height: '38px', padding: '0 8px', borderRadius: '8px', border: '1px solid rgba(194, 155, 98, 0.3)', background: '#FFFFFF', fontWeight: 800, fontSize: '12px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleStartSubnetScan}
+                    disabled={isScanningSubnet}
+                    style={{
+                      height: '42px',
+                      borderRadius: '10px',
+                      background: isScanningSubnet ? '#6e5d4f' : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      fontWeight: 900,
+                      fontSize: '12.5px',
+                      cursor: isScanningSubnet ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <RefreshCw size={14} className={isScanningSubnet ? 'animate-spin' : ''} />
+                    <span>{isScanningSubnet ? `جاري فحص: ${subnetProgress.currentIp} (${subnetProgress.scanned}/${subnetProgress.total})` : 'بدء فحص نطاق الشبكة الآن 🌐'}</span>
+                  </button>
+
+                  {/* قائمة الأجهزة المكتشفة في الشبكة */}
+                  {discoveredIps.length > 0 && (
+                    <div style={{
+                      background: '#FFFFFF',
+                      border: '1.5px solid rgba(5, 150, 105, 0.3)',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      maxHeight: '160px',
+                      overflowY: 'auto',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ fontSize: '11.5px', fontWeight: 900, color: '#059669' }}>
+                        تم العثور على ({discoveredIps.length}) أجهزة نشطة في الشبكة:
+                      </div>
+                      {discoveredIps.map((found, idx) => (
+                        <div key={idx} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 10px',
+                          background: '#FDFBF7',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(194, 155, 98, 0.2)'
+                        }}>
+                          <div style={{ fontSize: '12px', fontWeight: 800, color: '#1E130B' }}>
+                            🟢 {found.ip}:{found.port} <span style={{ fontSize: '10.5px', color: '#059669' }}>({found.latency}ms)</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleAddDiscoveredIp(found)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              background: '#059669',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              fontWeight: 800,
+                              fontSize: '11px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ➕ اعتماد
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

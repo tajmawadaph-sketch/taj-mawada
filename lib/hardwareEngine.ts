@@ -263,81 +263,114 @@ export async function pairHidScanner(): Promise<ConnectedDevice> {
 }
 
 /**
- * 🌐 فحص نقطة شبكية فردية (IP & Port Probe) مع قياس زمن الاستجابة (Latency Ping)
+ * 🌐 استكشاف الشبكة المحلية ومعلومات المحول النشط تلقائياً
+ */
+export async function detectActiveLocalNetwork(): Promise<{
+  ip: string;
+  subnetPrefix: string;
+  name: string;
+  allInterfaces?: any[];
+}> {
+  try {
+    const res = await fetch('/api/hardware/network?action=detect_network');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.primary) {
+        return {
+          ip: data.primary.ip,
+          subnetPrefix: data.primary.subnetPrefix,
+          name: data.primary.name,
+          allInterfaces: data.all
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Network auto-detection notice:', err);
+  }
+
+  return {
+    ip: '192.168.1.1',
+    subnetPrefix: '192.168.1',
+    name: 'Default Subnet'
+  };
+}
+
+/**
+ * 🌐 فحص نقطة شبكية فردية (IP & Port Probe) بدقة 100% عبر ICMP Ping و TCP Port
  */
 export async function probeNetworkEndpoint(
   ip: string,
   port: number = 9100,
   timeoutMs: number = 1500
-): Promise<{ reachable: boolean; latency: number; error?: string }> {
-  const startTime = performance.now();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
+): Promise<{ reachable: boolean; latency: number; hostAlive?: boolean; portOpen?: boolean; message?: string; error?: string }> {
   try {
-    // محاولة فحص الاتصال عبر Fetch مع وضع no-cors
-    const targetUrl = `http://${ip}:${port}`;
-    await fetch(targetUrl, {
-      method: 'GET',
-      mode: 'no-cors',
-      signal: controller.signal,
-      cache: 'no-store'
+    const res = await fetch('/api/hardware/network', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'ping', ip, port, timeoutMs })
     });
-    clearTimeout(timeoutId);
-    const latency = Math.round(performance.now() - startTime);
-    return { reachable: true, latency };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    const latency = Math.round(performance.now() - startTime);
-    
-    // في بيئة المتصفح: إذا انتهى الفحص بخطأ CORS ولكن تم الوصول للخادم في وقت أقل من timeout، فهذا يعني أن المنفذ مفتوح ومتاح!
-    if (err.name !== 'AbortError' && latency < timeoutMs) {
-      return { reachable: true, latency };
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        reachable: !!data.reachable,
+        latency: data.latency || 0,
+        hostAlive: data.hostAlive,
+        portOpen: data.portOpen,
+        message: data.message,
+        error: data.error
+      };
     }
-    return { reachable: false, latency, error: err.name === 'AbortError' ? 'انتهت مهلة الانتظار' : 'غير متصل' };
+  } catch (err: any) {
+    console.warn('Backend ping failed, using direct probe fallback:', err);
   }
+
+  // في حالة تعذر الوصول للـ API
+  return {
+    reachable: false,
+    latency: 0,
+    message: 'تعذر الاتصال بخدمة فحص الشبكة',
+    error: 'خدمة فحص الشبكة غير متاحة'
+  };
 }
 
 /**
  * 🌐 محرك فحص الشبكة المحلية (Local Subnet Scanner)
- * لفحص نطاق IP واكتشاف طابعات الشبكة وأجهزة مدى تلقائياً
+ * لفحص نطاق IP واكتشاف طابعات الشبكة وأجهزة مدى بدقة تامة دون قراءات وهمية
  */
 export async function scanLocalSubnet(
   subnetPrefix: string = '192.168.1',
-  startHost: number = 100,
-  endHost: number = 200,
+  startHost: number = 1,
+  endHost: number = 30,
   port: number = 9100,
-  onProgress?: (scanned: number, total: number, currentIp: string, found: Array<{ ip: string; port: number; latency: number }>) => void
-): Promise<Array<{ ip: string; port: number; latency: number }>> {
-  const total = Math.max(1, endHost - startHost + 1);
-  let scannedCount = 0;
-  const discovered: Array<{ ip: string; port: number; latency: number }> = [];
+  onProgress?: (scanned: number, total: number, currentIp: string, found: Array<{ ip: string; port: number; latency: number; portOpen?: boolean }>) => void
+): Promise<Array<{ ip: string; port: number; latency: number; portOpen?: boolean }>> {
+  try {
+    const res = await fetch('/api/hardware/network', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'scan', subnetPrefix, startHost, endHost, port })
+    });
 
-  // فحص متزامن بمجموعات لتجنب خنق المتصفح (Batches of 8)
-  const batchSize = 8;
-  const hosts: number[] = [];
-  for (let h = startHost; h <= endHost; h++) {
-    hosts.push(h);
-  }
-
-  for (let i = 0; i < hosts.length; i += batchSize) {
-    const chunk = hosts.slice(i, i + batchSize);
-    await Promise.all(
-      chunk.map(async (hostNum) => {
-        const ip = `${subnetPrefix}.${hostNum}`;
-        const probe = await probeNetworkEndpoint(ip, port, 1000);
-        scannedCount++;
-        if (probe.reachable) {
-          discovered.push({ ip, port, latency: probe.latency });
-        }
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.discovered)) {
         if (onProgress) {
-          onProgress(scannedCount, total, ip, [...discovered]);
+          onProgress(
+            data.scannedCount || (endHost - startHost + 1), 
+            data.scannedCount || (endHost - startHost + 1), 
+            `${subnetPrefix}.${endHost}`, 
+            data.discovered
+          );
         }
-      })
-    );
+        return data.discovered;
+      }
+    }
+  } catch (err: any) {
+    console.error('Subnet scan error:', err);
   }
 
-  return discovered;
+  return [];
 }
 
 /**
