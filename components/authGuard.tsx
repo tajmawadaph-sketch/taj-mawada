@@ -65,6 +65,7 @@ const ROUTE_MODULE_MAP: Record<string, string> = {
   '/audit': 'audit',
   '/payroll': 'payroll',
   '/settings': 'settings',
+  '/diagnostics': 'settings',
   '/settings/permissions': 'team',
   '/team': 'team',
   '/messages': 'messages',

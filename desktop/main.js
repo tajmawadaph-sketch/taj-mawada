@@ -3,8 +3,9 @@
  * مدمج بالكامل: نافذة آمنة + Single-instance + Tray + تشغيل تلقائي
  * + محرك العتاد وشبكات الإيثرنت والواي فاي والبوابات (Gateway) وفحص المنافذ والطباعة الخام مباشرة
  */
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, dialog } = require('electron');
 const { DatabaseSync } = require('node:sqlite');
+const { randomUUID } = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -15,8 +16,263 @@ const isWin = process.platform === 'win32';
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:3000';
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
+const dataLocationConfigPath = () => path.join(app.getPath('appData'), 'Taj Al-Mawadah POS', 'data-location.json');
+const DATA_LOCATION_MARKER_PREFIX = '.taj-mawadah-data-move-';
 const OFFLINE_QUEUE_SCHEMA_VERSION = 1;
 let offlineQueueDb = null;
+let activeDataDirectory = null;
+let selectedDataDirectory = null;
+let dataLocationMigrationError = null;
+
+function readDataLocationConfig() {
+  try {
+    const value = JSON.parse(fs.readFileSync(dataLocationConfigPath(), 'utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('ملف إعداد موقع التخزين غير صالح');
+    }
+    return value;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return {};
+    throw error;
+  }
+}
+
+function writeDataLocationConfig(value) {
+  const filePath = dataLocationConfigPath();
+  const directory = path.dirname(filePath);
+  fs.mkdirSync(directory, { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), { flag: 'wx' });
+  try {
+    fs.renameSync(temporaryPath, filePath);
+  } catch (error) {
+    try { fs.rmSync(temporaryPath, { force: true }); } catch {}
+    throw error;
+  }
+}
+
+function normalizeDataDirectory(value, label) {
+  if (typeof value !== 'string' || !value.trim() || !path.isAbsolute(value)) {
+    throw new Error(`${label} غير صالح`);
+  }
+  return path.resolve(value);
+}
+
+function comparableDataPath(value) {
+  const resolved = path.resolve(value);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function isSameOrNestedDataPath(parentPath, childPath) {
+  const parent = comparableDataPath(parentPath);
+  const child = comparableDataPath(childPath);
+  const relative = path.relative(parent, child);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+function assertSafeDataMovePaths(sourcePath, targetPath) {
+  const source = normalizeDataDirectory(sourcePath, 'مجلد البيانات الحالي');
+  const target = normalizeDataDirectory(targetPath, 'مجلد البيانات الجديد');
+  if (comparableDataPath(source) === comparableDataPath(target)) {
+    const error = new Error('المجلد المحدد هو مجلد البيانات الحالي بالفعل');
+    error.code = 'SAME_DATA_DIRECTORY';
+    throw error;
+  }
+  if (isSameOrNestedDataPath(source, target) || isSameOrNestedDataPath(target, source)) {
+    const error = new Error('يجب اختيار مجلد مستقل خارج مجلد البيانات الحالي');
+    error.code = 'NESTED_DATA_DIRECTORY';
+    throw error;
+  }
+  if (path.parse(target).root === target) {
+    const error = new Error('لا يمكن استخدام جذر القرص كمجلد بيانات مباشر');
+    error.code = 'INVALID_DATA_DIRECTORY';
+    throw error;
+  }
+  return { source, target };
+}
+
+function readDataMoveMarker(targetPath, pendingMove) {
+  const markerName = pendingMove?.markerName;
+  if (typeof markerName !== 'string' || !markerName.startsWith(DATA_LOCATION_MARKER_PREFIX)) return false;
+  try {
+    const marker = JSON.parse(fs.readFileSync(path.join(targetPath, markerName), 'utf8'));
+    return marker?.id === pendingMove.id
+      && comparableDataPath(marker.sourcePath) === comparableDataPath(pendingMove.sourcePath)
+      && comparableDataPath(marker.targetPath) === comparableDataPath(targetPath);
+  } catch {
+    return false;
+  }
+}
+
+function removeInterruptedDataMoveStages(parentPath, moveId) {
+  const prefix = `.taj-mawadah-stage-${moveId}-`;
+  for (const entry of fs.readdirSync(parentPath, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith(prefix)) continue;
+    const stagePath = path.resolve(parentPath, entry.name);
+    if (path.dirname(stagePath) === path.resolve(parentPath)) {
+      fs.rmSync(stagePath, { recursive: true, force: true });
+    }
+  }
+}
+
+function copyUserDataToTarget(sourcePath, targetPath, pendingMove) {
+  const { source, target } = assertSafeDataMovePaths(sourcePath, targetPath);
+  const sourceStat = fs.statSync(source);
+  if (!sourceStat.isDirectory()) {
+    const error = new Error('مجلد البيانات الحالي غير موجود أو ليس مجلداً');
+    error.code = 'SOURCE_DATA_DIRECTORY_UNAVAILABLE';
+    throw error;
+  }
+
+  if (fs.existsSync(target) && readDataMoveMarker(target, pendingMove)) return;
+  const targetParent = path.dirname(target);
+  if (!fs.existsSync(targetParent) || !fs.statSync(targetParent).isDirectory()) {
+    const error = new Error('مجلد القرص الذي يحتوي الوجهة غير متاح');
+    error.code = 'TARGET_PARENT_UNAVAILABLE';
+    throw error;
+  }
+
+  if (fs.existsSync(target)) {
+    const targetStat = fs.lstatSync(target);
+    if (!targetStat.isDirectory() || targetStat.isSymbolicLink() || fs.readdirSync(target).length > 0) {
+      const error = new Error('مجلد الوجهة يحتوي على ملفات؛ اختر مجلداً فارغاً كي لا تُستبدل بيانات أخرى');
+      error.code = 'TARGET_DATA_DIRECTORY_NOT_EMPTY';
+      throw error;
+    }
+  }
+
+  removeInterruptedDataMoveStages(targetParent, pendingMove.id);
+  const stagePath = fs.mkdtempSync(path.join(targetParent, `.taj-mawadah-stage-${pendingMove.id}-`));
+  let stageStillExists = true;
+  try {
+    fs.cpSync(source, stagePath, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      preserveTimestamps: true,
+    });
+
+    const marker = {
+      id: pendingMove.id,
+      sourcePath: source,
+      targetPath: target,
+    };
+    fs.writeFileSync(
+      path.join(stagePath, pendingMove.markerName),
+      JSON.stringify(marker),
+      { flag: 'wx' }
+    );
+
+    if (fs.existsSync(target)) {
+      if (fs.readdirSync(target).length > 0) {
+        const error = new Error('تغير محتوى مجلد الوجهة أثناء النقل؛ تم الإبقاء على البيانات الأصلية');
+        error.code = 'TARGET_DATA_DIRECTORY_NOT_EMPTY';
+        throw error;
+      }
+      fs.rmdirSync(target);
+    }
+
+    fs.renameSync(stagePath, target);
+    stageStillExists = false;
+  } finally {
+    if (stageStillExists) {
+      try { fs.rmSync(stagePath, { recursive: true, force: true }); } catch {}
+    }
+  }
+}
+
+function describeDataLocationError(error) {
+  const code = error?.code;
+  if (code === 'TARGET_DATA_DIRECTORY_NOT_EMPTY') {
+    return 'مجلد الوجهة غير فارغ. اختر مجلداً فارغاً؛ لم تُستبدل أي بيانات.';
+  }
+  if (code === 'SAME_DATA_DIRECTORY') return 'هذا هو مجلد البيانات الحالي بالفعل.';
+  if (code === 'NESTED_DATA_DIRECTORY') return 'اختر مجلداً مستقلاً خارج مجلد البيانات الحالي.';
+  if (code === 'SOURCE_DATA_DIRECTORY_UNAVAILABLE') {
+    return 'تعذر العثور على مجلد البيانات الحالي. أعد القرص أو المجلد الأصلي ثم أعد تشغيل التطبيق.';
+  }
+  if (code === 'TARGET_PARENT_UNAVAILABLE') {
+    return 'القرص أو المجلد الأب للوجهة غير متاح. وصّل القرص واختر مجلداً موجوداً ثم أعد المحاولة.';
+  }
+  if (code === 'ENOSPC') return 'المساحة الحرة غير كافية لنسخ البيانات. أفرغ مساحة ثم أعد المحاولة.';
+  if (code === 'EACCES' || code === 'EPERM') {
+    return 'لا توجد صلاحية كافية للكتابة في الوجهة. اختر مجلداً تملك صلاحية الكتابة إليه.';
+  }
+  return 'تعذر نقل البيانات بأمان. بقيت البيانات الأصلية في مكانها؛ تحقق من القرص والصلاحيات ثم أعد المحاولة.';
+}
+
+function initializeElectronDataLocation() {
+  const defaultDataDirectory = app.getPath('userData');
+  let locationConfig;
+  try {
+    locationConfig = readDataLocationConfig();
+  } catch (error) {
+    console.error('تعذر قراءة إعداد موقع بيانات Electron؛ سيستخدم التطبيق المجلد الافتراضي:', error);
+    dataLocationMigrationError = 'تعذر قراءة إعداد موقع البيانات؛ يستخدم التطبيق المجلد الافتراضي الحالي.';
+    locationConfig = {};
+  }
+
+  let dataDirectory = defaultDataDirectory;
+  if (typeof locationConfig.activePath === 'string' && path.isAbsolute(locationConfig.activePath)) {
+    const configuredPath = path.resolve(locationConfig.activePath);
+    try {
+      if (fs.statSync(configuredPath).isDirectory()) dataDirectory = configuredPath;
+    } catch {
+      dataLocationMigrationError = 'مجلد البيانات المحفوظ غير متاح؛ يستخدم التطبيق مساره الافتراضي. أعد توصيل القرص أو استعد المجلد القديم.';
+    }
+  }
+
+  const pendingMove = locationConfig.pendingMove;
+  if (pendingMove && typeof pendingMove === 'object') {
+    const source = dataDirectory;
+    try {
+      if (comparableDataPath(normalizeDataDirectory(pendingMove.sourcePath, 'مصدر النقل')) !== comparableDataPath(source)) {
+        const error = new Error('مصدر النقل لا يطابق موقع البيانات النشط');
+        error.code = 'SOURCE_DATA_DIRECTORY_UNAVAILABLE';
+        throw error;
+      }
+      copyUserDataToTarget(source, pendingMove.targetPath, pendingMove);
+      const target = path.resolve(pendingMove.targetPath);
+      locationConfig = {
+        ...locationConfig,
+        activePath: target,
+        pendingMove: null,
+        lastMoveError: null,
+      };
+      writeDataLocationConfig(locationConfig);
+      dataDirectory = target;
+      dataLocationMigrationError = null;
+      try { fs.rmSync(path.join(target, pendingMove.markerName), { force: true }); } catch {}
+      console.info(`تم نقل مجلد بيانات Electron بنجاح إلى ${target}; بقي المجلد السابق محفوظاً`);
+    } catch (error) {
+      dataDirectory = source;
+      dataLocationMigrationError = describeDataLocationError(error);
+      locationConfig.lastMoveError = dataLocationMigrationError;
+      try { writeDataLocationConfig(locationConfig); } catch (configError) {
+        console.error('تعذر حفظ سبب تعثر نقل بيانات Electron:', configError);
+      }
+      console.error('تعذر نقل مجلد بيانات Electron؛ سيستمر التطبيق باستخدام المجلد الأصلي:', error);
+    }
+  } else if (!locationConfig.activePath) {
+    locationConfig = { ...locationConfig, activePath: dataDirectory, lastMoveError: null };
+    try { writeDataLocationConfig(locationConfig); } catch (error) {
+      console.warn('تعذر حفظ موقع بيانات Electron الافتراضي:', error);
+    }
+  } else if (locationConfig.lastMoveError && !dataLocationMigrationError) {
+    dataLocationMigrationError = String(locationConfig.lastMoveError);
+  }
+
+  activeDataDirectory = dataDirectory;
+  try {
+    fs.mkdirSync(dataDirectory, { recursive: true });
+    app.setPath('userData', dataDirectory);
+    app.setPath('sessionData', dataDirectory);
+  } catch (error) {
+    console.error('تعذر تعيين موقع بيانات Electron؛ سيستخدم التطبيق مساره الافتراضي:', error);
+    dataLocationMigrationError = 'تعذر تهيئة مجلد البيانات المحدد. أعد توصيل القرص أو اختر مجلداً آخر.';
+    activeDataDirectory = defaultDataDirectory;
+  }
+}
 
 function migrateOfflineQueueToV1(database) {
   const existingQueue = database.prepare(
@@ -664,6 +920,63 @@ ipcMain.handle('taj:sync-queue:count-pending', (event, ...args) => {
     "SELECT COUNT(*) AS count FROM sync_queue WHERE status IN ('pending', 'failed')"
   ).get();
   return Number(row?.count || 0);
+});
+
+// Read-only aggregate used by the Settings diagnostics panel. Queue payloads and
+// SQL access remain private to the main process.
+ipcMain.handle('taj:sync-queue:diagnostics', (event, ...args) => {
+  assertTrustedQueueRenderer(event);
+  assertNoQueueArguments(args);
+  const row = getOfflineQueueDb().prepare(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN status = 'syncing' THEN 1 ELSE 0 END) AS syncing,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+      MIN(CASE WHEN status = 'pending' THEN created_at END) AS oldest_pending_at,
+      MIN(CASE WHEN status = 'syncing' THEN created_at END) AS oldest_syncing_at,
+      MAX(CASE WHEN status = 'failed' THEN retry_count ELSE 0 END) AS max_failed_retries,
+      SUM(CASE WHEN status = 'failed' AND (
+        lower(COALESCE(error_message, '')) LIKE '%permission%'
+        OR lower(COALESCE(error_message, '')) LIKE '%42501%'
+        OR lower(COALESCE(error_message, '')) LIKE '%row-level security%'
+      ) THEN 1 ELSE 0 END) AS permission_errors,
+      SUM(CASE WHEN status = 'failed' AND (
+        lower(COALESCE(error_message, '')) LIKE '%pgrst202%'
+        OR lower(COALESCE(error_message, '')) LIKE '%schema cache%'
+        OR lower(COALESCE(error_message, '')) LIKE '%function%not found%'
+      ) THEN 1 ELSE 0 END) AS rpc_errors,
+      SUM(CASE WHEN status = 'failed' AND (
+        lower(COALESCE(error_message, '')) LIKE '%fetch%'
+        OR lower(COALESCE(error_message, '')) LIKE '%network%'
+        OR lower(COALESCE(error_message, '')) LIKE '%timeout%'
+        OR lower(COALESCE(error_message, '')) LIKE '%connection%'
+      ) THEN 1 ELSE 0 END) AS network_errors,
+      SUM(CASE WHEN status = 'failed' AND (
+        lower(COALESCE(error_message, '')) LIKE '%23514%'
+        OR lower(COALESCE(error_message, '')) LIKE '%constraint%'
+        OR lower(COALESCE(error_message, '')) LIKE '%invalid%'
+        OR lower(COALESCE(error_message, '')) LIKE '%غير صالح%'
+      ) THEN 1 ELSE 0 END) AS validation_errors
+    FROM sync_queue
+  `).get();
+
+  return {
+    success: true,
+    total: Number(row?.total || 0),
+    pending: Number(row?.pending || 0),
+    syncing: Number(row?.syncing || 0),
+    failed: Number(row?.failed || 0),
+    oldestPendingAt: row?.oldest_pending_at || undefined,
+    oldestSyncingAt: row?.oldest_syncing_at || undefined,
+    maxFailedRetries: Number(row?.max_failed_retries || 0),
+    errorCategories: {
+      permission: Number(row?.permission_errors || 0),
+      rpc: Number(row?.rpc_errors || 0),
+      network: Number(row?.network_errors || 0),
+      validation: Number(row?.validation_errors || 0),
+    },
+  };
 });
 
 ipcMain.handle('taj:sync-queue:set-status', (event, params, ...extraArgs) => {

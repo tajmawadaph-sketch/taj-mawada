@@ -346,6 +346,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
       case 'import': return can('settings', 'view');
       case 'promotions': return can('invoices', 'view') || can('settings', 'view');
       case 'audit': return can('settings', 'view') || can('reports', 'view');
+      case 'diagnostics': return can('settings', 'view');
       case 'fleet': return can('fleet_operations', 'view') || can('fleet', 'view');
       case 'payroll': return can('expenses', 'view') || can('settings', 'view');
       case 'settings': return can('settings', 'view');

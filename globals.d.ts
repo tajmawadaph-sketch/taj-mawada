@@ -82,6 +82,22 @@ declare global {
       error_message?: string;
     }>>;
     syncQueueCountPending: () => Promise<number>;
+    syncQueueDiagnostics: () => Promise<{
+      success: boolean;
+      total: number;
+      pending: number;
+      syncing: number;
+      failed: number;
+      oldestPendingAt?: string;
+      oldestSyncingAt?: string;
+      maxFailedRetries: number;
+      errorCategories: {
+        permission: number;
+        rpc: number;
+        network: number;
+        validation: number;
+      };
+    }>;
     syncQueueSetStatus: (params: { id: string; status: 'pending' | 'syncing' }) => Promise<{ success: boolean }>;
     syncQueueMarkFailed: (params: { id: string; errorMessage?: string }) => Promise<{ success: boolean }>;
     syncQueueRemove: (id: string) => Promise<{ success: boolean }>;

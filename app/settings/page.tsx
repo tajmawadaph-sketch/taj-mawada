@@ -18,6 +18,11 @@ const SystemHealthRadar = dynamic(() => import('./SystemHealthRadar'), {
   ssr: false 
 });
 
+const DiagnosticsPanel = dynamic(() => import('./DiagnosticsPanel'), {
+  loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#C29B62' }}>⏳ جاري تجهيز فحوصات النظام...</div>,
+  ssr: false,
+});
+
 const AuditLogs = dynamic(() => import('./AuditLogs'), { 
   loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#1C73AB' }}>⏳ جاري تحميل سجل المراقبة...</div>,
   ssr: false 
@@ -95,19 +100,19 @@ const TABLE_NAMES_EN: Record<string, string> = {
   audit_logs: 'Audit Logs & Trails'
 };
 
-type SettingsTab = 'desktop' | 'devices' | 'backup' | 'restore' | 'reset' | 'permissions' | 'health' | 'audit';
+type SettingsTab = 'desktop' | 'devices' | 'backup' | 'restore' | 'reset' | 'permissions' | 'health' | 'diagnostics' | 'audit';
 
 function SettingsPageContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as SettingsTab | null;
   const [activeTab, setActiveTab] = useState<SettingsTab>(
-    tabParam && ['desktop', 'devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'audit'].includes(tabParam)
+    tabParam && ['desktop', 'devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'diagnostics', 'audit'].includes(tabParam)
       ? tabParam
       : 'devices'
   ); 
 
   useEffect(() => {
-    if (tabParam && ['desktop', 'devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'audit'].includes(tabParam)) {
+    if (tabParam && ['desktop', 'devices', 'backup', 'restore', 'reset', 'permissions', 'health', 'diagnostics', 'audit'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -135,6 +140,7 @@ function SettingsPageContent() {
     { id: 'reset', labelAr: 'التهيئة وتصفير الحركات', labelEn: 'Reset and Wipe', icon: '🚨' },
     { id: 'permissions', labelAr: 'مصفوفة الصلاحيات', labelEn: 'Permissions Matrix', icon: '🔐' },
     { id: 'health', labelAr: 'سلامة النظام (الرادار)', labelEn: 'System Health Radar', icon: '⚡' },
+    { id: 'diagnostics', labelAr: 'الفحص والتشخيص', labelEn: 'Diagnostics', icon: '🩺' },
     { id: 'audit', labelAr: 'سجل المراقبة والعمليات', labelEn: 'Audit Logs', icon: '🕵️‍♂️' },
   ];
 
@@ -744,6 +750,9 @@ function SettingsPageContent() {
         {/* 5. تبويب رادار سلامة النظام */}
         {activeTab === 'health' && <SystemHealthRadar />}
 
+        {/* 6. الفحص الفني والاتصال والطابور المحلي */}
+        {activeTab === 'diagnostics' && <DiagnosticsPanel />}
+
         {/* 6. تبويب سجل العمليات والمراقبة */}
         {activeTab === 'audit' && <AuditLogs />}
 
@@ -843,20 +852,17 @@ function SettingsPageContent() {
       <style>{`
         .settings-tabs-bar {
           display: flex;
+          flex-wrap: wrap;
           gap: 8px;
-          overflow-x: auto;
+          overflow-x: visible;
           padding-bottom: 8px;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: none;
-        }
-        .settings-tabs-bar::-webkit-scrollbar {
-          display: none;
         }
 
         .tab-btn { 
           display: flex;
           align-items: center;
           gap: 8px;
+          min-height: 44px;
           padding: 10px 18px; 
           border-radius: 14px; 
           border: 1px solid rgba(40, 145, 200, 0.2); 

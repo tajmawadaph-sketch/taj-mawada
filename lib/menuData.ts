@@ -83,6 +83,7 @@ export const menuGroups: MenuGroup[] = [
             { id: 'fleet', title: 'إدارة السيارات', titleEn: 'Fleet Management', icon: '🚙', path: '/fleet' },
             { id: 'payroll', title: 'الرواتب والأجور', titleEn: 'Payroll and Salaries', icon: '💵', path: '/payroll' },
             { id: 'devices', title: 'الأجهزة والطرفيات (Hardware)', titleEn: 'Connected Devices and POS', icon: '🖨️', path: '/settings/devices' },
+            { id: 'diagnostics', title: 'الفحص والتشخيص الفني', titleEn: 'System Diagnostics & Health', icon: '🩺', path: '/diagnostics' },
             { id: 'settings', title: 'إعدادات النظام', titleEn: 'System Settings', icon: '⚙️', path: '/settings' }
         ] 
     }

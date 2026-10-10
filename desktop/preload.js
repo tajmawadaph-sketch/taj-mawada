@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('tajDesktop', {
   syncQueueAdd: (item) => ipcRenderer.invoke('taj:sync-queue:add', item),
   syncQueueListPending: () => ipcRenderer.invoke('taj:sync-queue:list-pending'),
   syncQueueCountPending: () => ipcRenderer.invoke('taj:sync-queue:count-pending'),
+  syncQueueDiagnostics: () => ipcRenderer.invoke('taj:sync-queue:diagnostics'),
   syncQueueSetStatus: (params) => ipcRenderer.invoke('taj:sync-queue:set-status', params),
   syncQueueMarkFailed: (params) => ipcRenderer.invoke('taj:sync-queue:mark-failed', params),
   syncQueueRemove: (id) => ipcRenderer.invoke('taj:sync-queue:remove', id),

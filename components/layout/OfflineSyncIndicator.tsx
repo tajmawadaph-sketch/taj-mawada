@@ -34,9 +34,34 @@ export default function OfflineSyncIndicator() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [storageLocation, setStorageLocation] = useState<'checking' | 'browser' | 'desktop' | 'unavailable'>('checking');
+  const [userDataPath, setUserDataPath] = useState('');
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const desktopApi = window.tajDesktop;
+    if (!desktopApi?.isDesktop) {
+      setStorageLocation('browser');
+      return () => { cancelled = true; };
+    }
+
+    void desktopApi.getInfo().then((info) => {
+      if (cancelled) return;
+      if (info.userData) {
+        setUserDataPath(info.userData);
+        setStorageLocation('desktop');
+      } else {
+        setStorageLocation('unavailable');
+      }
+    }).catch(() => {
+      if (!cancelled) setStorageLocation('unavailable');
+    });
+
+    return () => { cancelled = true; };
   }, []);
 
   // إغلاق النافذة عند الضغط على زر Escape
@@ -265,7 +290,13 @@ export default function OfflineSyncIndicator() {
                   الخزنة المحلية (IndexedDB & Disk)
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#6b7280', fontWeight: 700, marginTop: '2px' }}>
-                  قاعدة المتصفح: <code style={{ fontSize: '11px', color: '#C29B62', fontWeight: 800 }}>D:\TajMawadah_Data</code>
+                  {storageLocation === 'desktop'
+                    ? <>مجلد بيانات Electron: <code dir="ltr" style={{ fontSize: '11px', color: '#C29B62', fontWeight: 800 }}>{userDataPath}</code></>
+                    : storageLocation === 'browser'
+                      ? 'قاعدة IndexedDB: موقع التخزين يديره المتصفح'
+                      : storageLocation === 'checking'
+                        ? 'جارٍ تحديد موقع التخزين المحلي...'
+                        : 'تعذر تحديد موقع التخزين المحلي'}
                 </div>
               </div>
             </div>
