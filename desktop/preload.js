@@ -8,6 +8,9 @@ ipcRenderer.on('taj:sync-queue:renderer-recovered', () => {
 contextBridge.exposeInMainWorld('tajDesktop', {
   isDesktop: true,
   getInfo: () => ipcRenderer.invoke('taj:get-info'),
+  chooseDataDirectory: () => ipcRenderer.invoke('taj:data-location:choose'),
+  cancelDataDirectory: () => ipcRenderer.invoke('taj:data-location:cancel'),
+  applyDataDirectory: () => ipcRenderer.invoke('taj:data-location:apply'),
   setAppUrl: (url) => ipcRenderer.invoke('taj:set-app-url', url),
   detectNetwork: () => ipcRenderer.invoke('taj:detect-network'),
   pingHost: (ip, port, timeoutMs) => ipcRenderer.invoke('taj:ping', { ip, port, timeoutMs }),

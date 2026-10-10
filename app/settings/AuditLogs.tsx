@@ -257,7 +257,7 @@ export default function AuditLogs() {
                     </p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <div style={{ background: 'rgba(255, 255, 255, 0.75)', border: '1px solid rgba(28, 115, 171, 0.2)', padding: '6px 14px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ background: '#FFFFFF', border: '1px solid rgba(194, 155, 98, 0.25)', padding: '6px 14px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#64748b' }}>
                             {isEn ? 'Total:' : 'إجمالي الحركات:'}
                         </span>
@@ -266,15 +266,16 @@ export default function AuditLogs() {
                     <button 
                         onClick={fetchLogs} 
                         style={{ 
-                            background: 'linear-gradient(135deg, #1C73AB, #2891C8)', 
+                            background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)', 
                             color: 'white', 
                             border: 'none', 
-                            padding: '8px 16px', 
+                            minHeight: '44px',
+                            padding: '8px 18px', 
                             borderRadius: '12px', 
                             cursor: 'pointer', 
                             fontWeight: 900,
                             fontSize: '12.5px',
-                            boxShadow: '0 2px 8px rgba(28, 115, 171, 0.2)'
+                            boxShadow: '0 2px 8px rgba(194, 155, 98, 0.25)'
                         }}
                     >
                         🔄 {isEn ? 'Refresh' : 'تحديث السجل'}
@@ -283,7 +284,7 @@ export default function AuditLogs() {
             </div>
 
             {logs.length === 0 && !isLoading && (
-                <div style={{ textAlign: 'center', padding: '60px 20px', background: 'rgba(255,255,255,0.7)', borderRadius: '24px', border: '1px solid rgba(28, 115, 171, 0.2)', backdropFilter: 'blur(10px)' }}>
+                <div style={{ textAlign: 'center', padding: '60px 20px', background: '#FFFFFF', borderRadius: '24px', border: '1px solid rgba(194, 155, 98, 0.25)', boxShadow: '0 4px 20px rgba(30, 19, 11, 0.04)' }}>
                     <div style={{ fontSize: '48px', marginBottom: '10px' }}>🛡️</div>
                     <h3 style={{ color: THEME.primary, fontWeight: 900, fontSize: '16px', margin: '0 0 8px' }}>
                         {isEn ? 'No activities recorded yet' : 'لم يتم تسجيل أي نشاط بعد'}
@@ -301,17 +302,17 @@ export default function AuditLogs() {
                         display: 'grid', 
                         gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
                         gap: '10px', 
-                        background: 'rgba(255, 255, 255, 0.7)', 
-                        backdropFilter: 'blur(15px)',
+                        background: '#FFFFFF', 
                         padding: '14px', 
                         borderRadius: '16px', 
-                        border: '1px solid rgba(28, 115, 171, 0.15)' 
+                        border: '1px solid rgba(194, 155, 98, 0.22)',
+                        boxShadow: '0 4px 16px rgba(30, 19, 11, 0.03)' 
                     }}>
                         <div>
                             <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748b', marginBottom: '4px' }}>
                                 {isEn ? 'User' : 'المستخدم'}
                             </label>
-                            <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(28, 115, 171, 0.2)', fontSize: '12px', background: 'white' }}>
+                            <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.25)', fontSize: '12px', background: '#FDFBF7' }}>
                                 <option value="">{isEn ? 'All Users' : 'الكل (All)'}</option>
                                 {uniqueUsers.map((user: string) => <option key={user} value={user}>{user}</option>)}
                             </select>
@@ -320,7 +321,7 @@ export default function AuditLogs() {
                             <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748b', marginBottom: '4px' }}>
                                 {isEn ? 'Table' : 'الجدول'}
                             </label>
-                            <select value={filterTable} onChange={(e) => setFilterTable(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(28, 115, 171, 0.2)', fontSize: '12px', background: 'white' }}>
+                            <select value={filterTable} onChange={(e) => setFilterTable(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.25)', fontSize: '12px', background: '#FDFBF7' }}>
                                 <option value="">{isEn ? 'All Tables' : 'الكل (All)'}</option>
                                 {uniqueTables.map((table: string) => <option key={table} value={table}>{table}</option>)}
                             </select>
@@ -332,7 +333,7 @@ export default function AuditLogs() {
                             <select
                                 value={filterAction}
                                 onChange={(e) => setFilterAction(e.target.value)}
-                                style={{ width: '100%', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(28, 115, 171, 0.2)', fontSize: '12px', background: 'white' }}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.25)', fontSize: '12px', background: '#FDFBF7' }}
                             >
                                 <option value="">{isEn ? 'All Actions' : 'الكل (All)'}</option>
                                 {uniqueActions.map((action: string) => {
@@ -345,18 +346,18 @@ export default function AuditLogs() {
                             <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748b', marginBottom: '4px' }}>
                                 {isEn ? 'Date' : 'التاريخ'}
                             </label>
-                            <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ width: '100%', padding: '7px 10px', borderRadius: '10px', border: '1px solid rgba(28, 115, 171, 0.2)', fontSize: '12px', background: 'white', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                            <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ width: '100%', padding: '7px 10px', borderRadius: '10px', border: '1px solid rgba(194, 155, 98, 0.25)', fontSize: '12px', background: '#FDFBF7', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                         </div>
                         {(filterUser || filterTable || filterAction || filterDate) && (
                             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                                <button onClick={() => { setFilterUser(''); setFilterTable(''); setFilterAction(''); setFilterDate(''); }} style={{ width: '100%', padding: '8px', borderRadius: '10px', border: 'none', background: '#ef4444', color: 'white', fontWeight: 800, fontSize: '12px', cursor: 'pointer' }}>
+                                <button onClick={() => { setFilterUser(''); setFilterTable(''); setFilterAction(''); setFilterDate(''); }} style={{ width: '100%', minHeight: '38px', padding: '8px', borderRadius: '10px', border: 'none', background: '#A8573C', color: 'white', fontWeight: 800, fontSize: '12px', cursor: 'pointer' }}>
                                     {isEn ? 'Clear ✕' : 'مسح الفلاتر ✕'}
                                 </button>
                             </div>
                         )}
                     </div>
 
-                    <div style={{ background: 'rgba(255, 255, 255, 0.75)', backdropFilter: 'blur(20px)', padding: '16px', borderRadius: '20px', boxShadow: '0 8px 32px rgba(28, 115, 171, 0.05)', border: '1px solid rgba(255, 255, 255, 0.8)' }}>
+                    <div style={{ background: '#FFFFFF', padding: '16px', borderRadius: '20px', boxShadow: '0 8px 32px rgba(30, 19, 11, 0.05)', border: '1px solid rgba(194, 155, 98, 0.2)' }}>
                         <RawasiSmartTable 
                             data={filteredLogs} 
                             columns={columns} 

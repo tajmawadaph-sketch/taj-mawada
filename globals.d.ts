@@ -9,8 +9,23 @@ declare global {
       version: string;
       platform: string;
       userData: string;
+      sessionData: string;
+      dataLocationMigrationError?: string | null;
+      pendingDataLocation?: string | null;
       appUrl: string | null;
       isDesktop: boolean;
+    }>;
+    chooseDataDirectory: () => Promise<{
+      success: boolean;
+      canceled?: boolean;
+      path?: string;
+      error?: string;
+    }>;
+    cancelDataDirectory: () => Promise<{ success: boolean }>;
+    applyDataDirectory: () => Promise<{
+      success: boolean;
+      restarting?: boolean;
+      error?: string;
     }>;
     setAppUrl: (url: string) => Promise<{ ok: boolean; error?: string }>;
     detectNetwork: () => Promise<{

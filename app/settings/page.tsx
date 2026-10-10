@@ -9,12 +9,12 @@ const ConnectedDevicesManager = dynamic(() => import('./ConnectedDevicesManager'
 });
 
 const PermissionsMatrix = dynamic(() => import('./PermissionsMatrix'), { 
-  loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#1C73AB' }}>⏳ جاري تحميل مصفوفة الصلاحيات...</div>,
+  loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#C29B62' }}>⏳ جاري تحميل مصفوفة الصلاحيات...</div>,
   ssr: false 
 });
 
 const SystemHealthRadar = dynamic(() => import('./SystemHealthRadar'), { 
-  loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#1C73AB' }}>⏳ جاري فحص سلامة النظام...</div>,
+  loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#C29B62' }}>⏳ جاري فحص سلامة النظام...</div>,
   ssr: false 
 });
 
@@ -24,7 +24,7 @@ const DiagnosticsPanel = dynamic(() => import('./DiagnosticsPanel'), {
 });
 
 const AuditLogs = dynamic(() => import('./AuditLogs'), { 
-  loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#1C73AB' }}>⏳ جاري تحميل سجل المراقبة...</div>,
+  loading: () => <div style={{ textAlign: 'center', padding: '40px', fontWeight: 800, color: '#C29B62' }}>⏳ جاري تحميل سجل المراقبة...</div>,
   ssr: false 
 });
 import RawasiSidebarManager from '@/components/RawasiSidebarManager'; 
@@ -414,7 +414,7 @@ function SettingsPageContent() {
         <div className="sidebar-summary-glass">
           <div className="icon-pulse">📥</div>
           <p className="summary-title">{isEn ? 'Smart Data Restore' : 'استعادة وترحيل البيانات'}</p>
-          <h3 className="summary-value" style={{ fontSize: '13px', marginTop: '6px', color: '#1C73AB', wordBreak: 'break-all' }}>
+          <h3 className="summary-value" style={{ fontSize: '13px', marginTop: '6px', color: '#C29B62', wordBreak: 'break-all' }}>
             {selectedFile ? selectedFile.name : (isEn ? 'No file selected' : 'لم يتم اختيار ملف')}
           </h3>
         </div>
@@ -434,8 +434,8 @@ function SettingsPageContent() {
       summary = (
         <div className="sidebar-summary-glass critical">
           <div className="icon-pulse">🚨</div>
-          <p className="summary-title" style={{ color: '#b91c1c' }}>{isEn ? 'Danger Zone' : 'العمليات الحساسة'}</p>
-          <h3 className="summary-value" style={{ fontSize: '13px', color: '#991b1b', marginTop: '6px' }}>
+          <p className="summary-title" style={{ color: '#A8573C' }}>{isEn ? 'Danger Zone' : 'العمليات الحساسة'}</p>
+          <h3 className="summary-value" style={{ fontSize: '13px', color: '#A8573C', marginTop: '6px' }}>
             {isEn ? 'Destructive Actions' : 'تصفير وإعادة تهيئة'}
           </h3>
         </div>
@@ -444,7 +444,7 @@ function SettingsPageContent() {
       summary = (
         <div className="sidebar-summary-glass info">
           <div className="icon-pulse">🛡️</div>
-          <p className="summary-title" style={{color: '#1C73AB'}}>{isEn ? 'System Protected' : 'النظام محمي ومؤمن'}</p>
+          <p className="summary-title" style={{ color: '#C29B62' }}>{isEn ? 'System Protected' : 'النظام محمي ومؤمن'}</p>
         </div>
       );
     }
@@ -471,10 +471,12 @@ function SettingsPageContent() {
               className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`} 
               onClick={() => setActiveTab(tab.id)}
             >
-              <span>{tab.icon}</span>
+              <span className="tab-icon">{tab.icon}</span>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
-                <span>{tab.labelAr}</span>
-                <span style={{ fontSize: '10px', color: '#C29B62', fontWeight: 700, letterSpacing: '0.2px' }}>{tab.labelEn}</span>
+                <span className="tab-title">{tab.labelAr}</span>
+                <span className="tab-sub" style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.2px' }}>
+                  {tab.labelEn}
+                </span>
               </div>
             </button>
           ))}
@@ -550,7 +552,7 @@ function SettingsPageContent() {
             <div className="cinematic-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '14px', maxHeight: '520px', overflowY: 'auto', paddingRight: '4px' }}>
               {TABLE_GROUPS.map((group) => (
                 <div key={group.id} className="group-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(40, 145, 200, 0.15)', paddingBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(194, 155, 98, 0.2)', paddingBottom: '6px' }}>
                     <h3 style={{ margin: 0, fontSize: '12.5px', color: THEME.primary, fontWeight: 900 }}>
                       {isEn ? group.nameEn : group.nameAr}
                     </h3>
@@ -584,18 +586,18 @@ function SettingsPageContent() {
             </div>
 
             {/* أزرار سريعة للشاشات المتجاوبة والجوال */}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '18px', paddingTop: '14px', borderTop: '1px solid rgba(40,145,200,0.15)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '18px', paddingTop: '14px', borderTop: '1px solid rgba(194, 155, 98, 0.2)', flexWrap: 'wrap' }}>
               <button 
                 onClick={handleExportExcel} 
                 disabled={selectedCount === 0 || isProcessing}
-                style={{ flex: 1, minWidth: '160px', padding: '12px', background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                style={{ flex: 1, minWidth: '160px', minHeight: '44px', padding: '12px', background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(5, 150, 105, 0.25)' }}
               >
                 📊 {isEn ? 'Export Formatted Excel' : 'تصدير Excel احترافي'}
               </button>
               <button 
                 onClick={handleExportSQL} 
                 disabled={selectedCount === 0 || isProcessing}
-                style={{ flex: 1, minWidth: '160px', padding: '12px', background: 'linear-gradient(135deg, #1C73AB, #2891C8)', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                style={{ flex: 1, minWidth: '160px', minHeight: '44px', padding: '12px', background: 'linear-gradient(135deg, #1E130B 0%, #2C1A12 100%)', color: 'white', border: '1px solid rgba(194, 155, 98, 0.35)', borderRadius: '12px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(30, 19, 11, 0.2)' }}
               >
                 💾 {isEn ? 'Export SQL Script' : 'تصدير سكريبت SQL'}
               </button>
@@ -847,12 +849,12 @@ function SettingsPageContent() {
         </div>
       )}
 
-      {/* ستايلات الـ CSS وفق طابع Aqua Glassmorphism */}
+      {/* ستايلات الـ CSS وفق هوية الفخامة الملكية Luxury Royal UI/UX */}
       <style>{`
         .settings-tabs-bar {
           display: flex;
           flex-wrap: wrap;
-          gap: 8px;
+          gap: 10px;
           overflow-x: visible;
           padding-bottom: 8px;
         }
@@ -860,108 +862,138 @@ function SettingsPageContent() {
         .tab-btn { 
           display: flex;
           align-items: center;
-          gap: 8px;
-          min-height: 44px;
+          gap: 10px;
+          min-height: 46px;
           padding: 10px 18px; 
           border-radius: 14px; 
-          border: 1px solid rgba(40, 145, 200, 0.2); 
-          font-weight: 900; 
+          border: 1px solid rgba(194, 155, 98, 0.28); 
+          font-weight: 800; 
           font-size: 13px; 
           cursor: pointer; 
-          transition: 0.2s; 
-          background: rgba(255, 255, 255, 0.7); 
-          color: #64748b; 
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); 
+          background: #FFFFFF; 
+          color: #6F6257; 
           white-space: nowrap; 
-          backdrop-filter: blur(10px);
+          box-shadow: 0 2px 8px rgba(30, 19, 11, 0.04);
           flex-shrink: 0;
         }
+        .tab-btn .tab-icon {
+          font-size: 18px;
+          transition: transform 0.2s;
+        }
+        .tab-btn .tab-title {
+          font-weight: 900;
+          font-size: 13px;
+        }
+        .tab-btn .tab-sub {
+          color: #9C8E82;
+          transition: color 0.2s;
+        }
         .tab-btn:hover { 
-          background: rgba(255, 255, 255, 0.95); 
-          color: #1C73AB; 
+          background: #FAF7F2; 
+          color: #1E130B; 
+          border-color: #C29B62;
           transform: translateY(-2px); 
+          box-shadow: 0 4px 14px rgba(194, 155, 98, 0.18);
+        }
+        .tab-btn:hover .tab-sub {
+          color: #8C6627;
         }
         .tab-btn.active { 
-          background: linear-gradient(135deg, #1C73AB, #2891C8); 
-          color: white; 
-          border-color: #1C73AB; 
-          box-shadow: 0 4px 15px rgba(28, 115, 171, 0.25); 
+          background: linear-gradient(135deg, #1E130B 0%, #2C1A12 100%); 
+          color: #FFFFFF; 
+          border-color: #C29B62; 
+          border-width: 1.5px;
+          box-shadow: 0 6px 20px rgba(30, 19, 11, 0.28); 
+          transform: translateY(-1px);
+        }
+        .tab-btn.active .tab-title {
+          color: #FFFFFF;
+        }
+        .tab-btn.active .tab-sub {
+          color: #C29B62 !important;
+        }
+        .tab-btn.active .tab-icon {
+          transform: scale(1.08);
         }
 
         .group-card { 
-          background: rgba(255, 255, 255, 0.6); 
-          padding: 12px; 
+          background: #FFFFFF; 
+          padding: 14px; 
           border-radius: 14px; 
-          border: 1px solid rgba(255, 255, 255, 0.8); 
-          box-shadow: 0 4px 15px rgba(28, 115, 171, 0.04);
+          border: 1px solid rgba(194, 155, 98, 0.22); 
+          box-shadow: 0 4px 16px rgba(30, 19, 11, 0.04);
         }
         .table-row { 
           display: flex; 
           justify-content: space-between; 
           align-items: center; 
-          padding: 7px 10px; 
-          background: white; 
-          border-radius: 9px; 
-          margin-top: 4px; 
-          border: 1px solid rgba(40, 145, 200, 0.15); 
+          padding: 8px 12px; 
+          background: #FDFBF7; 
+          border-radius: 10px; 
+          margin-top: 5px; 
+          border: 1px solid rgba(194, 155, 98, 0.15); 
           transition: 0.2s; 
         }
         .table-row.selected { 
-          border-color: #2891C8; 
-          background: rgba(40, 145, 200, 0.05); 
+          border-color: #C29B62; 
+          background: rgba(194, 155, 98, 0.08); 
         }
         .table-row:hover { 
-          border-color: #1C73AB; 
+          border-color: #C29B62; 
         }
         .custom-checkbox { 
-          width: 16px; 
-          height: 16px; 
+          width: 17px; 
+          height: 17px; 
           cursor: pointer; 
-          accent-color: #1C73AB; 
+          accent-color: #C29B62; 
         }
 
         .btn-action-small {
-          background: rgba(255, 255, 255, 0.8); 
-          border: 1px solid rgba(40, 145, 200, 0.2); 
+          background: #FFFFFF; 
+          border: 1px solid rgba(194, 155, 98, 0.3); 
           padding: 6px 12px; 
           border-radius: 8px; 
           cursor: pointer; 
           font-weight: 800; 
-          color: #1C73AB; 
+          color: #1E130B; 
           font-size: 11px;
           transition: 0.2s;
         }
         .btn-action-small:hover { 
-          background: #1C73AB; 
+          background: #C29B62; 
           color: white; 
+          border-color: #C29B62;
         }
 
         .link-btn { 
           background: none; 
           border: none; 
-          color: #0284c7; 
+          color: #C29B62; 
           cursor: pointer; 
           font-weight: 800; 
           font-size: 11px; 
         }
         .link-btn:hover { 
+          color: #1E130B;
           text-decoration: underline; 
         }
 
         .badge-master {
           font-size: 9.5px; 
           font-weight: 800; 
-          background: #e0f2fe; 
-          color: #0369a1;
-          padding: 2px 6px; 
+          background: rgba(194, 155, 98, 0.12); 
+          color: #8C6627;
+          padding: 2px 7px; 
           border-radius: 6px; 
-          border: 1px solid #bae6fd;
+          border: 1px solid rgba(194, 155, 98, 0.3);
         }
 
         .premium-dropzone { 
-          background: rgba(255, 255, 255, 0.6); 
-          border: 2px dashed rgba(40, 145, 200, 0.3); 
+          background: #FFFFFF; 
+          border: 2px dashed rgba(194, 155, 98, 0.35); 
           border-radius: 18px; 
-          padding: 25px 20px; 
+          padding: 28px 20px; 
           text-align: center; 
           cursor: pointer; 
           transition: 0.2s; 
@@ -970,20 +1002,21 @@ function SettingsPageContent() {
           gap: 8px; 
           justify-content: center; 
           align-items: center; 
+          box-shadow: 0 4px 16px rgba(30, 19, 11, 0.03);
         }
         .premium-dropzone:hover { 
-          background: white; 
-          border-color: #1C73AB; 
+          background: #FAF7F2; 
+          border-color: #C29B62; 
         }
         .premium-dropzone.has-file { 
-          background: #f0fdf4; 
-          border-color: #10b981; 
+          background: #F0FDF4; 
+          border-color: #059669; 
           border-style: solid; 
         }
         .premium-dropzone.uploading { 
           pointer-events: none; 
           opacity: 0.8; 
-          border-color: #1C73AB; 
+          border-color: #C29B62; 
         }
         
         .loading-spinner { 
@@ -991,7 +1024,7 @@ function SettingsPageContent() {
           animation: spin 2s linear infinite; 
         }
         .btn-premium-upload { 
-          background: linear-gradient(135deg, #1C73AB, #2891C8); 
+          background: linear-gradient(135deg, #C29B62 0%, #A8573C 100%); 
           color: white; 
           padding: 12px; 
           border-radius: 12px; 
@@ -1002,24 +1035,24 @@ function SettingsPageContent() {
           transition: 0.2s; 
           width: 100%; 
           margin-top: 12px; 
-          box-shadow: 0 4px 15px rgba(28, 115, 171, 0.25);
+          box-shadow: 0 4px 15px rgba(194, 155, 98, 0.3);
         }
         .btn-premium-upload:hover { 
           transform: translateY(-2px); 
-          filter: brightness(1.1); 
+          filter: brightness(1.08); 
         }
 
         .sidebar-summary-glass { 
-          background: rgba(255,255,255,0.85); 
+          background: #FFFFFF; 
           padding: 16px; 
           border-radius: 18px; 
           text-align: center; 
-          border: 1px solid rgba(40, 145, 200, 0.2); 
-          box-shadow: 0 4px 20px rgba(28, 115, 171, 0.08);
+          border: 1px solid rgba(194, 155, 98, 0.25); 
+          box-shadow: 0 4px 20px rgba(30, 19, 11, 0.05);
         }
         .sidebar-summary-glass.critical {
-          background: rgba(254, 242, 242, 0.9);
-          border-color: rgba(239, 68, 68, 0.3);
+          background: #FEF2F2;
+          border-color: rgba(168, 87, 60, 0.35);
         }
         .sidebar-summary-glass .icon-pulse { 
           font-size: 26px; 
@@ -1028,19 +1061,19 @@ function SettingsPageContent() {
         .summary-title { 
           margin: 0; 
           font-size: 11.5px; 
-          color: #64748b; 
+          color: #6F6257; 
           font-weight: 800; 
         }
         .summary-value { 
           margin: 4px 0 0 0; 
           font-weight: 900; 
-          font-size: 22px; 
-          color: #122946; 
+          font-size: 20px; 
+          color: #1E130B; 
         }
 
         .btn-premium-glass { 
           width: 100%; 
-          padding: 11px; 
+          padding: 12px; 
           border-radius: 12px; 
           border: none; 
           color: white; 
@@ -1050,18 +1083,21 @@ function SettingsPageContent() {
           gap: 8px; 
           cursor: pointer; 
           font-weight: 900; 
-          font-size: 12.5px; 
+          font-size: 13px; 
           transition: 0.2s; 
         }
         .btn-premium-glass.excel { 
-          background: linear-gradient(135deg, #10b981, #059669); 
+          background: linear-gradient(135deg, #10B981, #059669); 
+          box-shadow: 0 4px 14px rgba(5, 150, 105, 0.25);
         }
         .btn-premium-glass.sql { 
-          background: linear-gradient(135deg, #1C73AB, #2891C8); 
+          background: linear-gradient(135deg, #1E130B 0%, #2C1A12 100%); 
+          border: 1px solid rgba(194, 155, 98, 0.35);
+          box-shadow: 0 4px 14px rgba(30, 19, 11, 0.2);
         }
         .btn-premium-glass:hover:not(.disabled) { 
           transform: translateY(-2px); 
-          filter: brightness(1.1); 
+          filter: brightness(1.08); 
         }
         .btn-premium-glass.disabled { 
           opacity: 0.5; 
@@ -1077,28 +1113,27 @@ function SettingsPageContent() {
           margin-top: 12px; 
         }
         .status-alert.loading { 
-          background: #eff6ff; 
-          color: #1d4ed8; 
-          border: 1px solid #bfdbfe; 
+          background: #FAF7F2; 
+          color: #8C6627; 
+          border: 1px solid rgba(194, 155, 98, 0.35); 
         }
         .status-alert.success { 
-          background: #f0fdf4; 
-          color: #15803d; 
-          border: 1px solid #bbf7d0; 
+          background: #F0FDF4; 
+          color: #15803D; 
+          border: 1px solid #BBF7D0; 
         }
         .status-alert.error { 
-          background: #fef2f2; 
-          color: #b91c1c; 
-          border: 1px solid #fecaca; 
+          background: #FEF2F2; 
+          color: #B91C1C; 
+          border: 1px solid #FECACA; 
         }
 
         /* منطقة العمليات الحساسة */
         .danger-zone-container {
-          background: rgba(254, 242, 242, 0.7);
-          border: 1.5px solid rgba(239, 68, 68, 0.3);
+          background: #FEF2F2;
+          border: 1.5px solid rgba(168, 87, 60, 0.3);
           border-radius: 20px;
           padding: 20px;
-          backdrop-filter: blur(10px);
         }
         .danger-card {
           background: white;
@@ -1107,33 +1142,33 @@ function SettingsPageContent() {
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          border: 1px solid rgba(0,0,0,0.06);
-          box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+          border: 1px solid rgba(30, 19, 11, 0.08);
+          box-shadow: 0 4px 15px rgba(30, 19, 11, 0.03);
         }
         .danger-card.warning-level { 
-          border-top: 4px solid #f59e0b; 
+          border-top: 4px solid #C29B62; 
         }
         .danger-card.critical-level { 
-          border-top: 4px solid #ef4444; 
+          border-top: 4px solid #A8573C; 
         }
 
         .badge-safe {
           font-size: 10px; 
           font-weight: 800; 
-          background: #fef3c7; 
-          color: #b45309;
+          background: rgba(194, 155, 98, 0.15); 
+          color: #8C6627;
           padding: 2px 8px; 
           border-radius: 12px; 
-          border: 1px solid #fde68a;
+          border: 1px solid rgba(194, 155, 98, 0.3);
         }
         .badge-critical {
           font-size: 10px; 
           font-weight: 800; 
-          background: #fee2e2; 
-          color: #b91c1c;
+          background: #FEE2E2; 
+          color: #A8573C;
           padding: 2px 8px; 
           border-radius: 12px; 
-          border: 1px solid #fca5a5;
+          border: 1px solid #FCA5A5;
         }
 
         .btn-danger {
@@ -1144,24 +1179,24 @@ function SettingsPageContent() {
           font-weight: 900; 
           font-size: 12.5px;
           cursor: pointer; 
-          transition: 0.2s;
+          transition: 0.2s; 
         }
         .btn-danger.warning { 
-          background: #fffbeb; 
-          color: #b45309; 
-          border: 1.5px solid #f59e0b; 
+          background: #FFFBEB; 
+          color: #8C6627; 
+          border: 1.5px solid #C29B62; 
         }
         .btn-danger.warning:hover { 
-          background: #f59e0b; 
+          background: #C29B62; 
           color: white; 
         }
         .btn-danger.critical { 
-          background: #fef2f2; 
-          color: #dc2626; 
-          border: 1.5px solid #ef4444; 
+          background: #FEF2F2; 
+          color: #A8573C; 
+          border: 1.5px solid #A8573C; 
         }
         .btn-danger.critical:hover { 
-          background: #dc2626; 
+          background: #A8573C; 
           color: white; 
         }
 
@@ -1169,8 +1204,7 @@ function SettingsPageContent() {
         .security-modal-overlay {
           position: fixed; 
           inset: 0;
-          background: rgba(18, 41, 70, 0.88);
-          backdrop-filter: blur(10px);
+          background: rgba(30, 19, 11, 0.75);
           display: flex; 
           align-items: center; 
           justify-content: center;
@@ -1180,17 +1214,18 @@ function SettingsPageContent() {
         .security-modal-card {
           background: white; 
           border-radius: 20px;
-          padding: 22px; 
+          padding: 24px; 
           max-width: 440px; 
           width: 100%;
           text-align: center; 
-          box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+          border: 1px solid rgba(194, 155, 98, 0.3);
+          box-shadow: 0 25px 50px rgba(30, 19, 11, 0.3);
           animation: fadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .security-input {
           width: 100%; 
           padding: 10px; 
-          border: 2px solid #cbd5e1;
+          border: 2px solid rgba(194, 155, 98, 0.35);
           border-radius: 8px; 
           font-size: 14px; 
           font-weight: 900;
@@ -1200,7 +1235,7 @@ function SettingsPageContent() {
           box-sizing: border-box;
         }
         .security-input:focus { 
-          border-color: #dc2626; 
+          border-color: #A8573C; 
         }
         .btn-confirm-action {
           flex: 1; 
@@ -1211,17 +1246,17 @@ function SettingsPageContent() {
           font-size: 13px; 
           cursor: pointer; 
           color: white;
-          transition: 0.2s;
+          transition: 0.2s; 
         }
         .btn-confirm-action.warning { 
-          background: #d97706; 
+          background: #C29B62; 
         }
         .btn-confirm-action.warning:disabled { 
           opacity: 0.4; 
           cursor: not-allowed; 
         }
         .btn-confirm-action.critical { 
-          background: #dc2626; 
+          background: #A8573C; 
         }
         .btn-confirm-action.critical:disabled { 
           opacity: 0.4; 
@@ -1230,11 +1265,15 @@ function SettingsPageContent() {
         .btn-cancel-action {
           padding: 11px 18px; 
           border-radius: 10px; 
-          border: 1px solid #cbd5e1;
+          border: 1px solid rgba(194, 155, 98, 0.3);
           background: white; 
-          color: #475569; 
+          color: #6F6257; 
           font-weight: 800; 
-          cursor: pointer;
+          cursor: pointer; 
+        }
+        .btn-cancel-action:hover {
+          background: #FAF7F2;
+          color: #1E130B;
         }
 
         @media (max-width: 768px) {

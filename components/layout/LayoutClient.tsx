@@ -393,16 +393,17 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
   }, [authorizedMenuGroups]);
 
   // تابات سطح المكتب السريعة (Desktop Quick Navigation Tabs)
+  // اختصارات قليلة للشاشات الأكثر استخدامًا؛ بقية الصفحات داخل «جميع الشاشات».
+  // يُستخدم التعريف نفسه لسطح المكتب والجوال لتفادي اختلاف القوائم بينهما.
   const primaryNavTabs = useMemo(() => [
-    { id: 'dashboard', title: 'الرئيسية', titleEn: 'Dashboard', icon: '🏠', path: '/Dashboard' },
-    { id: 'pos', title: 'الكاشير', titleEn: 'POS Cashier', icon: '🛍️', path: '/pos' },
-    { id: 'invoices', title: 'الفواتير', titleEn: 'Invoices', icon: '🧾', path: '/invoices' },
-    { id: 'inventory', title: 'المخزون', titleEn: 'Inventory', icon: '📦', path: '/inventory' },
-    { id: 'receipts', title: 'القبض والصرف', titleEn: 'Vouchers', icon: '💵', path: '/ReceiptVouchers' },
-    { id: 'partners', title: 'العملاء', titleEn: 'Partners', icon: '👥', path: '/partners' },
-    { id: 'reports', title: 'التقارير', titleEn: 'Reports', icon: '📊', path: '/reports' },
-    { id: 'fleet', title: 'الأسطول', titleEn: 'Fleet', icon: '🚚', path: '/fleet_operations' },
+    { id: 'dashboard', title: 'الرئيسية', titleEn: 'Dashboard', Icon: Home, path: '/Dashboard' },
+    { id: 'pos', title: 'الكاشير', titleEn: 'Cashier', Icon: ShoppingBag, path: '/pos' },
+    { id: 'invoices', title: 'الفواتير', titleEn: 'Invoices', Icon: FileText, path: '/invoices' },
+    { id: 'inventory', title: 'الأصناف', titleEn: 'Inventory', Icon: Package, path: '/inventory' },
   ].filter(tab => canView(tab.id)), [role, can]);
+
+  const isQuickNavActive = (path: string) =>
+    pathname === path || (path !== '/Dashboard' && pathname.startsWith(`${path}/`));
 
   // فلترة الشاشات داخل مركز القيادة حسب البحث والتبويب المحدد
   const filteredMenuGroups = useMemo(() => {
@@ -511,7 +512,10 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         .desktop-tabs-track {
           display: flex;
           align-items: center;
-          gap: 4px;
+          justify-content: center;
+          flex: 1;
+          min-width: 0;
+          gap: 6px;
           overflow-x: auto;
           padding: 2px 0;
           scrollbar-width: none;
@@ -523,7 +527,8 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           display: inline-flex;
           align-items: center;
           gap: 7px;
-          padding: 5px 12px;
+          min-height: 44px;
+          padding: 6px 12px;
           border-radius: 10px;
           text-decoration: none;
           color: #6e5d4f;
@@ -531,6 +536,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           white-space: nowrap;
           position: relative;
+          flex-shrink: 0;
         }
         .desktop-nav-tab:hover {
           color: #1E130B;
@@ -545,23 +551,12 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         }
         .tab-title-wrap {
           display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-          line-height: 1.15;
+          align-items: center;
+          line-height: 1.2;
         }
-        .tab-title-ar {
+        .tab-title {
           font-size: 12px;
           font-weight: 800;
-          line-height: 1.1;
-        }
-        .tab-title-en {
-          font-size: 9px;
-          font-weight: 800;
-          color: #C29B62;
-          letter-spacing: 0.3px;
-        }
-        .desktop-nav-tab.active .tab-title-en {
-          color: #A8573C;
         }
         .tab-glow-dot {
           width: 6px;
@@ -574,6 +569,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           display: inline-flex;
           align-items: center;
           gap: 6px;
+          min-height: 44px;
           padding: 6px 12px;
           border-radius: 10px;
           background: linear-gradient(135deg, #C29B62 0%, #A8573C 100%);
@@ -971,21 +967,13 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             height: 19px;
             flex-shrink: 0;
           }
-          .dock-sub-en {
-            font-size: 8px;
-            font-weight: 700;
-            color: #C29B62;
-            line-height: 1;
-            margin-top: -2px;
-            letter-spacing: 0.2px;
-          }
         }
       `}} />
 
       {/* 🌟 1️⃣ شريط تابات التنقل السريع الفاخر لسطح المكتب (Desktop Quick Tabs Bar) */}
-      <nav className="desktop-luxury-nav no-print" aria-label="التنقل السريع">
+      <nav className="desktop-luxury-nav no-print" aria-label={language === 'en' ? 'Quick navigation' : 'التنقل السريع'}>
         <div className="desktop-nav-inner">
-          <div className="desktop-nav-brand" onClick={() => setIsOpen(true)} title="فتح القائمة الشاملة">
+          <div className="desktop-nav-brand" onClick={() => setIsOpen(true)} title={language === 'en' ? 'Open all screens' : 'فتح القائمة الشاملة'}>
             <img src="/taj_logo.png" alt="تاج المودة" className="desktop-brand-logo" />
             <div className="desktop-brand-meta">
               <span className="desktop-brand-name">تاج المودة</span>
@@ -995,18 +983,18 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
           <div className="desktop-tabs-track">
             {primaryNavTabs.map((tab) => {
-              const isActive = pathname === tab.path || (tab.path !== '/Dashboard' && pathname.startsWith(tab.path));
+              const isActive = isQuickNavActive(tab.path);
               return (
                 <Link
                   key={tab.path}
                   href={tab.path}
                   prefetch={false}
                   className={`desktop-nav-tab ${isActive ? 'active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
                 >
-                  <span className="tab-icon">{tab.icon}</span>
+                  <tab.Icon className="tab-icon" size={18} aria-hidden="true" />
                   <div className="tab-title-wrap">
-                    <span className="tab-title-ar">{tab.title}</span>
-                    <span className="tab-title-en">{tab.titleEn}</span>
+                    <span className="tab-title">{language === 'en' ? tab.titleEn : tab.title}</span>
                   </div>
                   {isActive && <span className="tab-glow-dot" />}
                 </Link>
@@ -1018,10 +1006,10 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
             type="button"
             onClick={() => setIsOpen(true)}
             className="desktop-nav-hub-btn"
-            title="فتح مركز القيادة الشامل لجميع الشاشات (F1)"
+            title={language === 'en' ? 'Open all available screens (F1)' : 'فتح مركز القيادة الشامل لجميع الشاشات (F1)'}
           >
             <span>🧭</span>
-            <span>جميع الشاشات</span>
+            <span>{language === 'en' ? 'All screens' : 'جميع الشاشات'}</span>
             <span className="hub-screens-badge">{totalScreensCount}</span>
           </button>
         </div>
@@ -1253,37 +1241,31 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
       </nav>
 
       {/* 5️⃣ شريط التنقل السفلي الذكي للجوال (Mobile Bottom Dock) */}
-      <div className="desert-bottom-dock no-print">
-        <Link href="/Dashboard" prefetch={false} className={`dock-item ${pathname === '/Dashboard' ? 'active' : ''}`}>
-          <Home />
-          <span>الرئيسية</span>
-          <span className="dock-sub-en">Dashboard</span>
-        </Link>
-        <Link href="/pos" prefetch={false} className={`dock-item ${pathname === '/pos' ? 'active' : ''}`}>
-          <ShoppingBag />
-          <span>الكاشير</span>
-          <span className="dock-sub-en">Cashier</span>
-        </Link>
-        <Link href="/invoices" prefetch={false} className={`dock-item ${pathname === '/invoices' ? 'active' : ''}`}>
-          <FileText />
-          <span>الفواتير</span>
-          <span className="dock-sub-en">Invoices</span>
-        </Link>
-        <Link href="/inventory" prefetch={false} className={`dock-item ${pathname === '/inventory' ? 'active' : ''}`}>
-          <Package />
-          <span>الأصناف</span>
-          <span className="dock-sub-en">Inventory</span>
-        </Link>
+      <nav className="desert-bottom-dock no-print" aria-label={language === 'en' ? 'Quick navigation' : 'التنقل السريع'}>
+        {primaryNavTabs.map((tab) => {
+          const isActive = isQuickNavActive(tab.path);
+          return (
+            <Link
+              key={tab.path}
+              href={tab.path}
+              prefetch={false}
+              className={`dock-item ${isActive ? 'active' : ''}`}
+              aria-current={isActive ? 'page' : undefined}
+            >
+              <tab.Icon aria-hidden="true" />
+              <span>{language === 'en' ? tab.titleEn : tab.title}</span>
+            </Link>
+          );
+        })}
         <button 
           onClick={() => setIsOpen(prev => !prev)} 
           className={`dock-item ${isOpen ? 'active' : ''}`}
           style={{ background: 'none', border: 'none', cursor: 'pointer' }}
         >
           <Menu />
-          <span>المزيد</span>
-          <span className="dock-sub-en">Menu</span>
+          <span>{language === 'en' ? 'More' : 'المزيد'}</span>
         </button>
-      </div>
+      </nav>
 
       {/* 6️⃣ المحتوى الرئيسي للصفحة */}
       <main className="main-content" style={{ 

@@ -36,6 +36,7 @@ export default function OfflineSyncIndicator() {
   const [mounted, setMounted] = useState(false);
   const [storageLocation, setStorageLocation] = useState<'checking' | 'browser' | 'desktop' | 'unavailable'>('checking');
   const [userDataPath, setUserDataPath] = useState('');
+  const [sessionDataPath, setSessionDataPath] = useState('');
 
   useEffect(() => {
     setMounted(true);
@@ -53,6 +54,7 @@ export default function OfflineSyncIndicator() {
       if (cancelled) return;
       if (info.userData) {
         setUserDataPath(info.userData);
+        setSessionDataPath(info.sessionData || info.userData);
         setStorageLocation('desktop');
       } else {
         setStorageLocation('unavailable');
@@ -291,7 +293,11 @@ export default function OfflineSyncIndicator() {
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#6b7280', fontWeight: 700, marginTop: '2px' }}>
                   {storageLocation === 'desktop'
-                    ? <>مجلد بيانات Electron: <code dir="ltr" style={{ fontSize: '11px', color: '#C29B62', fontWeight: 800 }}>{userDataPath}</code></>
+                    ? <>
+                        ملفات التطبيق وطابور SQLite: <code dir="ltr" style={{ fontSize: '11px', color: '#C29B62', fontWeight: 800 }}>{userDataPath}</code>
+                        <br />
+                        جذر جلسة Chromium وIndexedDB: <code dir="ltr" style={{ fontSize: '11px', color: '#C29B62', fontWeight: 800 }}>{sessionDataPath}</code>
+                      </>
                     : storageLocation === 'browser'
                       ? 'قاعدة IndexedDB: موقع التخزين يديره المتصفح'
                       : storageLocation === 'checking'

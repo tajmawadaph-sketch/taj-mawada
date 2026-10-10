@@ -80,15 +80,16 @@ export default function PermissionsMatrix() {
                 <button 
                     onClick={() => router.push('/team')}
                     style={{
-                        background: 'linear-gradient(135deg, #1C73AB, #2891C8)',
+                        background: 'linear-gradient(135deg, #C29B62 0%, #A8573C 100%)',
                         color: 'white',
                         border: 'none',
+                        minHeight: '44px',
                         padding: '10px 18px',
                         borderRadius: '12px',
                         cursor: 'pointer',
                         fontWeight: 900,
                         fontSize: '13px',
-                        boxShadow: '0 4px 15px rgba(28, 115, 171, 0.25)',
+                        boxShadow: '0 4px 15px rgba(194, 155, 98, 0.28)',
                         transition: '0.2s',
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -105,23 +106,22 @@ export default function PermissionsMatrix() {
             <div style={{
                 overflowX: 'auto',
                 WebkitOverflowScrolling: 'touch',
-                background: 'rgba(255, 255, 255, 0.75)',
-                backdropFilter: 'blur(20px)',
+                background: '#FFFFFF',
                 borderRadius: '20px',
-                border: '1px solid rgba(255, 255, 255, 0.8)',
-                boxShadow: '0 8px 32px rgba(28, 115, 171, 0.06)'
+                border: '1px solid rgba(194, 155, 98, 0.25)',
+                boxShadow: '0 8px 32px rgba(30, 19, 11, 0.05)'
             }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', minWidth: '750px' }}>
-                    <thead style={{ background: 'rgba(28, 115, 171, 0.06)' }}>
+                    <thead style={{ background: 'rgba(194, 155, 98, 0.08)' }}>
                         <tr>
-                            <th style={{ padding: '14px', borderBottom: '1.5px solid rgba(28, 115, 171, 0.15)', textAlign: isRtl ? 'right' : 'left', color: THEME.primary, fontSize: '12.5px', fontWeight: 900, position: 'sticky', [isRtl ? 'right' : 'left']: 0, background: 'rgba(240, 249, 255, 0.95)', zIndex: 2 }}>
+                            <th style={{ padding: '14px', borderBottom: '1.5px solid rgba(194, 155, 98, 0.2)', textAlign: isRtl ? 'right' : 'left', color: THEME.primary, fontSize: '12.5px', fontWeight: 900, position: 'sticky', [isRtl ? 'right' : 'left']: 0, background: 'rgba(253, 251, 247, 0.98)', zIndex: 2 }}>
                                 {isEn ? 'User' : 'المستخدم'}
                             </th>
-                            <th style={{ padding: '14px', borderBottom: '1.5px solid rgba(28, 115, 171, 0.15)', color: THEME.primary, fontSize: '12.5px', fontWeight: 900 }}>
+                            <th style={{ padding: '14px', borderBottom: '1.5px solid rgba(194, 155, 98, 0.2)', color: THEME.primary, fontSize: '12.5px', fontWeight: 900 }}>
                                 {isEn ? 'Role' : 'الدور'}
                             </th>
                             {modules.map(mod => (
-                                <th key={mod.key} style={{ padding: '12px 8px', borderBottom: '1.5px solid rgba(28, 115, 171, 0.15)', color: THEME.primary, fontSize: '11.5px', fontWeight: 900, whiteSpace: 'nowrap' }}>
+                                <th key={mod.key} style={{ padding: '12px 8px', borderBottom: '1.5px solid rgba(194, 155, 98, 0.2)', color: THEME.primary, fontSize: '11.5px', fontWeight: 900, whiteSpace: 'nowrap' }}>
                                     {isEn ? mod.nameEn : mod.nameAr}
                                 </th>
                             ))}
@@ -131,8 +131,8 @@ export default function PermissionsMatrix() {
                         {profiles.map(profile => {
                             const isSuperAdmin = profile.role === 'admin' || profile.role === 'super_admin' || profile.is_admin;
                             return (
-                                <tr key={profile.id} style={{ borderBottom: '1px solid rgba(28, 115, 171, 0.08)' }}>
-                                    <td style={{ padding: '12px 14px', textAlign: isRtl ? 'right' : 'left', fontWeight: 900, color: '#1e293b', fontSize: '13px', position: 'sticky', [isRtl ? 'right' : 'left']: 0, background: 'rgba(255, 255, 255, 0.95)', zIndex: 1, boxShadow: isRtl ? '-2px 0 6px rgba(0,0,0,0.03)' : '2px 0 6px rgba(0,0,0,0.03)' }}>
+                                <tr key={profile.id} style={{ borderBottom: '1px solid rgba(194, 155, 98, 0.1)' }}>
+                                    <td style={{ padding: '12px 14px', textAlign: isRtl ? 'right' : 'left', fontWeight: 900, color: '#1E130B', fontSize: '13px', position: 'sticky', [isRtl ? 'right' : 'left']: 0, background: '#FFFFFF', zIndex: 1, boxShadow: isRtl ? '-2px 0 6px rgba(0,0,0,0.03)' : '2px 0 6px rgba(0,0,0,0.03)' }}>
                                         {profile.full_name || profile.username || (isEn ? 'Unknown' : 'مستخدم')}
                                     </td>
                                     <td style={{ padding: '12px' }}>

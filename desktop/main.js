@@ -23,6 +23,7 @@ let offlineQueueDb = null;
 let activeDataDirectory = null;
 let selectedDataDirectory = null;
 let dataLocationMigrationError = null;
+let dataLocationPendingTarget = null;
 
 function readDataLocationConfig() {
   try {
@@ -91,6 +92,24 @@ function assertSafeDataMovePaths(sourcePath, targetPath) {
   return { source, target };
 }
 
+function normalizePendingDataMove(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('طلب نقل بيانات Electron غير صالح');
+  }
+  const id = value.id;
+  if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error('معرف نقل بيانات Electron غير صالح');
+  }
+  const markerName = `${DATA_LOCATION_MARKER_PREFIX}${id}.json`;
+  if (value.markerName !== markerName) throw new Error('علامة نقل بيانات Electron غير صالحة');
+  return {
+    id,
+    markerName,
+    sourcePath: normalizeDataDirectory(value.sourcePath, 'مصدر النقل'),
+    targetPath: normalizeDataDirectory(value.targetPath, 'وجهة النقل'),
+  };
+}
+
 function readDataMoveMarker(targetPath, pendingMove) {
   const markerName = pendingMove?.markerName;
   if (typeof markerName !== 'string' || !markerName.startsWith(DATA_LOCATION_MARKER_PREFIX)) return false;
@@ -143,12 +162,12 @@ function copyUserDataToTarget(sourcePath, targetPath, pendingMove) {
 
   removeInterruptedDataMoveStages(targetParent, pendingMove.id);
   const stagePath = fs.mkdtempSync(path.join(targetParent, `.taj-mawadah-stage-${pendingMove.id}-`));
-  let stageStillExists = true;
+  let stagePromoted = false;
   try {
     fs.cpSync(source, stagePath, {
       recursive: true,
       force: false,
-      errorOnExist: true,
+      errorOnExist: false,
       preserveTimestamps: true,
     });
 
@@ -173,9 +192,9 @@ function copyUserDataToTarget(sourcePath, targetPath, pendingMove) {
     }
 
     fs.renameSync(stagePath, target);
-    stageStillExists = false;
+    stagePromoted = true;
   } finally {
-    if (stageStillExists) {
+    if (!stagePromoted) {
       try { fs.rmSync(stagePath, { recursive: true, force: true }); } catch {}
     }
   }
@@ -213,19 +232,24 @@ function initializeElectronDataLocation() {
   }
 
   let dataDirectory = defaultDataDirectory;
-  if (typeof locationConfig.activePath === 'string' && path.isAbsolute(locationConfig.activePath)) {
-    const configuredPath = path.resolve(locationConfig.activePath);
+  if (locationConfig.activePath != null) {
     try {
-      if (fs.statSync(configuredPath).isDirectory()) dataDirectory = configuredPath;
+      const configuredPath = normalizeDataDirectory(locationConfig.activePath, 'مجلد البيانات المحفوظ');
+      if (!fs.statSync(configuredPath).isDirectory()) {
+        throw new Error('المسار المحفوظ ليس مجلداً');
+      }
+      dataDirectory = configuredPath;
     } catch {
       dataLocationMigrationError = 'مجلد البيانات المحفوظ غير متاح؛ يستخدم التطبيق مساره الافتراضي. أعد توصيل القرص أو استعد المجلد القديم.';
     }
   }
 
-  const pendingMove = locationConfig.pendingMove;
-  if (pendingMove && typeof pendingMove === 'object') {
+  const pendingMoveValue = locationConfig.pendingMove;
+  if (pendingMoveValue) {
     const source = dataDirectory;
     try {
+      const pendingMove = normalizePendingDataMove(pendingMoveValue);
+      dataLocationPendingTarget = pendingMove.targetPath;
       if (comparableDataPath(normalizeDataDirectory(pendingMove.sourcePath, 'مصدر النقل')) !== comparableDataPath(source)) {
         const error = new Error('مصدر النقل لا يطابق موقع البيانات النشط');
         error.code = 'SOURCE_DATA_DIRECTORY_UNAVAILABLE';
@@ -233,15 +257,17 @@ function initializeElectronDataLocation() {
       }
       copyUserDataToTarget(source, pendingMove.targetPath, pendingMove);
       const target = path.resolve(pendingMove.targetPath);
-      locationConfig = {
+      const completedConfig = {
         ...locationConfig,
         activePath: target,
         pendingMove: null,
         lastMoveError: null,
       };
-      writeDataLocationConfig(locationConfig);
+      writeDataLocationConfig(completedConfig);
+      locationConfig = completedConfig;
       dataDirectory = target;
       dataLocationMigrationError = null;
+      dataLocationPendingTarget = null;
       try { fs.rmSync(path.join(target, pendingMove.markerName), { force: true }); } catch {}
       console.info(`تم نقل مجلد بيانات Electron بنجاح إلى ${target}; بقي المجلد السابق محفوظاً`);
     } catch (error) {
@@ -271,6 +297,13 @@ function initializeElectronDataLocation() {
     console.error('تعذر تعيين موقع بيانات Electron؛ سيستخدم التطبيق مساره الافتراضي:', error);
     dataLocationMigrationError = 'تعذر تهيئة مجلد البيانات المحدد. أعد توصيل القرص أو اختر مجلداً آخر.';
     activeDataDirectory = defaultDataDirectory;
+    try {
+      fs.mkdirSync(defaultDataDirectory, { recursive: true });
+      app.setPath('userData', defaultDataDirectory);
+      app.setPath('sessionData', defaultDataDirectory);
+    } catch (fallbackError) {
+      console.error('تعذر تهيئة مجلد بيانات Electron الافتراضي:', fallbackError);
+    }
   }
 }
 
@@ -568,6 +601,8 @@ let quitting = false;
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  // Both paths affect Chromium and must be set before Electron becomes ready.
+  initializeElectronDataLocation();
   app.on('second-instance', () => {
     if (win) {
       if (win.isMinimized()) win.restore();
@@ -842,9 +877,102 @@ ipcMain.handle('taj:get-info', () => ({
   version: app.getVersion(),
   platform: process.platform,
   userData: app.getPath('userData'),
+  sessionData: app.getPath('sessionData'),
+  dataLocationMigrationError,
+  pendingDataLocation: dataLocationPendingTarget,
   appUrl: resolveAppUrl(),
   isDesktop: true,
 }));
+
+ipcMain.handle('taj:data-location:choose', async (event) => {
+  assertTrustedQueueRenderer(event);
+  const result = await dialog.showOpenDialog(win, {
+    title: 'اختيار مجلد بيانات تاج المودة',
+    defaultPath: activeDataDirectory || app.getPath('userData'),
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths?.[0]) {
+    return { success: false, canceled: true };
+  }
+
+  try {
+    const { target } = assertSafeDataMovePaths(activeDataDirectory || app.getPath('userData'), result.filePaths[0]);
+    const stat = fs.lstatSync(target);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      const error = new Error('اختر مجلداً عادياً غير مختصر إلى وجهة أخرى');
+      error.code = 'INVALID_DATA_DIRECTORY';
+      throw error;
+    }
+    if (comparableDataPath(target) !== comparableDataPath(activeDataDirectory || app.getPath('userData'))
+      && fs.readdirSync(target).length > 0) {
+      const error = new Error('اختر مجلداً فارغاً؛ لن يتم استبدال أي ملفات موجودة');
+      error.code = 'TARGET_DATA_DIRECTORY_NOT_EMPTY';
+      throw error;
+    }
+
+    selectedDataDirectory = target;
+    return { success: true, path: target };
+  } catch (error) {
+    selectedDataDirectory = null;
+    return { success: false, error: describeDataLocationError(error) };
+  }
+});
+
+ipcMain.handle('taj:data-location:cancel', (event) => {
+  assertTrustedQueueRenderer(event);
+  selectedDataDirectory = null;
+  return { success: true };
+});
+
+ipcMain.handle('taj:data-location:apply', (event) => {
+  assertTrustedQueueRenderer(event);
+  if (!selectedDataDirectory) {
+    return { success: false, error: 'اختر مجلداً جديداً أولاً.' };
+  }
+
+  try {
+    const { source, target } = assertSafeDataMovePaths(
+      activeDataDirectory || app.getPath('userData'),
+      selectedDataDirectory
+    );
+    const stat = fs.lstatSync(target);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      const error = new Error('مجلد الوجهة لم يعد متاحاً؛ اختره مرة أخرى');
+      error.code = 'TARGET_PARENT_UNAVAILABLE';
+      throw error;
+    }
+    if (fs.readdirSync(target).length > 0) {
+      const error = new Error('مجلد الوجهة لم يعد فارغاً؛ اختر مجلداً فارغاً آخر');
+      error.code = 'TARGET_DATA_DIRECTORY_NOT_EMPTY';
+      throw error;
+    }
+
+    const id = randomUUID();
+    const pendingMove = {
+      id,
+      sourcePath: source,
+      targetPath: target,
+      markerName: `${DATA_LOCATION_MARKER_PREFIX}${id}.json`,
+    };
+    const currentConfig = readDataLocationConfig();
+    writeDataLocationConfig({
+      ...currentConfig,
+      activePath: source,
+      pendingMove,
+      lastMoveError: null,
+    });
+    dataLocationPendingTarget = target;
+    dataLocationMigrationError = null;
+    selectedDataDirectory = null;
+    setImmediate(() => {
+      app.relaunch();
+      app.quit();
+    });
+    return { success: true, restarting: true };
+  } catch (error) {
+    return { success: false, error: describeDataLocationError(error) };
+  }
+});
 
 // Durable offline Outbox stored in SQLite under Electron's userData directory.
 ipcMain.handle('taj:sync-queue:add', (event, item, ...extraArgs) => {

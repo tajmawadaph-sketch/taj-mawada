@@ -15,6 +15,7 @@ import {
   Copy,
   Database,
   Filter,
+  FolderOpen,
   Gauge,
   HardDrive,
   Info,
@@ -330,6 +331,15 @@ export default function DiagnosticsPanel() {
   const [checks, setChecks] = useState<DiagnosticCheck[]>([]);
   const [runningScope, setRunningScope] = useState<CheckScope | null>(null);
   const [lastRunAt, setLastRunAt] = useState<Date | null>(null);
+  const [desktopStorageInfo, setDesktopStorageInfo] = useState<{
+    userData: string;
+    sessionData: string;
+    dataLocationMigrationError?: string | null;
+    pendingDataLocation?: string | null;
+  } | null>(null);
+  const [selectedDataDirectory, setSelectedDataDirectory] = useState('');
+  const [dataDirectoryAction, setDataDirectoryAction] = useState<'choose' | 'apply' | null>(null);
+  const [dataDirectoryActionError, setDataDirectoryActionError] = useState('');
   
   // Luxury UI interactive states
   const [searchQuery, setSearchQuery] = useState('');
@@ -338,6 +348,77 @@ export default function DiagnosticsPanel() {
   const [expandedCheckId, setExpandedCheckId] = useState<string | null>(null);
 
   const t = useCallback((ar: string, en: string) => isEn ? en : ar, [isEn]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const desktopApi = window.tajDesktop;
+    if (!desktopApi?.isDesktop) return () => { cancelled = true; };
+
+    void desktopApi.getInfo().then((info) => {
+      if (cancelled) return;
+      setDesktopStorageInfo({
+        userData: info.userData,
+        sessionData: info.sessionData || info.userData,
+        dataLocationMigrationError: info.dataLocationMigrationError,
+        pendingDataLocation: info.pendingDataLocation,
+      });
+    }).catch(() => {
+      if (!cancelled) setDataDirectoryActionError(t(
+        'تعذر قراءة موقع التخزين من عملية Electron الرئيسية.',
+        'Could not read the storage location from the Electron main process.'
+      ));
+    });
+
+    return () => { cancelled = true; };
+  }, [t]);
+
+  const chooseDataDirectory = useCallback(async () => {
+    const desktopApi = window.tajDesktop;
+    if (!desktopApi?.isDesktop || !desktopApi.chooseDataDirectory) return;
+    setDataDirectoryAction('choose');
+    setDataDirectoryActionError('');
+    try {
+      const result = await desktopApi.chooseDataDirectory();
+      if (result.canceled) return;
+      if (!result.success || !result.path) {
+        setSelectedDataDirectory('');
+        setDataDirectoryActionError(result.error || t('تعذر اختيار مجلد البيانات.', 'Could not select a data folder.'));
+        return;
+      }
+      setSelectedDataDirectory(result.path);
+    } catch {
+      setDataDirectoryActionError(t('تعذر فتح نافذة اختيار المجلد.', 'Could not open the folder picker.'));
+    } finally {
+      setDataDirectoryAction(null);
+    }
+  }, [t]);
+
+  const cancelDataDirectory = useCallback(() => {
+    setSelectedDataDirectory('');
+    setDataDirectoryActionError('');
+    const cancelSelection = window.tajDesktop?.cancelDataDirectory;
+    if (cancelSelection) void cancelSelection().catch(() => {});
+  }, []);
+
+  const applyDataDirectory = useCallback(async () => {
+    const desktopApi = window.tajDesktop;
+    if (!desktopApi?.isDesktop || !desktopApi.applyDataDirectory) return;
+    setDataDirectoryAction('apply');
+    setDataDirectoryActionError('');
+    try {
+      const result = await desktopApi.applyDataDirectory();
+      if (!result.success) {
+        setDataDirectoryActionError(result.error || t('تعذر بدء نقل البيانات.', 'Could not start the data move.'));
+        return;
+      }
+      setSelectedDataDirectory('');
+      toast.success(t('سيُعاد تشغيل التطبيق لنقل البيانات إلى المجلد الجديد.', 'The app will restart to move its data to the new folder.'));
+    } catch {
+      setDataDirectoryActionError(t('تعذر بدء نقل البيانات؛ بقيت البيانات في مكانها الحالي.', 'Could not start the move; the current data remains in place.'));
+    } finally {
+      setDataDirectoryAction(null);
+    }
+  }, [t]);
 
   const inspectApplication = useCallback(async (): Promise<DiagnosticCheck[]> => {
     const results: DiagnosticCheck[] = [];
@@ -497,6 +578,8 @@ export default function DiagnosticsPanel() {
           && Date.now() - new Date(stats.oldestSyncingAt).getTime() > 15 * 60 * 1000;
         const details = [
           t(`محرك التخزين: SQLite المدمج في Electron ${info.version} (${info.platform}).`, `Engine: Embedded SQLite in Electron ${info.version} (${info.platform}).`),
+          t(`مجلد ملفات التطبيق وطابور SQLite (userData): ${info.userData}.`, `App files and SQLite queue (userData): ${info.userData}.`),
+          t(`جذر بيانات جلسة Chromium التي تضم IndexedDB (sessionData): ${info.sessionData || info.userData}.`, `Chromium session data root containing IndexedDB (sessionData): ${info.sessionData || info.userData}.`),
           t(`إجمالي العمليات المسجلة: ${stats.total} (معلّق: ${stats.pending} | فاشل: ${stats.failed} | قيد المزامنة: ${stats.syncing}).`, `Total operations: ${stats.total} (Pending: ${stats.pending} | Failed: ${stats.failed} | Syncing: ${stats.syncing}).`),
           stats.maxFailedRetries > 0
             ? t(`أعلى عدد محاولات إعادة فاشلة: ${stats.maxFailedRetries}.`, `Highest recorded retry count: ${stats.maxFailedRetries}.`)
@@ -1067,6 +1150,121 @@ export default function DiagnosticsPanel() {
 
   return (
     <div dir={isEn ? 'ltr' : 'rtl'} className="space-y-6 pb-12 font-sans text-[#1E130B]">
+
+      <section className="rounded-2xl border border-[#C29B62]/25 bg-white p-5 shadow-[0_4px_20px_rgba(30,19,11,0.05)] md:p-6" aria-labelledby="local-data-location-title">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex items-center gap-2 text-[#C29B62]">
+              <HardDrive className="h-5 w-5 shrink-0" />
+              <h2 id="local-data-location-title" className="text-base font-black text-[#1E130B]">
+                {t('موقع الخزنة المحلية الحقيقي', 'Actual Local Storage Location')}
+              </h2>
+            </div>
+
+            {typeof window !== 'undefined' && window.tajDesktop?.isDesktop ? (
+              desktopStorageInfo ? (
+                <div className="space-y-2 text-xs font-semibold text-[#6F6257]">
+                  <p>
+                    {t('ملفات التطبيق وطابور SQLite (userData):', 'App files and SQLite queue (userData):')}{' '}
+                    <code dir="ltr" className="break-all rounded bg-[#FDFBF7] px-1.5 py-0.5 text-[#1E130B]">{desktopStorageInfo.userData}</code>
+                  </p>
+                  <p>
+                    {t('جذر جلسة Chromium وملفات IndexedDB (sessionData):', 'Chromium session and IndexedDB data root (sessionData):')}{' '}
+                    <code dir="ltr" className="break-all rounded bg-[#FDFBF7] px-1.5 py-0.5 text-[#1E130B]">{desktopStorageInfo.sessionData}</code>
+                  </p>
+                  <p className="text-[11px] font-medium text-[#8C7A6B]">
+                    {t(
+                      'المساران يقرؤهما التطبيق من Electron مباشرة. تغييرهما ينقل مجلد بيانات التطبيق كاملاً بعد إعادة التشغيل، ويحتفظ بالمجلد القديم.',
+                      'Both paths come directly from Electron. Changing them copies the full app data folder after restart and keeps the old folder.'
+                    )}
+                  </p>
+                  {desktopStorageInfo.dataLocationMigrationError && (
+                    <div role="alert" className="rounded-xl border border-[#A8573C]/25 bg-[#A8573C]/5 p-3 text-[#8A3E2B]">
+                      <strong className="block">{t('تعذر إكمال النقل السابق', 'The previous move did not finish')}</strong>
+                      <span>{desktopStorageInfo.dataLocationMigrationError}</span>
+                      {desktopStorageInfo.pendingDataLocation && (
+                        <span className="mt-1 block">
+                          {t('الوجهة المطلوبة:', 'Requested destination:')}{' '}
+                          <code dir="ltr" className="break-all">{desktopStorageInfo.pendingDataLocation}</code>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs font-semibold text-[#6F6257]">
+                  {t('جارٍ قراءة المسار الفعلي من Electron...', 'Reading the actual path from Electron...')}
+                </p>
+              )
+            ) : (
+              <p className="text-xs font-semibold text-[#6F6257]">
+                {t(
+                  'هذه النسخة تعمل في المتصفح. المتصفح يدير مكان IndexedDB ولا يسمح للصفحة بعرض مساره الفعلي أو تغييره. استخدم تطبيق Electron لتحديد مجلد التخزين.',
+                  'This build runs in a browser. The browser manages IndexedDB location; a web page cannot inspect or change its disk path. Use Electron to choose the storage folder.'
+                )}
+              </p>
+            )}
+
+            {dataDirectoryActionError && (
+              <p role="alert" className="rounded-xl border border-[#A8573C]/25 bg-[#A8573C]/5 p-3 text-xs font-bold text-[#8A3E2B]">
+                {dataDirectoryActionError}
+              </p>
+            )}
+
+            {selectedDataDirectory && desktopStorageInfo && (
+              <div className="space-y-2 rounded-xl border border-[#C29B62]/30 bg-[#FDFBF7] p-3">
+                <p className="text-xs font-black text-[#1E130B]">
+                  {t('المجلد الجديد:', 'New folder:')}{' '}
+                  <code dir="ltr" className="break-all font-bold">{selectedDataDirectory}</code>
+                </p>
+                <p className="text-[11px] font-semibold text-[#6F6257]">
+                  {t(
+                    'سيُغلق التطبيق ويُعاد تشغيله. سينسخ بيانات SQLite وملف الجلسة الذي يحتوي IndexedDB. سيبقى المجلد الحالي محفوظاً، ويجب أن تكون الوجهة فارغة.',
+                    'The app will close and restart. SQLite and the session profile containing IndexedDB will be copied. The current folder stays intact, and the destination must be empty.'
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void applyDataDirectory()}
+                    disabled={Boolean(dataDirectoryAction)}
+                    className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#C29B62] px-4 py-2 text-xs font-black text-[#1E130B] shadow-sm disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {dataDirectoryAction === 'apply' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    {t('تأكيد النقل وإعادة التشغيل', 'Confirm move and restart')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelDataDirectory}
+                    disabled={Boolean(dataDirectoryAction)}
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-[#C29B62]/30 bg-white px-4 py-2 text-xs font-black text-[#1E130B] disabled:opacity-60"
+                  >
+                    {t('إلغاء', 'Cancel')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {typeof window !== 'undefined' && window.tajDesktop?.isDesktop && (
+            typeof window.tajDesktop.chooseDataDirectory === 'function' ? (
+              <button
+                type="button"
+                onClick={() => void chooseDataDirectory()}
+                disabled={Boolean(dataDirectoryAction)}
+                className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-xl border border-[#C29B62]/30 bg-[#FDFBF7] px-4 py-2.5 text-xs font-black text-[#1E130B] transition-colors hover:bg-white disabled:cursor-wait disabled:opacity-60"
+              >
+                {dataDirectoryAction === 'choose' ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4 text-[#C29B62]" />}
+                {t('اختيار موقع جديد', 'Choose a new location')}
+              </button>
+            ) : (
+              <p className="max-w-xs rounded-xl border border-amber-500/20 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+                {t('نسخة Electron الحالية لا تدعم تغيير مسار التخزين. يلزم تحديث تطبيق سطح المكتب.', 'This Electron build cannot change the storage path. Update the desktop app first.')}
+              </p>
+            )
+          )}
+        </div>
+      </section>
       
       {/* ========================================================================= */}
       {/* 👑 1. البطاقة الملكية الرئيسية (Command Center Hero Card)                */}
