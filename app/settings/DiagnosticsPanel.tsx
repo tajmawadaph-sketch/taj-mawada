@@ -835,7 +835,7 @@ export default function DiagnosticsPanel() {
         method: 'GET',
         headers: { Authorization: `Bearer ${accessToken}` },
         cache: 'no-store',
-        signal: timeoutSignal(12000),
+        signal: timeoutSignal(30000),
       });
       payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.available) {

@@ -79,7 +79,8 @@ export async function GET(request: Request) {
   if (profileError) {
     return jsonResponse({ available: false, code: 'admin_profile_unavailable' }, 503);
   }
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin' && profile.is_admin !== true)) {
+  const allowedRoles = ['admin', 'super_admin', 'manager', 'مدير', 'مدير النظام'];
+  if (!profile || (!allowedRoles.includes(String(profile.role || '').toLowerCase()) && profile.is_admin !== true)) {
     return jsonResponse({ available: false, code: 'administrator_required' }, 403);
   }
 
@@ -92,8 +93,8 @@ export async function GET(request: Request) {
   try {
     sql = postgres(databaseUrl, {
       max: 1,
-      idle_timeout: 5,
-      connect_timeout: 5,
+      idle_timeout: 10,
+      connect_timeout: 15,
       prepare: false,
       ssl: 'require',
     });
@@ -103,7 +104,7 @@ export async function GET(request: Request) {
 
   try {
     const snapshot = await sql.begin('read only', async (tx) => {
-      await tx`SET LOCAL statement_timeout = '5000ms'`;
+      await tx`SET LOCAL statement_timeout = '15000ms'`;
 
       const [transactionMode] = await tx`
         SELECT current_setting('transaction_read_only') AS value
