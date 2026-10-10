@@ -57,6 +57,35 @@ declare global {
       files: Array<{ name: string; size: number; date: string | Date }>;
       error?: string;
     }>;
+    syncQueueAdd: (item: {
+      id: string;
+      table: string;
+      type?: string;
+      action: 'insert' | 'update' | 'delete' | 'INSERT' | 'UPDATE' | 'DELETE';
+      payload?: any;
+      data?: any;
+      status?: 'pending' | 'syncing' | 'failed';
+      retry_count?: number;
+      created_at?: string;
+      error_message?: string;
+    }) => Promise<{ success: boolean; id?: string }>;
+    syncQueueListPending: () => Promise<Array<{
+      id: string;
+      table: string;
+      type?: string;
+      action: 'insert' | 'update' | 'delete' | 'INSERT' | 'UPDATE' | 'DELETE';
+      payload: any;
+      data: any;
+      status: 'pending' | 'failed';
+      retry_count: number;
+      created_at: string;
+      error_message?: string;
+    }>>;
+    syncQueueCountPending: () => Promise<number>;
+    syncQueueSetStatus: (params: { id: string; status: 'pending' | 'syncing' }) => Promise<{ success: boolean }>;
+    syncQueueMarkFailed: (params: { id: string; errorMessage?: string }) => Promise<{ success: boolean }>;
+    syncQueueRemove: (id: string) => Promise<{ success: boolean }>;
+    syncQueueClear: () => Promise<{ success: boolean }>;
   }
 
   interface Window {

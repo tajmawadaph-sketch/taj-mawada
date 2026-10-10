@@ -214,7 +214,12 @@ export function useReceiptVouchersLogic() {
                 const { error } = await supabase.from('receipt_vouchers').update(voucherData).eq('id', record.id);
                 if (error) throw error;
             } else {
-                const { error } = await supabase.from('receipt_vouchers').insert([voucherData]);
+                const { error } = await supabase.rpc('rpc_process_receipt_voucher', {
+                    p_data: {
+                        ...voucherData,
+                        auto_allocate: true
+                    }
+                });
                 if (error) throw error;
 
                 // 🔔 بث إشعار سند القبض في النظام وعبر الجوال
@@ -229,7 +234,8 @@ export function useReceiptVouchersLogic() {
         },
         onSuccess: () => {
             setIsEditModalOpen(false);
-            showToast("تم حفظ سند القبض بنجاح 💾", "success");
+            showToast("تم حفظ سند القبض وترحيل القيد بنجاح 💾", "success");
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
             queryClient.invalidateQueries({ queryKey: ['receipt_vouchers'] });
             queryClient.invalidateQueries({ queryKey: ['accounts_report_with_lines'] }); 
             queryClient.invalidateQueries({ queryKey: ['journal_master_view'] });

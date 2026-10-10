@@ -405,21 +405,52 @@ export function useInvoicesLogic() {
                 const { error: headErr } = await supabase.from('invoices').update(invoiceHeader).eq('id', record.id);
                 if (headErr) throw headErr;
             } else {
-                const { data: inserted, error: headErr } = await supabase.from('invoices').insert([invoiceHeader]).select().single();
-                if (headErr) throw headErr;
+                const items = record.lines || record.items || [];
+                if (items.length > 0) {
+                    const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_process_sales_invoice', {
+                        p_data: {
+                            invoice_number: invoiceHeader.invoice_number,
+                            date: invoiceHeader.date,
+                            partner_id: invoiceHeader.partner_id,
+                            warehouse_id: invoiceHeader.warehouse_id,
+                            delegate_id: invoiceHeader.delegate_id,
+                            fleet_operation_id: invoiceHeader.fleet_operation_id,
+                            payment_method: invoiceHeader.payment_method,
+                            notes: invoiceHeader.description,
+                            due_in_days: invoiceHeader.due_in_days,
+                            due_date: invoiceHeader.due_date,
+                            paid_amount: invoiceHeader.paid_amount,
+                            lines: items.map((it: any) => ({
+                                item_id: it.item_id || it.itemId || it.id,
+                                quantity: Number(it.quantity || it.qty || 1),
+                                unit_price: Number(it.unit_price || it.price || 0),
+                                tax_rate: Number(it.tax_rate ?? 15),
+                                discount_amount: Number(it.discount_amount || it.discount || 0)
+                            }))
+                        }
+                    });
+                    if (rpcErr) throw rpcErr;
+                    if (!rpcRes?.success) throw new Error(rpcRes?.message || 'فشل إصدار الفاتورة');
 
-                // AUTO POST INVOICE (If Warehouse is specified)
-                if (invoiceHeader.warehouse_id && inserted) {
-                     await supabase.rpc('post_invoices_bulk', { p_ids: [inserted.id] });
+                    // 🔔 بث إشعار فوري في النظام وعبر الجوال
+                    notifyInvoiceCreated({
+                        invoiceNumber: invoiceHeader.invoice_number,
+                        clientName: invoiceHeader.client_name,
+                        totalAmount: Number(rpcRes.total_amount || invoiceHeader.total_amount || 0),
+                        invoiceId: rpcRes.invoice_id
+                    }).catch(() => {});
+                } else {
+                    const { data: inserted, error: headErr } = await supabase.from('invoices').insert([invoiceHeader]).select().single();
+                    if (headErr) throw headErr;
+
+                    // 🔔 بث إشعار فوري في النظام وعبر الجوال
+                    notifyInvoiceCreated({
+                        invoiceNumber: invoiceHeader.invoice_number,
+                        clientName: invoiceHeader.client_name,
+                        totalAmount: Number(invoiceHeader.total_amount) || 0,
+                        invoiceId: inserted?.id
+                    }).catch(() => {});
                 }
-
-                // 🔔 بث إشعار فوري في النظام وعبر الجوال
-                notifyInvoiceCreated({
-                    invoiceNumber: invoiceHeader.invoice_number,
-                    clientName: invoiceHeader.client_name,
-                    totalAmount: Number(invoiceHeader.total_amount) || 0,
-                    invoiceId: inserted?.id
-                }).catch(() => {});
             }
 
         },
@@ -592,7 +623,9 @@ export function useInvoicesLogic() {
                 partner_acc_id: cleanId(receiptData.partner_acc_id),
             };
 
-            const { error: receiptErr } = await supabase.from('receipt_vouchers').insert([dataToSave]);
+            const { error: receiptErr } = await supabase.rpc('rpc_process_receipt_voucher', {
+                p_data: dataToSave
+            });
             if (receiptErr) throw receiptErr;
 
         },

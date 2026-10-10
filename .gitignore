@@ -1,5 +1,8 @@
 node_modules/
 .next/
-.env.local
+.env*
 backups/*.json
 dist-desktop/
+dist-desktop-*/
+scratch/
+*.tsbuildinfo

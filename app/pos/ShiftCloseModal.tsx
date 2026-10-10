@@ -7,7 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/lib/toast-context';
 import { classifyPaymentMethod } from '@/lib/helpers';
 import { notifyShiftClosed } from '@/lib/notificationService';
-import { executeWithOfflineSync } from '@/lib/offline/offlineExecutor';
+import { executeWithOfflineSync, SyncOperationAcknowledgementError } from '@/lib/offline/offlineExecutor';
 import { getPendingSyncItems } from '@/lib/offline/syncStore';
 import { getInventoryItemsList } from '@/lib/cache/resources';
 
@@ -205,18 +205,42 @@ export default function ShiftCloseModal({
                 bottles_sold: bottlesSold,
                 bottles_returned: returnedCount,
                 bottles_shortage: bottlesShortage,
+                actual_bottles: returnedCount,
+                cash_expenses: (totals as any).cashExpenses || 0,
+                closing_notes: 'تقفيل وردية الكاشير وتسوية الصندوق دفترياً ومحاسبياً',
                 status: 'closed'
             };
 
             const result = await executeWithOfflineSync({
-                cloudOperation: async () => {
-                    const { data, error } = await supabase.from('pos_shifts')
-                        .update(payload)
-                        .eq('id', activeShift.id)
-                        .select()
-                        .maybeSingle();
+                cloudOperation: async ({ operationId }) => {
+                    const { data, error } = await supabase.rpc('rpc_close_pos_shift', {
+                        p_data: {
+                            _sync_operation_id: operationId,
+                            shift_id: activeShift.id,
+                            actual_cash: Number(actualCash),
+                            actual_bottles: returnedCount,
+                            bottles_returned: returnedCount,
+                            bottles_sold: bottlesSold,
+                            total_sales: totals.total,
+                            total_cash_sales: totals.cash,
+                            total_card_sales: totals.card,
+                            total_credit_sales: totals.credit,
+                            total_expenses: (totals as any).totalExpenses || 0,
+                            cash_expenses: (totals as any).cashExpenses || 0,
+                            notes: payload.closing_notes
+                        }
+                    });
 
                     if (error) throw new Error(error.message);
+                    if (data?.success !== true) {
+                        throw new Error('لم يؤكد الخادم نجاح إغلاق الوردية');
+                    }
+                    if (data?._sync_operation_id !== operationId
+                        || typeof data?._sync_replayed !== 'boolean') {
+                        throw new SyncOperationAcknowledgementError(
+                            'لم يؤكد الخادم نتيجة إغلاق الوردية بمعرّف العملية الثابت'
+                        );
+                    }
                     return data;
                 },
                 offlineBackup: {

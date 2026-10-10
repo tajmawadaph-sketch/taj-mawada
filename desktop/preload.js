@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+ipcRenderer.on('taj:sync-queue:renderer-recovered', () => {
+  window.dispatchEvent(new Event('tajmawadah-sync-queue-recovered'));
+});
+
 // واجهة آمنة متكاملة بين واجهة المتصفح ومحرك ويندوز المدمج
 contextBridge.exposeInMainWorld('tajDesktop', {
   isDesktop: true,
@@ -12,5 +16,12 @@ contextBridge.exposeInMainWorld('tajDesktop', {
   kickDrawer: (params) => ipcRenderer.invoke('taj:kick-drawer', params),
   backupExport: (params) => ipcRenderer.invoke('taj:backup-export', params),
   backupList: () => ipcRenderer.invoke('taj:backup-list'),
+  syncQueueAdd: (item) => ipcRenderer.invoke('taj:sync-queue:add', item),
+  syncQueueListPending: () => ipcRenderer.invoke('taj:sync-queue:list-pending'),
+  syncQueueCountPending: () => ipcRenderer.invoke('taj:sync-queue:count-pending'),
+  syncQueueSetStatus: (params) => ipcRenderer.invoke('taj:sync-queue:set-status', params),
+  syncQueueMarkFailed: (params) => ipcRenderer.invoke('taj:sync-queue:mark-failed', params),
+  syncQueueRemove: (id) => ipcRenderer.invoke('taj:sync-queue:remove', id),
+  syncQueueClear: () => ipcRenderer.invoke('taj:sync-queue:clear'),
 });
 

@@ -35,8 +35,8 @@ export function useOfflineSync() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [tableCounts, setTableCounts] = useState<TableSyncCounts>(DEFAULT_TABLE_COUNTS);
-  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
   const [timeAgoText, setTimeAgoText] = useState<string>('منذ لحظات');
+  const lastSyncTimeRef = useRef<Date>(new Date());
 
   // 🛡️ حماية ضد الحلقات التكرارية بواسطة useRef
   const isSyncingRef = useRef<boolean>(false);
@@ -81,9 +81,10 @@ export function useOfflineSync() {
       };
 
       tableCountsRef.current = counts;
+      const syncedAt = new Date();
+      lastSyncTimeRef.current = syncedAt;
       if (isMountedRef.current) {
         setTableCounts(counts);
-        setLastSyncTime(new Date());
       }
     } catch (err) {
       console.warn('⚠️ [Sync Hook] تعذر جلب إحصائيات الجداول اللحظية، يتم استخدام الكاش المحصن');
@@ -93,7 +94,7 @@ export function useOfflineSync() {
   // تحديث نص "منذ متى تم آخر فحص"
   const updateTimeAgo = useCallback(() => {
     const now = new Date();
-    const diffSecs = Math.floor((now.getTime() - lastSyncTime.getTime()) / 1000);
+    const diffSecs = Math.floor((now.getTime() - lastSyncTimeRef.current.getTime()) / 1000);
 
     if (diffSecs < 15) {
       setTimeAgoText('منذ لحظات');
@@ -104,7 +105,7 @@ export function useOfflineSync() {
     } else {
       setTimeAgoText(`منذ ${Math.floor(diffSecs / 60)} دقيقة`);
     }
-  }, [lastSyncTime]);
+  }, []);
 
   // تحديث عدد المعلقات وحالة الاتصال
   const updateStatus = useCallback(async () => {
@@ -165,12 +166,24 @@ export function useOfflineSync() {
 
   useEffect(() => {
     isMountedRef.current = true;
+    let isCancelled = false;
     updateStatus();
     refreshTableCounts();
 
+    const resumeSyncIfAuthenticated = async (silent = true) => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!isCancelled && session && navigator.onLine) {
+          await processSyncQueue({ silent });
+        }
+      } catch (error) {
+        console.warn('تعذر استئناف مزامنة العمليات المحلية عند بدء التطبيق أو عودة الاتصال:', error);
+      }
+    };
+
     const handleOnline = () => {
       setIsOnline(true);
-      processSyncQueue();
+      void resumeSyncIfAuthenticated(false);
       refreshTableCounts();
     };
 
@@ -180,6 +193,11 @@ export function useOfflineSync() {
 
     const handleQueueChange = () => {
       updateStatus();
+    };
+
+    const handleQueueRecovered = () => {
+      updateStatus();
+      if (navigator.onLine) void resumeSyncIfAuthenticated();
     };
 
     const handleSyncStart = () => {
@@ -197,8 +215,20 @@ export function useOfflineSync() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('tajmawadah-sync-queue-changed', handleQueueChange);
+    window.addEventListener('tajmawadah-sync-queue-recovered', handleQueueRecovered);
     window.addEventListener('tajmawadah-sync-started', handleSyncStart);
     window.addEventListener('tajmawadah-sync-finished', handleSyncFinish);
+
+    // Resume durable desktop outbox items after Electron restarts and restores a signed-in session.
+    void resumeSyncIfAuthenticated();
+
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session && navigator.onLine) {
+        window.setTimeout(() => {
+          if (!isCancelled) void processSyncQueue({ silent: true });
+        }, 0);
+      }
+    });
 
     // ⏱️ فحص ذكي كل 60 ثانية لحالة الطابور وتحديث توقيت آخر فحص
     const timer = setInterval(() => {
@@ -210,12 +240,15 @@ export function useOfflineSync() {
     const timeAgoTimer = setInterval(updateTimeAgo, 15000);
 
     return () => {
+      isCancelled = true;
       isMountedRef.current = false;
+      authSubscription.unsubscribe();
       clearInterval(timer);
       clearInterval(timeAgoTimer);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('tajmawadah-sync-queue-changed', handleQueueChange);
+      window.removeEventListener('tajmawadah-sync-queue-recovered', handleQueueRecovered);
       window.removeEventListener('tajmawadah-sync-started', handleSyncStart);
       window.removeEventListener('tajmawadah-sync-finished', handleSyncFinish);
     };

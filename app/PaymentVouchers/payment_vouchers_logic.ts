@@ -216,11 +216,11 @@ export function usePaymentVouchersLogic() {
                 const { error } = await supabase.from('payment_vouchers').update(payload).eq('id', payload.id);
                 if (error) throw error;
             } else {
-                payload.voucher_number = `PV-${Date.now().toString().slice(-6)}`;
-                payload.is_posted = false;
-                payload.status = 'مسودة';
+                payload.voucher_number = payload.voucher_number || `PV-${Date.now().toString().slice(-6)}`;
 
-                const { error } = await supabase.from('payment_vouchers').insert([payload]);
+                const { error } = await supabase.rpc('rpc_process_payment_voucher', {
+                    p_data: payload
+                });
                 if (error) throw new Error(error.message);
 
                 // 🔔 بث إشعار سند الصرف في النظام وعبر الجوال
@@ -234,10 +234,13 @@ export function usePaymentVouchersLogic() {
 
         },
         onSuccess: () => {
-            showToast('تم حفظ السند بنجاح 💾', 'success');
+            showToast('تم حفظ وترحيل سند الصرف بنجاح 💾', 'success');
             setIsEditModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['payment_vouchers'] });
             queryClient.invalidateQueries({ queryKey: ['vouchers_server_totals'] }); 
+            queryClient.invalidateQueries({ queryKey: ['accounts_report_with_lines'] }); 
+            queryClient.invalidateQueries({ queryKey: ['journal_master_view'] });
+            queryClient.invalidateQueries({ queryKey: ['cash_flows_list'] });
         },
         onError: (error: any) => showToast(error.message, 'error')
     });

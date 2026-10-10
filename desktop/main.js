@@ -4,6 +4,7 @@
  * + محرك العتاد وشبكات الإيثرنت والواي فاي والبوابات (Gateway) وفحص المنافذ والطباعة الخام مباشرة
  */
 const { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage } = require('electron');
+const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -14,6 +15,277 @@ const isWin = process.platform === 'win32';
 const isDev = !app.isPackaged;
 const DEV_URL = 'http://localhost:3000';
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
+const OFFLINE_QUEUE_SCHEMA_VERSION = 1;
+let offlineQueueDb = null;
+
+function migrateOfflineQueueToV1(database) {
+  const existingQueue = database.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'sync_queue'"
+  ).get();
+  const legacyRows = existingQueue
+    ? database.prepare(`
+        SELECT id, table_name, type, action, payload_json, status,
+               retry_count, created_at, error_message
+        FROM sync_queue
+      `).all()
+    : [];
+
+  database.exec(`
+    CREATE TABLE sync_queue_schema_v1 (
+      id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) BETWEEN 1 AND 512),
+      table_name TEXT NOT NULL CHECK (length(trim(table_name)) BETWEEN 1 AND 128),
+      type TEXT NOT NULL CHECK (length(trim(type)) BETWEEN 1 AND 128),
+      action TEXT NOT NULL CHECK (action IN ('INSERT', 'UPDATE', 'DELETE')),
+      payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'syncing', 'failed')),
+      retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
+      created_at TEXT NOT NULL CHECK (length(trim(created_at)) > 0),
+      error_message TEXT CHECK (error_message IS NULL OR length(error_message) <= 4000)
+    );
+  `);
+
+  const insert = database.prepare(`
+    INSERT INTO sync_queue_schema_v1
+      (id, table_name, type, action, payload_json, status, retry_count, created_at, error_message)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const row of legacyRows) {
+    let payload;
+    try {
+      payload = JSON.parse(row.payload_json);
+    } catch {
+      throw new Error(`تعذر ترحيل العملية ${row.id}: بيانات الحمولة القديمة غير صالحة`);
+    }
+
+    const normalized = normalizeOfflineQueueItem({
+      id: row.id,
+      table: row.table_name,
+      type: row.type,
+      action: row.action,
+      payload,
+      status: row.status,
+      retry_count: row.retry_count,
+      created_at: row.created_at,
+      error_message: row.error_message,
+    });
+
+    insert.run(
+      normalized.id,
+      normalized.table,
+      normalized.type,
+      normalized.action,
+      normalized.payloadJson,
+      normalized.status,
+      normalized.retryCount,
+      normalized.createdAt,
+      normalized.errorMessage
+    );
+  }
+
+  if (existingQueue) database.exec('DROP TABLE sync_queue');
+  database.exec('ALTER TABLE sync_queue_schema_v1 RENAME TO sync_queue');
+  database.exec(`
+    CREATE INDEX idx_sync_queue_status_date
+      ON sync_queue(status, created_at);
+  `);
+}
+
+function migrateOfflineQueueSchema(database) {
+  const versionRow = database.prepare('PRAGMA user_version').get();
+  let version = Number(versionRow?.user_version ?? 0);
+
+  if (!Number.isSafeInteger(version) || version < 0) {
+    throw new Error('إصدار مخطط طابور المزامنة المحلي غير صالح');
+  }
+  if (version > OFFLINE_QUEUE_SCHEMA_VERSION) {
+    throw new Error(
+      `قاعدة طابور المزامنة أحدث من إصدار البرنامج (${version} > ${OFFLINE_QUEUE_SCHEMA_VERSION})`
+    );
+  }
+
+  while (version < OFFLINE_QUEUE_SCHEMA_VERSION) {
+    const nextVersion = version + 1;
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      if (nextVersion === 1) {
+        migrateOfflineQueueToV1(database);
+        database.exec('PRAGMA user_version = 1');
+      } else {
+        throw new Error(`لا يوجد ترحيل لمخطط طابور المزامنة إلى الإصدار ${nextVersion}`);
+      }
+      database.exec('COMMIT');
+      version = nextVersion;
+    } catch (error) {
+      try { database.exec('ROLLBACK'); } catch {}
+      throw error;
+    }
+  }
+}
+
+function getOfflineQueueDb() {
+  if (offlineQueueDb) return offlineQueueDb;
+
+  const userDataDir = app.getPath('userData');
+  fs.mkdirSync(userDataDir, { recursive: true });
+  const database = new DatabaseSync(path.join(userDataDir, 'offline-sync.sqlite'));
+
+  try {
+    database.exec(`
+      PRAGMA busy_timeout = 5000;
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = FULL;
+    `);
+    migrateOfflineQueueSchema(database);
+
+    // Recover work interrupted by an app or operating-system shutdown.
+    database.prepare("UPDATE sync_queue SET status = 'pending' WHERE status = 'syncing'").run();
+    offlineQueueDb = database;
+    return offlineQueueDb;
+  } catch (error) {
+    try { database.close(); } catch {}
+    throw error;
+  }
+}
+
+function recoverOfflineQueueAfterRendererExit(webContents, lifecycleEvent) {
+  if (quitting || !offlineQueueDb) return;
+
+  try {
+    const result = offlineQueueDb.prepare(
+      "UPDATE sync_queue SET status = 'pending' WHERE status = 'syncing'"
+    ).run();
+    const recoveredCount = Number(result.changes);
+    if (recoveredCount > 0) {
+      console.info(`تمت استعادة ${recoveredCount} عملية متوقفة بعد ${lifecycleEvent}`);
+      if (webContents && !webContents.isDestroyed()) {
+        try {
+          webContents.send('taj:sync-queue:renderer-recovered');
+        } catch (error) {
+          console.warn('تمت استعادة الطابور، لكن تعذر تنبيه renderer الجديد:', error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`تعذرت استعادة طابور المزامنة بعد ${lifecycleEvent}:`, error);
+  }
+}
+
+const OFFLINE_QUEUE_ITEM_KEYS = [
+  'id', 'table', 'type', 'action', 'payload', 'data', 'status',
+  'retry_count', 'created_at', 'error_message',
+];
+
+function assertQueueRecord(value, allowedKeys, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} غير صالحة`);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error(`${label} يجب أن تكون كائن بيانات بسيطًا`);
+  }
+  const unexpectedKey = Object.keys(value).find((key) => !allowedKeys.includes(key));
+  if (unexpectedKey) throw new Error(`${label} تحتوي على حقل غير مسموح`);
+  return value;
+}
+
+function validateQueueText(value, label, maxLength) {
+  if (typeof value !== 'string') throw new Error(`${label} يجب أن يكون نصًا`);
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLength || /[\u0000-\u001f\u007f]/.test(normalized)) {
+    throw new Error(`${label} غير صالح أو تجاوز الحد المسموح`);
+  }
+  return normalized;
+}
+
+function validateQueueId(value) {
+  return validateQueueText(value, 'معرف العملية', 512);
+}
+
+function assertNoQueueArguments(args) {
+  if (args.length !== 0) throw new Error('هذه القناة لا تقبل معاملات إضافية');
+}
+
+function normalizeOfflineQueueItem(item) {
+  assertQueueRecord(item, OFFLINE_QUEUE_ITEM_KEYS, 'بيانات عملية المزامنة');
+
+  const id = validateQueueId(item.id);
+  const table = validateQueueText(item.table, 'اسم الجدول', 128);
+  const type = item.type == null || item.type === ''
+    ? table
+    : validateQueueText(item.type, 'نوع العملية', 128);
+  const action = typeof item.action === 'string' ? item.action.trim().toUpperCase() : '';
+  const payload = item.payload !== undefined ? item.payload : item.data;
+  if (!['INSERT', 'UPDATE', 'DELETE'].includes(action) || payload === undefined) {
+    throw new Error('عملية المزامنة ناقصة الأمر أو البيانات');
+  }
+
+  const payloadJson = JSON.stringify(payload);
+  if (typeof payloadJson !== 'string') throw new Error('تعذر تحويل بيانات العملية إلى JSON');
+  if (Buffer.byteLength(payloadJson, 'utf8') > 16 * 1024 * 1024) {
+    throw new Error('حجم العملية أكبر من الحد المسموح للتخزين المحلي');
+  }
+
+  const status = item.status == null ? 'pending' : item.status;
+  if (typeof status !== 'string' || !['pending', 'syncing', 'failed'].includes(status)) {
+    throw new Error('حالة مزامنة غير صالحة');
+  }
+
+  const retryCount = item.retry_count == null ? 0 : item.retry_count;
+  if (!Number.isSafeInteger(retryCount) || retryCount < 0) {
+    throw new Error('عداد محاولات المزامنة غير صالح');
+  }
+
+  const createdAt = item.created_at == null
+    ? new Date().toISOString()
+    : validateQueueText(item.created_at, 'تاريخ إنشاء العملية', 64);
+  if (item.error_message != null && typeof item.error_message !== 'string') {
+    throw new Error('رسالة خطأ المزامنة يجب أن تكون نصًا');
+  }
+
+  return {
+    id,
+    table,
+    type,
+    action,
+    payloadJson,
+    status,
+    retryCount,
+    createdAt,
+    errorMessage: item.error_message ? item.error_message.slice(0, 4000) : null,
+  };
+}
+
+function assertTrustedQueueRenderer(event) {
+  const sender = event?.sender;
+  const senderFrame = event?.senderFrame;
+  if (!win || win.isDestroyed() || !sender || sender !== win.webContents || sender.isDestroyed()) {
+    throw new Error('مصدر طلب الطابور غير مسموح');
+  }
+  if (!senderFrame || senderFrame.parent !== null || senderFrame.url !== sender.mainFrame?.url) {
+    throw new Error('طلبات الطابور مسموحة من الصفحة الرئيسية فقط');
+  }
+
+  const expectedUrl = resolveAppUrl();
+  if (!expectedUrl || !senderFrame.url) throw new Error('مصدر طلب الطابور غير معروف');
+
+  let expected;
+  let actual;
+  try {
+    expected = new URL(expectedUrl);
+    actual = new URL(senderFrame.url);
+  } catch {
+    throw new Error('مصدر طلب الطابور غير صالح');
+  }
+
+  if (!['http:', 'https:'].includes(expected.protocol) || expected.origin === 'null') {
+    throw new Error('رابط التطبيق لا يسمح باستخدام طابور المزامنة المحلي');
+  }
+  if (expected.origin !== actual.origin) {
+    throw new Error('غير مسموح لمصدر الصفحة باستخدام طابور المزامنة المحلي');
+  }
+}
 
 function readConfig() {
   try { return JSON.parse(fs.readFileSync(configPath(), 'utf8')); } catch { return {}; }
@@ -66,6 +338,16 @@ function createWindow() {
       sandbox: false, // مطلوب لتمكين الـ Preload من IPC الموسّع
       webSecurity: true,
     },
+  });
+
+  const queueRendererContents = win.webContents;
+  // did-navigate fires after the previous main-frame document has been replaced.
+  queueRendererContents.on('did-navigate', () => {
+    recoverOfflineQueueAfterRendererExit(queueRendererContents, 'إعادة تحميل الصفحة');
+  });
+  // A crashed renderer has exited, so no previous queue processor can still be running.
+  queueRendererContents.on('render-process-gone', () => {
+    recoverOfflineQueueAfterRendererExit(queueRendererContents, 'توقف عملية العرض');
   });
 
   win.once('ready-to-show', () => {
@@ -308,6 +590,132 @@ ipcMain.handle('taj:get-info', () => ({
   isDesktop: true,
 }));
 
+// Durable offline Outbox stored in SQLite under Electron's userData directory.
+ipcMain.handle('taj:sync-queue:add', (event, item, ...extraArgs) => {
+  assertTrustedQueueRenderer(event);
+  assertNoQueueArguments(extraArgs);
+  const normalized = normalizeOfflineQueueItem(item);
+  const database = getOfflineQueueDb();
+  const insertResult = database.prepare(`
+    INSERT OR IGNORE INTO sync_queue
+      (id, table_name, type, action, payload_json, status, retry_count, created_at, error_message)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    normalized.id,
+    normalized.table,
+    normalized.type,
+    normalized.action,
+    normalized.payloadJson,
+    normalized.status,
+    normalized.retryCount,
+    normalized.createdAt,
+    normalized.errorMessage
+  );
+
+  if (Number(insertResult.changes) === 0) {
+    const existing = database.prepare(`
+      SELECT table_name, type, action, payload_json
+      FROM sync_queue
+      WHERE id = ?
+    `).get(normalized.id);
+    const sameOperation = existing
+      && existing.table_name === normalized.table
+      && existing.type === normalized.type
+      && existing.action === normalized.action
+      && existing.payload_json === normalized.payloadJson;
+
+    if (!sameOperation) return { success: false };
+  }
+
+  return { success: true, id: normalized.id };
+});
+
+ipcMain.handle('taj:sync-queue:list-pending', (event, ...args) => {
+  assertTrustedQueueRenderer(event);
+  assertNoQueueArguments(args);
+  const rows = getOfflineQueueDb().prepare(`
+    SELECT id, table_name, type, action, payload_json, status,
+           retry_count, created_at, error_message
+    FROM sync_queue
+    WHERE status IN ('pending', 'failed')
+    ORDER BY created_at ASC
+  `).all();
+  return rows.map((row) => {
+    const payload = JSON.parse(row.payload_json);
+    return {
+      id: row.id,
+      table: row.table_name,
+      type: row.type,
+      action: row.action,
+      payload,
+      data: payload,
+      status: row.status,
+      retry_count: row.retry_count,
+      created_at: row.created_at,
+      error_message: row.error_message || undefined,
+    };
+  });
+});
+
+ipcMain.handle('taj:sync-queue:count-pending', (event, ...args) => {
+  assertTrustedQueueRenderer(event);
+  assertNoQueueArguments(args);
+  const row = getOfflineQueueDb().prepare(
+    "SELECT COUNT(*) AS count FROM sync_queue WHERE status IN ('pending', 'failed')"
+  ).get();
+  return Number(row?.count || 0);
+});
+
+ipcMain.handle('taj:sync-queue:set-status', (event, params, ...extraArgs) => {
+  assertTrustedQueueRenderer(event);
+  assertNoQueueArguments(extraArgs);
+  const { id, status } = assertQueueRecord(params, ['id', 'status'], 'طلب تحديث حالة العملية');
+  const safeId = validateQueueId(id);
+  if (typeof status !== 'string' || !['pending', 'syncing'].includes(status)) {
+    throw new Error('حالة مزامنة غير صالحة');
+  }
+  const result = getOfflineQueueDb().prepare(
+    'UPDATE sync_queue SET status = ?, error_message = NULL WHERE id = ?'
+  ).run(status, safeId);
+  return { success: Number(result.changes) > 0 };
+});
+
+ipcMain.handle('taj:sync-queue:mark-failed', (event, params, ...extraArgs) => {
+  assertTrustedQueueRenderer(event);
+  assertNoQueueArguments(extraArgs);
+  const { id, errorMessage } = assertQueueRecord(
+    params,
+    ['id', 'errorMessage'],
+    'طلب تسجيل فشل العملية'
+  );
+  const safeId = validateQueueId(id);
+  if (errorMessage != null && typeof errorMessage !== 'string') {
+    throw new Error('رسالة خطأ المزامنة يجب أن تكون نصًا');
+  }
+  const safeErrorMessage = (errorMessage || 'فشل الاتصال بالخادم').slice(0, 4000);
+  const result = getOfflineQueueDb().prepare(`
+    UPDATE sync_queue
+    SET status = 'failed', retry_count = retry_count + 1, error_message = ?
+    WHERE id = ?
+  `).run(safeErrorMessage, safeId);
+  return { success: Number(result.changes) > 0 };
+});
+
+ipcMain.handle('taj:sync-queue:remove', (event, id, ...extraArgs) => {
+  assertTrustedQueueRenderer(event);
+  assertNoQueueArguments(extraArgs);
+  const safeId = validateQueueId(id);
+  const result = getOfflineQueueDb().prepare('DELETE FROM sync_queue WHERE id = ?').run(safeId);
+  return { success: Number(result.changes) > 0 };
+});
+
+ipcMain.handle('taj:sync-queue:clear', (event, ...args) => {
+  assertTrustedQueueRenderer(event);
+  assertNoQueueArguments(args);
+  getOfflineQueueDb().prepare('DELETE FROM sync_queue').run();
+  return { success: true };
+});
+
 ipcMain.handle('taj:set-app-url', (_e, url) => {
   const clean = String(url || '').trim();
   if (!/^https?:\/\/[^\s]+$/i.test(clean)) return { ok: false, error: 'رابط غير صالح' };
@@ -432,9 +840,24 @@ ipcMain.handle('taj:backup-list', async () => {
 });
 
 app.whenReady().then(() => {
+  try {
+    getOfflineQueueDb();
+  } catch (err) {
+    console.error('تعذر تهيئة طابور المزامنة المحلي SQLite:', err);
+  }
   createWindow();
   createTray();
 });
 
-app.on('before-quit', () => { quitting = true; });
+app.on('before-quit', () => {
+  quitting = true;
+  if (offlineQueueDb) {
+    try {
+      offlineQueueDb.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+      offlineQueueDb.close();
+    } catch (err) {
+      console.warn('تعذر إغلاق قاعدة طابور المزامنة بشكل نظيف:', err);
+    }
+  }
+});
 app.on('window-all-closed', () => { /* يبقى في Tray */ });

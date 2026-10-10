@@ -383,37 +383,25 @@ export function useStocktakingLogic(initialWarehouseId?: string) {
       const todayStr = new Date().toISOString().split('T')[0];
       let processedTxCount = 0;
 
-      for (const item of varianceItems) {
-        const isSurplus = item.variance_qty > 0;
-        const qtyDiff = Math.abs(item.variance_qty);
-        const txType = isSurplus ? 'adjustment_in' : 'adjustment_out';
-        const txDesc = isSurplus 
-          ? `تسوية زيادة جردية - محضر #${sessionNumber}` 
-          : `تسوية عجز جردي - محضر #${sessionNumber}`;
-
-        const { data: newTx, error: txErr } = await supabase.from('inventory_transactions').insert([{
-          type: txType,
-          item_id: item.item_id,
-          quantity: qtyDiff,
-          unit_price: item.cost_price || 0,
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_process_inventory_adjustment', {
+        p_data: {
+          adjustment_number: sessionNumber,
+          date: todayStr,
           warehouse_id: selectedWarehouseId,
-          batch_number: item.batch_number || null,
-          expiry_date: item.expiry_date || null,
-          notes: txDesc,
-          transaction_date: todayStr,
-          status: 'pending'
-        }]).select('id').single();
-
-        if (txErr) {
-          console.error(`Error inserting adjustment for ${item.name}:`, txErr);
-          continue;
+          type: 'count_reconciliation',
+          notes: sessionNotes || `محضر جرد دوري رقم ${sessionNumber}`,
+          lines: varianceItems.map(item => ({
+            item_id: item.item_id,
+            system_qty: item.book_qty,
+            actual_qty: item.physical_qty,
+            unit_cost: item.cost_price || 0,
+            reason: item.variance_qty < 0 ? 'عجز جردي فعلي' : 'فائض جردي فعلي'
+          }))
         }
+      });
 
-        if (newTx?.id) {
-          await executeApproveTransaction(newTx.id, { skipSync: true });
-          processedTxCount++;
-        }
-      }
+      if (rpcErr) throw new Error(rpcErr.message);
+      processedTxCount = rpcRes?.items_adjusted_count || varianceItems.length;
 
       // إعادة مزامنة أرصدة كافة المستودعات وبث التحديث اللحظي
       await syncAllWarehouseBalances();

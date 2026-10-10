@@ -648,414 +648,33 @@ export function useDelegateSettlementsLogic() {
             const targetMainWh = mainWarehouseId || MAIN_WAREHOUSE_ID;
             const targetSafeAcc = safeBankAccId || ACC.CASH_BOX;
 
-            let createdReceiptVoucherId: string | null = null;
-            let createdJournalHeaderId: string | null = null;
+            // ⚡ Execute complete settlement atomically via Supabase RPC
+            const { data: rpcRes, error: rpcErr } = await supabase.rpc('rpc_settle_fleet_trip', {
+                p_data: {
+                    fleet_operation_id: tripId,
+                    settlement_date: date,
+                    actual_cash_collected: cashAmount,
+                    safe_bank_acc_id: targetSafeAcc,
+                    shortage_action: shortageAction,
+                    close_trip: closeTrip,
+                    return_warehouse_id: targetMainWh,
+                    notes,
+                    lines: (inventoryReturns || []).map(r => ({
+                        item_id: r.itemId,
+                        returned_qty: Number(r.returnQty || 0),
+                        waste_qty: Number(r.wasteQty || 0),
+                        shortage_qty: Number(r.shortageQty || 0),
+                        unit_price: Number(r.costPrice || 0),
+                        notes: r.notes
+                    }))
+                }
+            });
 
-            // Details string formatters
-            const driverInfo = `${driverName}${driverPhone ? ` (${driverPhone})` : ''}`;
-            const vehicleInfo = vehiclePlate ? ` | مركبة: ${vehiclePlate}` : '';
-            const salesSummary = totalSales !== undefined ? ` | المبيعات: ${Number(totalSales).toFixed(2)} ر.س` : '';
-            const expSummary = totalExpenses !== undefined && totalExpenses > 0 ? ` | المصروفات: ${Number(totalExpenses).toFixed(2)} ر.س` : '';
-            const shortageSummary = cashShortage > 0 
-                ? ` | العجز: ${cashShortage.toFixed(2)} ر.س (${shortageAction === 'debt_on_delegate' ? 'تسجيل ذمة' : 'فرق تسوية'})` 
-                : '';
-            const extraNotes = notes ? ` | ملاحظات: ${notes}` : '';
+            if (rpcErr) throw rpcErr;
+            if (!rpcRes?.success) throw new Error(rpcRes?.message || 'فشلت تسوية رحلة الأسطول');
 
             // ─────────────────────────────────────────────────────────────
-            // 1. CASH SETTLEMENT: Insert Receipt Voucher & Cash Journal
-            // ─────────────────────────────────────────────────────────────
-            if (cashAmount > 0) {
-                const receiptNumber = `RV-SETTLE-${operationNumber}-${Date.now().toString().slice(-4)}`;
-                const voucherNotes = `توريد نقدية تسوية عهدة رحلة #${operationNumber} | المندوب المسؤول: ${driverInfo}${vehicleInfo}${salesSummary}${expSummary} | المبلغ المورد: ${cashAmount.toFixed(2)} ر.س${shortageSummary}${extraNotes}`;
-
-                // A. Insert into receipt_vouchers
-                const { data: rvData, error: rvErr } = await supabase
-                    .from('receipt_vouchers')
-                    .insert([{
-                        receipt_number: receiptNumber,
-                        date,
-                        amount: cashAmount,
-                        payment_method: 'نقدي (كاش)',
-                        partner_id: driverId,
-                        delegate_id: driverId,
-                        fleet_operation_id: tripId,
-                        safe_bank_acc_id: targetSafeAcc,
-                        partner_acc_id: ACC.EMPLOYEE_CUSTODY, // 125 عهدة مناديب
-                        status: 'معتمد',
-                        notes: voucherNotes
-                    }])
-                    .select('id')
-                    .single();
-
-                if (rvErr) {
-                    console.error("Receipt Voucher Insert Error:", rvErr);
-                    throw new Error(`فشل تسجيل سند القبض: ${rvErr.message}`);
-                }
-                createdReceiptVoucherId = rvData?.id || null;
-
-                // B. Insert Journal Header for Cash Handover
-                const cashHeaderDesc = `إخلاء وتوريد نقدية عهدة رحلة #${operationNumber} | المندوب المسؤول: ${driverInfo}${vehicleInfo}${salesSummary}${expSummary} | المبلغ المورد: ${cashAmount.toFixed(2)} ر.س${shortageSummary}${extraNotes}`;
-
-                const { data: jhData, error: jhErr } = await supabase
-                    .from('journal_headers')
-                    .insert([{
-                        entry_date: date,
-                        description: cashHeaderDesc,
-                        status: 'posted',
-                        v_type: 'تسوية عهدة',
-                        reference_id: createdReceiptVoucherId || tripId,
-                        fleet_operation_id: tripId
-                    }])
-                    .select('id')
-                    .single();
-
-                if (jhErr) {
-                    console.error("Journal Header Insert Error:", jhErr);
-                    throw new Error(`فشل إنشاء قيد تسوية النقدية: ${jhErr.message}`);
-                }
-                createdJournalHeaderId = jhData?.id || null;
-
-                // C. Insert Journal Lines for Cash Handover (Balanced Double-Entry)
-                // Line 1: Debit Cash Box / Bank (الخزينة الرئيسية 122)
-                // Line 2: Credit Employee Custody (125 عهدة موظفين ومناديب) linked to driver partner_id!
-                const journalLinesToInsert: any[] = [
-                    {
-                        header_id: createdJournalHeaderId,
-                        account_id: targetSafeAcc,
-                        partner_id: null,
-                        delegate_id: driverId,
-                        fleet_operation_id: tripId,
-                        debit: cashAmount,
-                        credit: 0,
-                        notes: `توريد نقدية للخزينة من عهدة رحلة #${operationNumber} | المندوب المسؤول: ${driverInfo}${vehicleInfo}`
-                    },
-                    {
-                        header_id: createdJournalHeaderId,
-                        account_id: ACC.EMPLOYEE_CUSTODY,
-                        partner_id: driverId, // 🔑 ربط مباشر بمعرف المندوب!
-                        delegate_id: driverId,
-                        fleet_operation_id: tripId,
-                        debit: 0,
-                        credit: cashAmount,
-                        notes: `إخلاء عهدة نقدية للمندوب ${driverInfo} | رحلة #${operationNumber} | المبلغ المورد: ${cashAmount.toFixed(2)} ر.س`
-                    }
-                ];
-
-                // If there's a cash shortage and the user chose to record it:
-                if (cashShortage > 0) {
-                    if (shortageAction === 'debt_on_delegate') {
-                        // Debit: 128 سلف وذمم مناديب (partner_id: driverId)
-                        // Credit: 125 عهدة مناديب (partner_id: driverId)
-                        journalLinesToInsert.push(
-                            {
-                                header_id: createdJournalHeaderId,
-                                account_id: ACC.EMPLOYEE_ADVANCES,
-                                partner_id: driverId,
-                                delegate_id: driverId,
-                                fleet_operation_id: tripId,
-                                debit: cashShortage,
-                                credit: 0,
-                                notes: `إثبات عجز عهدة نقدية كذمة مستحقة على المندوب ${driverInfo} | رحلة #${operationNumber}`
-                            },
-                            {
-                                header_id: createdJournalHeaderId,
-                                account_id: ACC.EMPLOYEE_CUSTODY,
-                                partner_id: driverId,
-                                delegate_id: driverId,
-                                fleet_operation_id: tripId,
-                                debit: 0,
-                                credit: cashShortage,
-                                notes: `إقفال عجز عهدة رحلة #${operationNumber} بذمة المندوب ${driverInfo}`
-                            }
-                        );
-                    } else if (shortageAction === 'rounding') {
-                        // Debit: 527 تسويات وفروق هللات
-                        // Credit: 125 عهدة مناديب
-                        journalLinesToInsert.push(
-                            {
-                                header_id: createdJournalHeaderId,
-                                account_id: ACC.ROUNDING_DIFF,
-                                partner_id: null,
-                                delegate_id: driverId,
-                                fleet_operation_id: tripId,
-                                debit: cashShortage,
-                                credit: 0,
-                                notes: `فروق وهللات تسوية عهدة رحلة #${operationNumber} | المندوب: ${driverInfo}`
-                            },
-                            {
-                                header_id: createdJournalHeaderId,
-                                account_id: ACC.EMPLOYEE_CUSTODY,
-                                partner_id: driverId,
-                                delegate_id: driverId,
-                                fleet_operation_id: tripId,
-                                debit: 0,
-                                credit: cashShortage,
-                                notes: `إقفال فرق هللات تسوية عهدة رحلة #${operationNumber} للمندوب ${driverInfo}`
-                            }
-                        );
-                    }
-                }
-
-                const { error: jlErr } = await supabase.from('journal_lines').insert(journalLinesToInsert);
-                if (jlErr) {
-                    console.error("Journal Lines Error:", jlErr);
-                    throw new Error(`فشل إدخال أسطر القيد: ${jlErr.message}`);
-                }
-            }
-
-            // ─────────────────────────────────────────────────────────────
-            // 2. INVENTORY SETTLEMENT: Return remaining stock to Main Warehouse
-            // ─────────────────────────────────────────────────────────────
-            const validReturns = (inventoryReturns || []).filter(r => (Number(r.returnQty) > 0 || Number(r.wasteQty) > 0 || Number(r.shortageQty) > 0));
-
-            if (validReturns.length > 0) {
-                let totalReturnInventoryValue = 0;
-                let totalWasteInventoryValue = 0;
-                let totalShortageInventoryValue = 0;
-
-                for (const item of validReturns) {
-                    const returnQty = Number(item.returnQty || 0);
-                    const wasteQty = Number(item.wasteQty || 0);
-                    const shortageQty = Number(item.shortageQty || 0);
-                    const costPrice = Number(item.costPrice || 0);
-
-                    // A. Return to Main Warehouse (type: 'in' into targetMainWh)
-                    if (returnQty > 0) {
-                        const txTotal = returnQty * costPrice;
-                        totalReturnInventoryValue += txTotal;
-
-                        const { error: itErr } = await supabase.from('inventory_transactions').insert([{
-                            transaction_number: `RET-${operationNumber}-${Date.now().toString().slice(-4)}`,
-                            transaction_date: date,
-                            type: 'in', // وارد للمستودع الرئيسي
-                            quantity: returnQty,
-                            item_id: item.itemId,
-                            unit_price: costPrice,
-                            total_price: txTotal,
-                            warehouse_id: targetMainWh, // المستودع الرئيسي المستلم
-                            destination_warehouse_id: null,
-                            fleet_operation_id: tripId,
-                            delegate_id: driverId,
-                            partner_id: driverId, // 🔑 ربط بمعرف المندوب!
-                            status: 'approved',
-                            notes: `إرجاع فائض بضاعة للمستودع الرئيسي من رحلة #${operationNumber} للمندوب ${driverName}`
-                        }]);
-
-                        if (itErr) console.warn("Return Txn Error:", itErr);
-                    }
-
-                    // B. Damaged / Waste stock (type: 'waste')
-                    if (wasteQty > 0) {
-                        const wasteTotal = wasteQty * costPrice;
-                        totalWasteInventoryValue += wasteTotal;
-
-                        const { error: wErr } = await supabase.from('inventory_transactions').insert([{
-                            transaction_number: `WST-${operationNumber}-${Date.now().toString().slice(-4)}`,
-                            transaction_date: date,
-                            type: 'waste',
-                            quantity: wasteQty,
-                            item_id: item.itemId,
-                            unit_price: costPrice,
-                            total_price: wasteTotal,
-                            warehouse_id: targetMainWh,
-                            fleet_operation_id: tripId,
-                            delegate_id: driverId,
-                            partner_id: driverId,
-                            status: 'approved',
-                            notes: `توالف وهدر بضاعة رحلة #${operationNumber} - المندوب: ${driverName}`
-                        }]);
-
-                        if (wErr) console.warn("Waste Txn Error:", wErr);
-                    }
-
-                    // C. Update vehicle_inventory record if exists, or insert new
-                    try {
-                        const { data: existingVInv } = await supabase
-                            .from('vehicle_inventory')
-                            .select('id, loaded_qty, sold_qty, returned_qty, waste_qty, shortage_qty')
-                            .eq('fleet_operation_id', tripId)
-                            .eq('item_id', item.itemId)
-                            .maybeSingle();
-
-                        if (existingVInv) {
-                            await supabase.from('vehicle_inventory').update({
-                                returned_qty: (Number(existingVInv.returned_qty || 0) + returnQty),
-                                waste_qty: (Number(existingVInv.waste_qty || 0) + wasteQty),
-                                shortage_qty: (Number(existingVInv.shortage_qty || 0) + shortageQty),
-                                quantity: 0,
-                                updated_at: new Date().toISOString()
-                            }).eq('id', existingVInv.id);
-                        } else {
-                            await supabase.from('vehicle_inventory').insert([{
-                                fleet_operation_id: tripId,
-                                item_id: item.itemId,
-                                loaded_qty: returnQty + wasteQty + shortageQty,
-                                sold_qty: 0,
-                                returned_qty: returnQty,
-                                waste_qty: wasteQty,
-                                shortage_qty: shortageQty,
-                                quantity: 0
-                            }]);
-                        }
-                    } catch (viErr) {
-                        console.warn("Vehicle Inv Update Warn:", viErr);
-                    }
-                }
-
-                // D. Generate Journal Entries for Inventory Return
-                const totalInvJournalValue = totalReturnInventoryValue + totalWasteInventoryValue + totalShortageInventoryValue;
-                if (totalInvJournalValue > 0) {
-                    try {
-                        const returnedItemsSummary = (inventoryReturns || [])
-                            .filter(r => r.returnQty > 0)
-                            .map(r => `${r.itemName} (${r.returnQty})`)
-                            .join('، ');
-                        const wasteItemsSummary = (inventoryReturns || [])
-                            .filter(r => r.wasteQty > 0)
-                            .map(r => `${r.itemName} (${r.wasteQty})`)
-                            .join('، ');
-                        const shortageItemsSummary = (inventoryReturns || [])
-                            .filter(r => r.shortageQty > 0)
-                            .map(r => `${r.itemName} (${r.shortageQty})`)
-                            .join('، ');
-
-                        const invHeaderDesc = `إرجاع وتسوية مخزون بضاعة رحلة #${operationNumber} | المندوب المسؤول: ${driverInfo}${vehicleInfo}${returnedItemsSummary ? ` | المرتجع: [${returnedItemsSummary}]` : ''}${wasteItemsSummary ? ` | التوالف: [${wasteItemsSummary}]` : ''}${shortageItemsSummary ? ` | العجز: [${shortageItemsSummary}]` : ''}`;
-
-                        const { data: invJh, error: invJhErr } = await supabase
-                            .from('journal_headers')
-                            .insert([{
-                                entry_date: date,
-                                description: invHeaderDesc,
-                                status: 'posted',
-                                v_type: 'تسوية مخزون',
-                                reference_id: tripId,
-                                fleet_operation_id: tripId
-                            }])
-                            .select('id')
-                            .single();
-
-                        if (!invJhErr && invJh) {
-                            const invLines: any[] = [];
-
-                            // 1. Returned Stock to Main Warehouse:
-                            // Debit: ACC.INVENTORY (126 مخزون البضائع بالمستودع الرئيسي)
-                            // Credit: ACC.INVENTORY_CUSTODY (130 عهدة مخزون) with partner_id: driverId!
-                            if (totalReturnInventoryValue > 0) {
-                                invLines.push(
-                                    {
-                                        header_id: invJh.id,
-                                        account_id: ACC.INVENTORY,
-                                        partner_id: null,
-                                        delegate_id: driverId,
-                                        fleet_operation_id: tripId,
-                                        debit: totalReturnInventoryValue,
-                                        credit: 0,
-                                        notes: `إرجاع بضاعة للمستودع الرئيسي من عهدة رحلة #${operationNumber} | المندوب: ${driverInfo}${returnedItemsSummary ? ` [${returnedItemsSummary}]` : ''}`
-                                    },
-                                    {
-                                        header_id: invJh.id,
-                                        account_id: ACC.INVENTORY_CUSTODY,
-                                        partner_id: driverId, // 🔑 ربط بالمعرف المندوب!
-                                        delegate_id: driverId,
-                                        fleet_operation_id: tripId,
-                                        debit: 0,
-                                        credit: totalReturnInventoryValue,
-                                        notes: `إخلاء عهدة مخزون بضاعة مرتجعة للمندوب ${driverInfo} | رحلة #${operationNumber}`
-                                    }
-                                );
-                            }
-
-                            // 2. Damaged / Waste stock:
-                            // Debit: ACC.WASTE_LOSS (528 خسائر توالف وهدر مخزني)
-                            // Credit: ACC.INVENTORY_CUSTODY (130)
-                            if (totalWasteInventoryValue > 0) {
-                                invLines.push(
-                                    {
-                                        header_id: invJh.id,
-                                        account_id: ACC.WASTE_LOSS,
-                                        partner_id: null,
-                                        delegate_id: driverId,
-                                        fleet_operation_id: tripId,
-                                        debit: totalWasteInventoryValue,
-                                        credit: 0,
-                                        notes: `إثبات توالف وهدر بضاعة رحلة #${operationNumber} | المندوب: ${driverInfo}${wasteItemsSummary ? ` [${wasteItemsSummary}]` : ''}`
-                                    },
-                                    {
-                                        header_id: invJh.id,
-                                        account_id: ACC.INVENTORY_CUSTODY,
-                                        partner_id: driverId,
-                                        delegate_id: driverId,
-                                        fleet_operation_id: tripId,
-                                        debit: 0,
-                                        credit: totalWasteInventoryValue,
-                                        notes: `تخفيض عهدة المخزون بالتوالف للمندوب ${driverInfo} | رحلة #${operationNumber}`
-                                    }
-                                );
-                            }
-
-                            // 3. Shortage stock:
-                            // Debit: ACC.EMPLOYEE_ADVANCES (128 سلف وذمم مناديب)
-                            // Credit: ACC.INVENTORY_CUSTODY (130)
-                            if (totalShortageInventoryValue > 0) {
-                                invLines.push(
-                                    {
-                                        header_id: invJh.id,
-                                        account_id: ACC.EMPLOYEE_ADVANCES,
-                                        partner_id: driverId,
-                                        delegate_id: driverId,
-                                        fleet_operation_id: tripId,
-                                        debit: totalShortageInventoryValue,
-                                        credit: 0,
-                                        notes: `عجز بضاعة مفقودة محمل كذمة على المندوب ${driverInfo} | رحلة #${operationNumber}${shortageItemsSummary ? ` [${shortageItemsSummary}]` : ''}`
-                                    },
-                                    {
-                                        header_id: invJh.id,
-                                        account_id: ACC.INVENTORY_CUSTODY,
-                                        partner_id: driverId,
-                                        delegate_id: driverId,
-                                        fleet_operation_id: tripId,
-                                        debit: 0,
-                                        credit: totalShortageInventoryValue,
-                                        notes: `إقفال عهدة المخزون بالعجز المحمل على المندوب ${driverInfo} | رحلة #${operationNumber}`
-                                    }
-                                );
-                            }
-
-                            if (invLines.length > 0) {
-                                await supabase.from('journal_lines').insert(invLines);
-                            }
-                        }
-                    } catch (invJournalErr) {
-                        console.warn("Inventory Journal Creation Warn:", invJournalErr);
-                    }
-                }
-
-                // 🔄 Recalculate and synchronize all warehouse balances so Main Warehouse is immediately updated!
-                try {
-                    await syncAllWarehouseBalances();
-                } catch (syncErr) {
-                    console.warn("syncAllWarehouseBalances warning:", syncErr);
-                }
-            }
-
-            // ─────────────────────────────────────────────────────────────
-            // 3. TRIP CLOSURE & STATUS UPDATE
-            // ─────────────────────────────────────────────────────────────
-            if (closeTrip) {
-                const updatedNotes = `${notes ? notes + ' | ' : ''}تمت تسوية العهدة بالكامل وتوريد النقدية والمخزون بتاريخ ${date}`;
-                const { error: opErr } = await supabase
-                    .from('fleet_operations')
-                    .update({
-                        status: 'مغلق',
-                        notes: updatedNotes
-                    })
-                    .eq('id', tripId);
-
-                if (opErr) console.warn("Trip Close Error:", opErr);
-            }
-
-            // ─────────────────────────────────────────────────────────────
-            // 4. REALTIME NOTIFICATIONS & CACHE INVALIDATIONS
+            // REALTIME NOTIFICATIONS & CACHE INVALIDATIONS
             // ─────────────────────────────────────────────────────────────
             emitTableChange('fleet_operations');
             emitTableChange('receipt_vouchers');
@@ -1063,6 +682,7 @@ export function useDelegateSettlementsLogic() {
             emitTableChange('warehouse_inventory');
             emitTableChange('vehicle_inventory');
             emitTableChange('journal_headers');
+            emitTableChange('journal_lines');
 
             sendSystemNotification({
                 title: `🤝 تسوية عهدة رحلة #${operationNumber}`,
@@ -1073,8 +693,9 @@ export function useDelegateSettlementsLogic() {
 
             return {
                 success: true,
-                receiptVoucherId: createdReceiptVoucherId,
-                journalHeaderId: createdJournalHeaderId
+                receiptVoucherId: rpcRes.receipt_voucher_id,
+                cashJournalId: rpcRes.cash_journal_id,
+                inventoryJournalId: rpcRes.inventory_journal_id
             };
         },
         onSuccess: () => {

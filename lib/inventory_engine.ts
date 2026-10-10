@@ -707,3 +707,36 @@ export function allocateItemQtyFEFO(
     minDaysLeft
   };
 }
+
+/**
+ * 🚚 تحويل مخزني ذري بين المستودعات وسيارات التوزيع
+ * يدعم المعالجة الذرية بالسيرفر والتكامل مع Offline Sync
+ */
+export async function executeStockTransfer(payload: {
+  transfer_number?: string;
+  date?: string;
+  source_warehouse_id: string;
+  destination_warehouse_id: string;
+  fleet_operation_id?: string | null;
+  delegate_id?: string | null;
+  notes?: string;
+  lines: Array<{
+    item_id: string;
+    quantity: number;
+    unit_price?: number;
+  }>;
+}) {
+  const { data, error } = await supabase.rpc('rpc_process_stock_transfer', {
+    p_data: payload
+  });
+  if (error) throw error;
+  
+  emitTableChange('inventory_transactions');
+  emitTableChange('warehouse_inventory');
+  emitTableChange('vehicle_inventory');
+  emitTableChange('journal_headers');
+  emitTableChange('journal_lines');
+
+  return data;
+}
+
