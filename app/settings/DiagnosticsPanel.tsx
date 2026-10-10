@@ -1149,7 +1149,7 @@ export default function DiagnosticsPanel() {
   ];
 
   return (
-    <div dir={isEn ? 'ltr' : 'rtl'} className="space-y-6 pb-12 font-sans text-[#1E130B]">
+    <div dir={isEn ? 'ltr' : 'rtl'} className="space-y-6 pb-32 font-sans text-[#1E130B]">
 
       {/* ========================================================================= */}
       {/* 👑 1. البطاقة الملكية الرئيسية (Command Center Hero Card)                */}
@@ -1177,10 +1177,10 @@ export default function DiagnosticsPanel() {
                 <Activity className="h-6 w-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-[#1E130B] md:text-3xl">
+                <h1 className="text-xl font-black tracking-tight text-[#1E130B] md:text-2xl">
                   {t('مركز الفحص والتشخيص الفني المتقدم', 'Advanced System Diagnostics Center')}
                 </h1>
-                <p className="mt-1 text-sm font-medium text-[#6F6257]">
+                <p className="mt-1 text-xs font-medium text-[#6F6257]">
                   {t(
                     'رادار تدقيق لحظي يفحص سلامة محرك الأوفلاين، طابور المزامنة المحلي، استقرار السحابة، ومطابقة عقود دوال الـ RPC.',
                     'Real-time diagnostic radar inspecting offline queue, desktop storage, cloud health, and atomic RPC contracts.'
@@ -1190,11 +1190,11 @@ export default function DiagnosticsPanel() {
             </div>
 
             {/* شريط الإقرار الأمني للقراءة فقط */}
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-600/20 bg-emerald-50/60 p-3 text-xs font-bold text-emerald-900">
+            <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/20 bg-emerald-50/60 px-3 py-2 text-xs font-bold text-emerald-900">
               <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-700" />
               <span>
                 {t(
-                  'الفحص آمن ومحصن بنسبة 100% للقراءة فقط (Read-Only). لا يُعدل بيانات العمليات، ومفاتيح التشفير وكلمات المرور لا تُكشف مطلقاً.',
+                  'الفحص آمن ومحصن بنسبة 100% للقراءة فقط (Read-Only) — لا يُعدل بيانات العمليات، ومفاتيح التشفير لا تُكشف مطلقاً.',
                   'Safe read-only execution. Does not mutate business data. Secrets and credentials remain strictly concealed.'
                 )}
               </span>
@@ -1202,9 +1202,9 @@ export default function DiagnosticsPanel() {
           </div>
 
           {/* مؤشر صحة النظام الشامل (Health Gauge Ring) */}
-          <div className="flex flex-col sm:flex-row items-center gap-5 rounded-2xl border border-[#C29B62]/20 bg-[#FDFBF7] p-5 shadow-sm">
-            <div className="relative flex h-24 w-24 shrink-0 items-center justify-center">
-              <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 36 36">
+          <div className="flex items-center gap-4 rounded-2xl border border-[#C29B62]/20 bg-[#FDFBF7] p-4 shadow-sm shrink-0">
+            <div className="relative shrink-0 flex items-center justify-center" style={{ width: 84, height: 84 }}>
+              <svg className="-rotate-90 transform" viewBox="0 0 36 36" style={{ width: 84, height: 84 }}>
                 <path
                   className="text-stone-200"
                   strokeWidth="3.5"
@@ -1222,29 +1222,29 @@ export default function DiagnosticsPanel() {
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <div className="absolute flex flex-col items-center justify-center text-center">
-                <span className="text-2xl font-black text-[#1E130B]">{healthScore}%</span>
-                <span className="text-[10px] font-bold text-[#6F6257]">{t('مؤشر الصحة', 'Health')}</span>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <span className="text-xl font-black text-[#1E130B] leading-none">{healthScore}%</span>
+                <span className="text-[10px] font-bold text-[#6F6257] mt-0.5">{t('مؤشر الصحة', 'Health')}</span>
               </div>
             </div>
 
-            <div className="space-y-1.5 text-center sm:text-start">
-              <div className="flex items-center justify-center sm:justify-start gap-1.5">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5">
                 <span className={`h-2.5 w-2.5 rounded-full ${healthScore >= 90 ? 'bg-emerald-500' : healthScore >= 70 ? 'bg-amber-500' : 'bg-red-500'} animate-ping`} />
                 <span className="text-sm font-black text-[#1E130B]">
                   {healthScore >= 90
-                    ? t('حالة ممتازة ومستقرة', 'Optimal System Health')
+                    ? t('حالة ممتازة ومستقرة 🟢', 'Optimal System Health 🟢')
                     : healthScore >= 70
-                    ? t('مستقر مع تنبيهات بسيطة', 'Stable with Warnings')
-                    : t('يتطلب فحصاً وتدخلاً', 'Action Required')}
+                    ? t('مستقر مع تنبيهات بسيطة ⚠️', 'Stable with Warnings ⚠️')
+                    : t('يتطلب فحصاً وتدخلاً 🔴', 'Action Required 🔴')}
                 </span>
               </div>
               <p className="text-xs font-semibold text-[#6F6257]">
                 {statusCounts.total > 0
-                  ? t(`تم اجتياز ${statusCounts.pass} من أصل ${statusCounts.total} فحصاً فنياً.`, `${statusCounts.pass} of ${statusCounts.total} checks passed.`)
+                  ? t(`اجتياز ${statusCounts.pass} من ${statusCounts.total} فحصاً فنياً`, `${statusCounts.pass} of ${statusCounts.total} checks passed`)
                   : t('جاري تشغيل الفحص...', 'Running diagnostics...')}
               </p>
-              <div className="flex items-center justify-center sm:justify-start gap-1.5 text-[11px] font-medium text-[#8C7A6B]">
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8C7A6B]">
                 <Clock3 className="h-3.5 w-3.5" />
                 <span>{t('آخر تحديث:', 'Last updated:')} {formatLastRun()}</span>
               </div>
@@ -1255,27 +1255,31 @@ export default function DiagnosticsPanel() {
         {/* ========================================================================= */}
         {/* 📊 2. كروت الإحصائيات التفاعلية مع الفلترة السريعة (Filterable KPI Cards) */}
         {/* ========================================================================= */}
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4 md:gap-4">
+        <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           
           {/* كارت السليم */}
           <button
             type="button"
             onClick={() => setStatusFilter((prev) => prev === 'pass' ? 'all' : 'pass')}
-            className={`group flex flex-col justify-between rounded-xl border p-4 text-start transition-all hover:-translate-y-0.5 ${
+            className={`flex flex-col justify-between rounded-xl p-4 text-start transition-all cursor-pointer shadow-xs hover:-translate-y-0.5 ${
               statusFilter === 'pass'
-                ? 'border-emerald-600 bg-emerald-50/80 shadow-md ring-2 ring-emerald-500/30'
-                : 'border-[#C29B62]/20 bg-[#FDFBF7] hover:border-emerald-500/40 hover:bg-white'
+                ? 'bg-emerald-50/80 border-2 border-emerald-600 shadow-md ring-2 ring-emerald-500/20'
+                : 'bg-white border border-[#C29B62]/20 hover:border-emerald-500/40 hover:bg-[#FDFBF7]'
             }`}
+            style={{ borderBottom: '4px solid #059669', minHeight: 110 }}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#6F6257]">{t('سليم ومطابق', 'Passed')}</span>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black text-[#514438]">{t('سليم ومطابق', 'Passed')}</span>
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-emerald-700">{statusCounts.pass}</span>
+              <span className="text-2xl font-black font-mono text-emerald-700">{statusCounts.pass}</span>
               <span className="text-[11px] font-bold text-emerald-600/80">{t('فحص ناجح', 'passed')}</span>
+            </div>
+            <div className="text-[10px] font-semibold text-[#8C7A6B] mt-1">
+              {statusFilter === 'pass' ? t('✓ مصفى حالياً (انقر للإلغاء)', '✓ Filtered (click to reset)') : t('انقر للتصفية', 'Click to filter')}
             </div>
           </button>
 
@@ -1283,21 +1287,25 @@ export default function DiagnosticsPanel() {
           <button
             type="button"
             onClick={() => setStatusFilter((prev) => prev === 'warning' ? 'all' : 'warning')}
-            className={`group flex flex-col justify-between rounded-xl border p-4 text-start transition-all hover:-translate-y-0.5 ${
+            className={`flex flex-col justify-between rounded-xl p-4 text-start transition-all cursor-pointer shadow-xs hover:-translate-y-0.5 ${
               statusFilter === 'warning'
-                ? 'border-amber-600 bg-amber-50/80 shadow-md ring-2 ring-amber-500/30'
-                : 'border-[#C29B62]/20 bg-[#FDFBF7] hover:border-amber-500/40 hover:bg-white'
+                ? 'bg-amber-50/80 border-2 border-amber-600 shadow-md ring-2 ring-amber-500/20'
+                : 'bg-white border border-[#C29B62]/20 hover:border-amber-500/40 hover:bg-[#FDFBF7]'
             }`}
+            style={{ borderBottom: '4px solid #D97706', minHeight: 110 }}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#6F6257]">{t('تنبيهات للمراجعة', 'Warnings')}</span>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black text-[#514438]">{t('تنبيهات للمراجعة', 'Warnings')}</span>
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
                 <AlertTriangle className="h-4 w-4" />
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-amber-700">{statusCounts.warning}</span>
+              <span className="text-2xl font-black font-mono text-amber-700">{statusCounts.warning}</span>
               <span className="text-[11px] font-bold text-amber-600/80">{t('تنبيه', 'warning')}</span>
+            </div>
+            <div className="text-[10px] font-semibold text-[#8C7A6B] mt-1">
+              {statusFilter === 'warning' ? t('✓ مصفى حالياً (انقر للإلغاء)', '✓ Filtered (click to reset)') : t('انقر للتصفية', 'Click to filter')}
             </div>
           </button>
 
@@ -1305,21 +1313,25 @@ export default function DiagnosticsPanel() {
           <button
             type="button"
             onClick={() => setStatusFilter((prev) => prev === 'error' ? 'all' : 'error')}
-            className={`group flex flex-col justify-between rounded-xl border p-4 text-start transition-all hover:-translate-y-0.5 ${
+            className={`flex flex-col justify-between rounded-xl p-4 text-start transition-all cursor-pointer shadow-xs hover:-translate-y-0.5 ${
               statusFilter === 'error'
-                ? 'border-[#A8573C] bg-red-50/80 shadow-md ring-2 ring-[#A8573C]/30'
-                : 'border-[#C29B62]/20 bg-[#FDFBF7] hover:border-[#A8573C]/40 hover:bg-white'
+                ? 'bg-red-50/80 border-2 border-[#A8573C] shadow-md ring-2 ring-[#A8573C]/20'
+                : 'bg-white border border-[#C29B62]/20 hover:border-[#A8573C]/40 hover:bg-[#FDFBF7]'
             }`}
+            style={{ borderBottom: '4px solid #A8573C', minHeight: 110 }}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#6F6257]">{t('مشكلات تتطلب تدخلاً', 'Issues / Errors')}</span>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black text-[#514438]">{t('مشكلات تتطلب تدخلاً', 'Issues / Errors')}</span>
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-[#A8573C]">
                 <XCircle className="h-4 w-4" />
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-[#A8573C]">{statusCounts.error}</span>
+              <span className="text-2xl font-black font-mono text-[#A8573C]">{statusCounts.error}</span>
               <span className="text-[11px] font-bold text-[#A8573C]/80">{t('مشكلة', 'issue')}</span>
+            </div>
+            <div className="text-[10px] font-semibold text-[#8C7A6B] mt-1">
+              {statusFilter === 'error' ? t('✓ مصفى حالياً (انقر للإلغاء)', '✓ Filtered (click to reset)') : t('انقر للتصفية', 'Click to filter')}
             </div>
           </button>
 
@@ -1327,21 +1339,25 @@ export default function DiagnosticsPanel() {
           <button
             type="button"
             onClick={() => setStatusFilter((prev) => prev === 'unavailable' ? 'all' : 'unavailable')}
-            className={`group flex flex-col justify-between rounded-xl border p-4 text-start transition-all hover:-translate-y-0.5 ${
+            className={`flex flex-col justify-between rounded-xl p-4 text-start transition-all cursor-pointer shadow-xs hover:-translate-y-0.5 ${
               statusFilter === 'unavailable'
-                ? 'border-slate-400 bg-slate-100 shadow-md ring-2 ring-slate-400/30'
-                : 'border-[#C29B62]/20 bg-[#FDFBF7] hover:border-slate-300 hover:bg-white'
+                ? 'bg-slate-100 border-2 border-slate-500 shadow-md ring-2 ring-slate-400/20'
+                : 'bg-white border border-[#C29B62]/20 hover:border-slate-400 hover:bg-[#FDFBF7]'
             }`}
+            style={{ borderBottom: '4px solid #786b59', minHeight: 110 }}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#6F6257]">{t('غير متاح / مؤجل', 'Unavailable')}</span>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black text-[#514438]">{t('غير متاح / مؤجل', 'Unavailable')}</span>
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-200 text-slate-700">
                 <CircleHelp className="h-4 w-4" />
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-700">{statusCounts.unavailable}</span>
+              <span className="text-2xl font-black font-mono text-slate-700">{statusCounts.unavailable}</span>
               <span className="text-[11px] font-bold text-slate-500">{t('معلق', 'skipped')}</span>
+            </div>
+            <div className="text-[10px] font-semibold text-[#8C7A6B] mt-1">
+              {statusFilter === 'unavailable' ? t('✓ مصفى حالياً (انقر للإلغاء)', '✓ Filtered (click to reset)') : t('انقر للتصفية', 'Click to filter')}
             </div>
           </button>
         </div>

@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   /* 🏜️ لوحة الألوان الصحراوية (Desert Core Palette) */
