@@ -139,8 +139,7 @@ function SettingsPageContent() {
     { id: 'restore', labelAr: 'استعادة البيانات الذكية', labelEn: 'Smart Restore', icon: '📥' },
     { id: 'reset', labelAr: 'التهيئة وتصفير الحركات', labelEn: 'Reset and Wipe', icon: '🚨' },
     { id: 'permissions', labelAr: 'مصفوفة الصلاحيات', labelEn: 'Permissions Matrix', icon: '🔐' },
-    { id: 'health', labelAr: 'سلامة النظام (الرادار)', labelEn: 'System Health Radar', icon: '⚡' },
-    { id: 'diagnostics', labelAr: 'الفحص والتشخيص', labelEn: 'Diagnostics', icon: '🩺' },
+    { id: 'health', labelAr: 'الفحص والتشخيص (سلامة النظام)', labelEn: 'Diagnostics & System Health', icon: '🩺' },
     { id: 'audit', labelAr: 'سجل المراقبة والعمليات', labelEn: 'Audit Logs', icon: '🕵️‍♂️' },
   ];
 
