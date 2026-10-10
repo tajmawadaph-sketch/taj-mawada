@@ -218,6 +218,56 @@ body {
   filter: brightness(1.08) !important;
 }
 
+/* 📑 أزرار التبويبات الموحدة في النظام (Unified System Dashboard Tabs) */
+.dashboard-tab, .system-tab {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 42px !important;
+  padding: 8px 16px !important;
+  border-radius: 12px !important;
+  font-family: 'Cairo', sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  color: #786b59 !important;
+  background: #FFFFFF !important;
+  border: 1px solid rgba(194, 155, 98, 0.25) !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  white-space: nowrap !important;
+  box-shadow: 0 2px 6px rgba(44, 26, 18, 0.04) !important;
+  text-decoration: none !important;
+  box-sizing: border-box !important;
+}
+
+.dashboard-tab:hover, .system-tab:hover {
+  background: #FDFBF7 !important;
+  color: #1E130B !important;
+  border-color: #C29B62 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 10px rgba(194, 155, 98, 0.15) !important;
+}
+
+.dashboard-tab.active, .system-tab.active {
+  background: #1E130B !important;
+  color: #FFFFFF !important;
+  border-color: #1E130B !important;
+  box-shadow: 0 4px 14px rgba(30, 19, 11, 0.25) !important;
+}
+
+/* 🏷️ بطاقات الملخصات الجانبية الموحدة (Unified Sidebar Summary Cards) */
+.summary-glass-card {
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  padding: 18px 14px !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  text-align: center !important;
+  transition: all 0.25s ease !important;
+  margin-bottom: 12px !important;
+}
+
 /* ✏️ حقول الإدخال */
 input, select, textarea {
   background: var(--input-bg);

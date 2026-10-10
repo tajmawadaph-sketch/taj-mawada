@@ -368,55 +368,59 @@ function SettingsPageContent() {
 
     if (activeTab === 'devices') {
       summary = (
-        <div className="sidebar-summary-glass">
-          <div className="icon-pulse">🖨️</div>
-          <p className="summary-title">{isEn ? 'Hardware & POS' : 'الأجهزة والطرفيات المتصلة'}</p>
-          <h3 className="summary-value" style={{ fontSize: '13px', marginTop: '6px', color: '#C29B62' }}>
+        <div className="summary-glass-card">
+          <div style={{ fontSize: '26px', marginBottom: '6px' }}>🖨️</div>
+          <span style={{ fontSize: '12px', fontWeight: 800, color: '#a89c8d' }}>{isEn ? 'Hardware & POS' : 'الأجهزة والطرفيات المتصلة'}</span>
+          <div style={{ fontSize: '15px', fontWeight: 900, color: '#FFFFFF', marginTop: '4px' }}>
             {isEn ? 'Hardware Fleet Active' : 'مراقبة واختبار فوري'}
-          </h3>
+          </div>
         </div>
       );
       actions = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textAlign: 'center' }}>
+          <div style={{ fontSize: '11px', color: '#a89c8d', fontWeight: 700, textAlign: 'center' }}>
             {isEn ? 'Hardware radar: Ready' : 'رادار فحص الطرفيات نشط'}
           </div>
         </div>
       );
     } else if (activeTab === 'backup') {
       summary = (
-        <div className="sidebar-summary-glass">
-          <div className="icon-pulse">📦</div>
-          <p className="summary-title">{isEn ? 'Selected Tables' : 'الجداول المحددة للتصدير'}</p>
-          <h3 className="summary-value">{selectedCount} / {SYSTEM_TABLES.length}</h3>
+        <div className="summary-glass-card">
+          <div style={{ fontSize: '26px', marginBottom: '6px' }}>📦</div>
+          <span style={{ fontSize: '12px', fontWeight: 800, color: '#a89c8d' }}>{isEn ? 'Selected Tables' : 'الجداول المحددة للتصدير'}</span>
+          <div style={{ fontSize: '22px', fontWeight: 900, color: '#FFFFFF', marginTop: '4px' }}>
+            {selectedCount} / {SYSTEM_TABLES.length}
+          </div>
         </div>
       );
       actions = (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button 
             onClick={handleExportExcel} 
             disabled={selectedCount === 0 || isProcessing}
-            className={`btn-premium-glass excel ${selectedCount === 0 ? 'disabled' : ''}`}
+            className="btn-main-glass green"
+            style={{ width: '100%' }}
           >
-            <span className="btn-icon">📊</span> {isEn ? 'Export Excel Report' : 'تصدير Excel (تقرير احترافي)'}
+            <span>📊</span> {isEn ? 'Export Excel Report' : 'تصدير Excel (تقرير احترافي)'}
           </button>
           <button 
             onClick={handleExportSQL} 
             disabled={selectedCount === 0 || isProcessing}
-            className={`btn-premium-glass sql ${selectedCount === 0 ? 'disabled' : ''}`}
+            className="btn-main-glass blue"
+            style={{ width: '100%' }}
           >
-            <span className="btn-icon">💾</span> {isEn ? 'Export SQL Script' : 'تصدير سكريبت SQL (Postgres)'}
+            <span>💾</span> {isEn ? 'Export SQL Script' : 'تصدير سكريبت SQL (Postgres)'}
           </button>
         </div>
       );
     } else if (activeTab === 'restore') {
       summary = (
-        <div className="sidebar-summary-glass">
-          <div className="icon-pulse">📥</div>
-          <p className="summary-title">{isEn ? 'Smart Data Restore' : 'استعادة وترحيل البيانات'}</p>
-          <h3 className="summary-value" style={{ fontSize: '13px', marginTop: '6px', color: '#C29B62', wordBreak: 'break-all' }}>
+        <div className="summary-glass-card">
+          <div style={{ fontSize: '26px', marginBottom: '6px' }}>📥</div>
+          <span style={{ fontSize: '12px', fontWeight: 800, color: '#a89c8d' }}>{isEn ? 'Smart Data Restore' : 'استعادة وترحيل البيانات'}</span>
+          <div style={{ fontSize: '13px', fontWeight: 900, color: '#C29B62', marginTop: '4px', wordBreak: 'break-all' }}>
             {selectedFile ? selectedFile.name : (isEn ? 'No file selected' : 'لم يتم اختيار ملف')}
-          </h3>
+          </div>
         </div>
       );
       if (selectedFile) {
@@ -424,27 +428,41 @@ function SettingsPageContent() {
           <button 
             onClick={handleConfirmRestore} 
             disabled={isProcessing}
-            className="btn-premium-glass excel"
+            className="btn-main-glass gold"
+            style={{ width: '100%' }}
           >
-            🚀 {isEn ? 'Execute Restore' : 'بدء الاستعادة'}
+            <span>🚀</span> {isEn ? 'Execute Restore' : 'بدء الاستعادة'}
           </button>
         );
       }
     } else if (activeTab === 'reset') {
       summary = (
-        <div className="sidebar-summary-glass critical">
-          <div className="icon-pulse">🚨</div>
-          <p className="summary-title" style={{ color: '#A8573C' }}>{isEn ? 'Danger Zone' : 'العمليات الحساسة'}</p>
-          <h3 className="summary-value" style={{ fontSize: '13px', color: '#A8573C', marginTop: '6px' }}>
+        <div className="summary-glass-card" style={{ background: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.4)' }}>
+          <div style={{ fontSize: '26px', marginBottom: '6px' }}>🚨</div>
+          <span style={{ fontSize: '12px', fontWeight: 800, color: '#fca5a5' }}>{isEn ? 'Danger Zone' : 'العمليات الحساسة'}</span>
+          <div style={{ fontSize: '14px', fontWeight: 900, color: '#FFFFFF', marginTop: '4px' }}>
             {isEn ? 'Destructive Actions' : 'تصفير وإعادة تهيئة'}
-          </h3>
+          </div>
+        </div>
+      );
+    } else if (activeTab === 'health' || activeTab === 'diagnostics') {
+      summary = (
+        <div className="summary-glass-card">
+          <div style={{ fontSize: '26px', marginBottom: '6px' }}>🩺</div>
+          <span style={{ fontSize: '12px', fontWeight: 800, color: '#a89c8d' }}>{isEn ? 'System Health Radar' : 'رادار الفحص والتشخيص'}</span>
+          <div style={{ fontSize: '15px', fontWeight: 900, color: '#059669', marginTop: '4px' }}>
+            {isEn ? 'Continuous Monitoring' : 'مراقبة فورية نشطة 🟢'}
+          </div>
         </div>
       );
     } else {
       summary = (
-        <div className="sidebar-summary-glass info">
-          <div className="icon-pulse">🛡️</div>
-          <p className="summary-title" style={{ color: '#C29B62' }}>{isEn ? 'System Protected' : 'النظام محمي ومؤمن'}</p>
+        <div className="summary-glass-card">
+          <div style={{ fontSize: '26px', marginBottom: '6px' }}>🛡️</div>
+          <span style={{ fontSize: '12px', fontWeight: 800, color: '#a89c8d' }}>{isEn ? 'System Status' : 'حالة النظام'}</span>
+          <div style={{ fontSize: '15px', fontWeight: 900, color: '#C29B62', marginTop: '4px' }}>
+            {isEn ? 'System Protected' : 'النظام محمي ومؤمن'}
+          </div>
         </div>
       );
     }
@@ -463,21 +481,17 @@ function SettingsPageContent() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeUp 0.4s ease-out' }}>
         
-        {/* شريط التبويبات المطور والمناسب للجوال */}
-        <div className="settings-tabs-bar">
+        {/* شريط التبويبات الموحد وفق ثيم النظام (Dashboard Tab Suite) */}
+        <div className="no-print" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderBottom: '1.5px solid rgba(194, 155, 98, 0.2)', paddingBottom: '12px' }}>
           {tabs.map((tab) => (
             <button 
               key={tab.id}
-              className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`} 
+              type="button"
+              className={`dashboard-tab ${activeTab === tab.id ? 'active' : ''}`} 
               onClick={() => setActiveTab(tab.id)}
             >
-              <span className="tab-icon">{tab.icon}</span>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
-                <span className="tab-title">{tab.labelAr}</span>
-                <span className="tab-sub" style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.2px' }}>
-                  {tab.labelEn}
-                </span>
-              </div>
+              <span>{tab.icon}</span>
+              <span>{isEn ? tab.labelEn : tab.labelAr}</span>
             </button>
           ))}
         </div>
@@ -536,14 +550,14 @@ function SettingsPageContent() {
                   {isEn ? 'Select tables to export as a formatted multi-sheet Excel workbook or a PostgreSQL script.' : 'حدد الجداول المراد استخراجها كتقرير Excel احترافي منسق أو كسكريبت SQL.'}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                <button onClick={selectAllTables} className="btn-action-small">
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button onClick={selectAllTables} className="btn-main-glass white" style={{ minHeight: '36px', padding: '6px 14px', fontSize: '11.5px' }}>
                   {selectedCount === SYSTEM_TABLES.length ? (isEn ? 'Deselect All' : 'إلغاء التحديد') : (isEn ? 'Select All' : 'تحديد كل الجداول')}
                 </button>
-                <button onClick={selectTransactionsOnly} className="btn-action-small">
+                <button onClick={selectTransactionsOnly} className="btn-main-glass white" style={{ minHeight: '36px', padding: '6px 14px', fontSize: '11.5px' }}>
                   {isEn ? 'Transactions Only' : 'العمليات فقط'}
                 </button>
-                <button onClick={selectMasterOnly} className="btn-action-small">
+                <button onClick={selectMasterOnly} className="btn-main-glass white" style={{ minHeight: '36px', padding: '6px 14px', fontSize: '11.5px' }}>
                   {isEn ? 'Master Data Only' : 'الأساسيات فقط'}
                 </button>
               </div>
@@ -586,18 +600,20 @@ function SettingsPageContent() {
             </div>
 
             {/* أزرار سريعة للشاشات المتجاوبة والجوال */}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '18px', paddingTop: '14px', borderTop: '1px solid rgba(194, 155, 98, 0.2)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '18px', paddingTop: '14px', borderTop: '1px solid rgba(194, 155, 98, 0.2)', flexWrap: 'wrap' }}>
               <button 
                 onClick={handleExportExcel} 
                 disabled={selectedCount === 0 || isProcessing}
-                style={{ flex: 1, minWidth: '160px', minHeight: '44px', padding: '12px', background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(5, 150, 105, 0.25)' }}
+                className="btn-main-glass green"
+                style={{ flex: 1, minWidth: '180px', minHeight: '44px' }}
               >
                 📊 {isEn ? 'Export Formatted Excel' : 'تصدير Excel احترافي'}
               </button>
               <button 
                 onClick={handleExportSQL} 
                 disabled={selectedCount === 0 || isProcessing}
-                style={{ flex: 1, minWidth: '160px', minHeight: '44px', padding: '12px', background: 'linear-gradient(135deg, #1E130B 0%, #2C1A12 100%)', color: 'white', border: '1px solid rgba(194, 155, 98, 0.35)', borderRadius: '12px', fontWeight: 900, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(30, 19, 11, 0.2)' }}
+                className="btn-main-glass blue"
+                style={{ flex: 1, minWidth: '180px', minHeight: '44px' }}
               >
                 💾 {isEn ? 'Export SQL Script' : 'تصدير سكريبت SQL'}
               </button>
@@ -851,70 +867,45 @@ function SettingsPageContent() {
 
       {/* ستايلات الـ CSS وفق هوية الفخامة الملكية Luxury Royal UI/UX */}
       <style>{`
-        .settings-tabs-bar {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          overflow-x: visible;
-          padding-bottom: 8px;
-        }
-
-        .tab-btn { 
-          display: flex;
+        .dashboard-tab {
+          display: inline-flex;
           align-items: center;
-          gap: 10px;
-          min-height: 46px;
-          padding: 10px 18px; 
-          border-radius: 14px; 
-          border: 1px solid rgba(194, 155, 98, 0.28); 
-          font-weight: 800; 
-          font-size: 13px; 
-          cursor: pointer; 
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); 
-          background: #FFFFFF; 
-          color: #6F6257; 
-          white-space: nowrap; 
-          box-shadow: 0 2px 8px rgba(30, 19, 11, 0.04);
-          flex-shrink: 0;
-        }
-        .tab-btn .tab-icon {
-          font-size: 18px;
-          transition: transform 0.2s;
-        }
-        .tab-btn .tab-title {
-          font-weight: 900;
+          gap: 8px;
+          min-height: 42px;
+          padding: 8px 16px;
+          border-radius: 12px;
           font-size: 13px;
+          font-weight: 800;
+          color: #786b59;
+          background: #FFFFFF;
+          border: 1px solid rgba(194, 155, 98, 0.25);
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(44, 26, 18, 0.04);
         }
-        .tab-btn .tab-sub {
-          color: #9C8E82;
-          transition: color 0.2s;
-        }
-        .tab-btn:hover { 
-          background: #FAF7F2; 
-          color: #1E130B; 
+        .dashboard-tab:hover {
+          background: #FDFBF7;
+          color: #1E130B;
           border-color: #C29B62;
-          transform: translateY(-2px); 
-          box-shadow: 0 4px 14px rgba(194, 155, 98, 0.18);
-        }
-        .tab-btn:hover .tab-sub {
-          color: #8C6627;
-        }
-        .tab-btn.active { 
-          background: linear-gradient(135deg, #1E130B 0%, #2C1A12 100%); 
-          color: #FFFFFF; 
-          border-color: #C29B62; 
-          border-width: 1.5px;
-          box-shadow: 0 6px 20px rgba(30, 19, 11, 0.28); 
           transform: translateY(-1px);
         }
-        .tab-btn.active .tab-title {
-          color: #FFFFFF;
+        .dashboard-tab.active {
+          background: #1E130B !important;
+          color: #FFFFFF !important;
+          border-color: #1E130B !important;
+          box-shadow: 0 4px 14px rgba(30, 19, 11, 0.2) !important;
         }
-        .tab-btn.active .tab-sub {
-          color: #C29B62 !important;
-        }
-        .tab-btn.active .tab-icon {
-          transform: scale(1.08);
+
+        .summary-glass-card {
+          background: rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(10px);
+          padding: 18px 14px;
+          border-radius: 18px;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          text-align: center;
+          transition: 0.3s;
+          margin-bottom: 12px;
         }
 
         .group-card { 

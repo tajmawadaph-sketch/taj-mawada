@@ -313,17 +313,12 @@ export default function SystemHealthRadar() {
           </div>
         </div>
 
-        {/* أزرار التبديل الفاخرة */}
-        <div className="inline-flex rounded-xl border border-[#C29B62]/30 bg-[#FDFBF7] p-1.5 shadow-xs">
-          
+        {/* أزرار التبديل الفاخرة الموحدة */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveView('technical')}
-            className={`inline-flex min-h-[40px] items-center gap-2 rounded-lg px-4 text-xs font-black transition-all ${
-              activeView === 'technical'
-                ? 'bg-[#1E130B] text-[#C29B62] shadow-sm ring-1 ring-[#C29B62]/40'
-                : 'text-[#6F6257] hover:text-[#1E130B]'
-            }`}
+            className={`dashboard-tab ${activeView === 'technical' ? 'active' : ''}`}
           >
             <Sparkles className="h-4 w-4" />
             <span>{t('الفحص والتشخيص الفني (الرئيسي)', 'Technical Diagnostics')}</span>
@@ -332,16 +327,11 @@ export default function SystemHealthRadar() {
           <button
             type="button"
             onClick={() => setActiveView('business')}
-            className={`inline-flex min-h-[40px] items-center gap-2 rounded-lg px-4 text-xs font-black transition-all ${
-              activeView === 'business'
-                ? 'bg-[#1E130B] text-[#C29B62] shadow-sm ring-1 ring-[#C29B62]/40'
-                : 'text-[#6F6257] hover:text-[#1E130B]'
-            }`}
+            className={`dashboard-tab ${activeView === 'business' ? 'active' : ''}`}
           >
-            <Zap className="h-4 w-4 text-[#C29B62]" />
+            <Zap className="h-4 w-4" />
             <span>{t('رادار الشذوذ المالي والمخزني', 'Financial & Stock Radar')}</span>
           </button>
-
         </div>
       </div>
 
@@ -386,7 +376,7 @@ export default function SystemHealthRadar() {
               type="button"
               onClick={runAuditScan}
               disabled={loading}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#C29B62] px-5 text-xs font-black text-[#1E130B] shadow-sm transition hover:brightness-105 active:scale-95 disabled:opacity-50"
+              className="btn-main-glass gold"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               <span>{loading ? t('جاري التدقيق...', 'Scanning...') : t('إعادة فحص العمليات الآن', 'Rescan Financials Now')}</span>
@@ -546,7 +536,7 @@ export default function SystemHealthRadar() {
                               type="button"
                               onClick={deleteZeroJournals}
                               disabled={isCleaningZeros}
-                              className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl bg-[#A8573C] px-4 text-xs font-black text-white shadow-sm transition hover:bg-red-700 active:scale-95 disabled:opacity-50"
+                              className="btn-main-glass red"
                             >
                               <Trash2 className="h-4 w-4" />
                               <span>{isCleaningZeros ? t('جاري التطهير...', 'Purging...') : t('تطهير القيود الصفرية فوراً', 'Purge Zero Entries')}</span>
